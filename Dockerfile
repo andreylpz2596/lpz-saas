@@ -1,35 +1,44 @@
+# -------- STAGE 1: instalar dependencias PHP con Composer --------
+FROM composer:2 AS vendor
+
+WORKDIR /app
+
+# Copiamos sólo composer.* para cachear capas
+COPY composer.json composer.lock ./
+
+# Instala dependencias SIN dev e IGNORA requisitos de plataforma (extensiones),
+# esto evita que falle el build por falta de ext en el entorno de compilación.
+RUN composer install \
+    --no-dev --prefer-dist --no-interaction --no-progress --no-scripts \
+    --ignore-platform-reqs
+
+# Ahora copiamos todo el proyecto (por si hay autoloads adicionales)
+COPY . .
+RUN composer dump-autoload --optimize --no-dev --no-interaction
+
+# -------- STAGE 2: runtime con Nginx + PHP-FPM --------
 FROM richarvey/nginx-php-fpm:latest
-
-# Instalar Composer en la imagen final
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-
-# En Alpine usamos apk (no apt). Instala git y unzip para Composer.
-RUN apk add --no-cache git unzip
 
 ENV DOCUMENT_ROOT=/var/www/html/public
 ENV COMPOSER_ALLOW_SUPERUSER=1
-ENV COMPOSER_MEMORY_LIMIT=-1
 
 WORKDIR /var/www/html
 
-# 1) Copia composer.* primero para cachear capas
-COPY composer.json composer.lock ./
+# Copiamos el código de la app
+COPY . /var/www/html
 
-# 2) Instala dependencias PHP (sin dev). -vvv para ver errores si algo falla.
-RUN composer install --no-dev --prefer-dist --no-interaction --no-progress -vvv
+# Copiamos vendor desde el stage anterior (ya resuelto)
+COPY --from=vendor /app/vendor /var/www/html/vendor
 
-# 3) Copia el resto del código
-COPY . .
-
-# Nginx
+# Config Nginx
 COPY conf/nginx/nginx-site.conf /etc/nginx/sites-enabled/default
 
-# Permisos mínimos para Laravel
+# Permisos mínimos Laravel
 RUN chown -R www-data:www-data /var/www/html \
  && find storage -type d -exec chmod 775 {} \; \
  && find bootstrap/cache -type d -exec chmod 775 {} \;
 
-# Entrypoint (key:generate, migrate, etc.)
+# Entrypoint: genera APP_KEY, storage:link, migrate, seed, etc.
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
