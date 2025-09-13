@@ -1,29 +1,27 @@
-# -------- STAGE 1: Build de dependencias PHP con Composer --------
-FROM composer:2 AS vendor
-
-WORKDIR /app
-# Copiamos solo composer.* primero para cachear capas
-COPY composer.json composer.lock ./
-# Instala dependencias sin dev (si no tienes lock, composer lo generará)
-RUN composer install --no-dev --prefer-dist --no-interaction --no-progress --no-scripts
-
-# Ahora copiamos el resto del proyecto y regeneramos autoload si hiciera falta
-COPY . .
-RUN composer dump-autoload --optimize --no-dev --no-interaction
-
-# -------- STAGE 2: Imagen de runtime con Nginx + PHP-FPM --------
 FROM richarvey/nginx-php-fpm:latest
 
-# Directorio público de Laravel
+# Composer dentro de la imagen final
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# Paquetes necesarios para composer y VCS (git/unzip)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git unzip \
+ && rm -rf /var/lib/apt/lists/*
+
 ENV DOCUMENT_ROOT=/var/www/html/public
 ENV COMPOSER_ALLOW_SUPERUSER=1
+ENV COMPOSER_MEMORY_LIMIT=-1
 
-# Copiamos el código de la app
 WORKDIR /var/www/html
-COPY . /var/www/html
 
-# Copiamos vendor desde el stage anterior (evitamos correr composer aquí)
-COPY --from=vendor /app/vendor /var/www/html/vendor
+# 1) Copiamos composer.* primero para cachear capas
+COPY composer.json composer.lock ./
+
+# 2) Instala dependencias PHP (sin dev) con salida VERBOSA para ver el error real si falla
+RUN composer install --no-dev --prefer-dist --no-interaction --no-progress -vvv
+
+# 3) Ahora sí, copiamos el resto del código
+COPY . .
 
 # Config Nginx
 COPY conf/nginx/nginx-site.conf /etc/nginx/sites-enabled/default
@@ -33,7 +31,7 @@ RUN chown -R www-data:www-data /var/www/html \
  && find storage -type d -exec chmod 775 {} \; \
  && find bootstrap/cache -type d -exec chmod 775 {} \;
 
-# Entrypoint que hace key:generate, storage:link, migrate, etc.
+# Entrypoint (key:generate, migrate, etc.)
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
