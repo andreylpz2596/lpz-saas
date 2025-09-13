@@ -1,12 +1,10 @@
 FROM richarvey/nginx-php-fpm:latest
 
-# Composer dentro de la imagen final
+# Instalar Composer en la imagen final
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Paquetes necesarios para composer y VCS (git/unzip)
-RUN apt-get update \
- && apt-get install -y --no-install-recommends git unzip \
- && rm -rf /var/lib/apt/lists/*
+# En Alpine usamos apk (no apt). Instala git y unzip para Composer.
+RUN apk add --no-cache git unzip
 
 ENV DOCUMENT_ROOT=/var/www/html/public
 ENV COMPOSER_ALLOW_SUPERUSER=1
@@ -14,16 +12,16 @@ ENV COMPOSER_MEMORY_LIMIT=-1
 
 WORKDIR /var/www/html
 
-# 1) Copiamos composer.* primero para cachear capas
+# 1) Copia composer.* primero para cachear capas
 COPY composer.json composer.lock ./
 
-# 2) Instala dependencias PHP (sin dev) con salida VERBOSA para ver el error real si falla
+# 2) Instala dependencias PHP (sin dev). -vvv para ver errores si algo falla.
 RUN composer install --no-dev --prefer-dist --no-interaction --no-progress -vvv
 
-# 3) Ahora sí, copiamos el resto del código
+# 3) Copia el resto del código
 COPY . .
 
-# Config Nginx
+# Nginx
 COPY conf/nginx/nginx-site.conf /etc/nginx/sites-enabled/default
 
 # Permisos mínimos para Laravel
