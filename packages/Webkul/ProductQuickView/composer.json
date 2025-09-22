@@ -1,0 +1,26 @@
+{
+    "name": "bagisto/productquickview",
+    "license": "MIT",
+    "description" : "The Product Preview extension enables a seamless shopping experience by allowing customers to view product details in a quick-view modal. Admins can customize displayed product information for better user engagement and conversions.",
+    "authors": [
+        {
+            "name": "Kishan Kanani",
+            "email": "kishan.kanani@brainstream.tech"
+        }
+    ],
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "Brainstream\\ProductQuickView\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Brainstream\\ProductQuickView\\Providers\\ProductQuickViewServiceProvider"
+            ],
+            "aliases": {}
+        }
+    },
+    "minimum-stability": "dev"
+}
