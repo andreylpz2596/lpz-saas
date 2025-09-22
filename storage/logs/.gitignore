@@ -1,2 +1,29 @@
-*
-!.gitignore
+# Dependencias PHP/Node
+/vendor/
+/node_modules/
+
+# Entorno
+.env
+.env.*
+!.env.example
+
+# Storage y enlaces
+/storage
+/public/storage
+
+# Compilados/Cache
+/bootstrap/cache/*.php
+/.phpunit.result.cache
+
+# Logs/Temp
+*.log
+/storage/*.key
+/storage/framework/*
+/storage/logs/*
+/storage/app/public/*
+
+# IDE/editor
+/.vscode/
+/.idea/
+.DS_Store
+Thumbs.db
