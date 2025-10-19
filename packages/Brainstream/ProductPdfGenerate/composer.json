@@ -1,0 +1,26 @@
+{
+    "name": "bagisto/productpdfgenerate-extension",
+    "license": "MIT",
+    "description" : "The PDF Catalog Generator for Bagisto extension enables store owners to easily generate professionally formatted PDF catalogs from their product listings. This feature is essential for businesses looking to share product information with customers in a clean, organized, and portable format, perfect for offline viewing, distribution, or print.",
+    "authors": [
+        {
+            "name": "Kishan Kanani",
+            "email": "kishan.kanani@brainstream.tech"
+        }
+    ],
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "Brainstream\\ProductPdfGenerate\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Brainstream\\ProductPdfGenerate\\Providers\\ProductPdfGenerateServiceProvider"
+            ],
+            "aliases": {}
+        }
+    },
+    "minimum-stability": "dev"
+}
