@@ -34,7 +34,7 @@
                 </a>
 
                 {!! view_render_event('bagisto.shop.components.products.card.image.after') !!}
-                
+
                 <!-- Product Ratings -->
                 {!! view_render_event('bagisto.shop.components.products.card.average_ratings.before') !!}
 
@@ -108,7 +108,7 @@
 
                         {!! view_render_event('bagisto.shop.components.products.card.compare_option.after') !!}
 
-                        <span 
+                        <span
                             class="absolute top-10 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-200 bg-white text-lg sm:hidden ltr:right-1.5 rtl:left-1.5"
                             @click="openQuickView(product)"
                             aria-label="Quick View"
@@ -121,26 +121,26 @@
 
                         <!-- Product Preview Modal - Moved outside the product cards -->
                         <Teleport to="body">
-                            <div 
-                                v-if="showModal" 
+                            <div
+                                v-if="showModal"
                                 class="fixed inset-0 z-[60] flex items-center justify-center p-3"
                                 role="dialog"
                                 aria-modal="true"
                             >
                                 <!-- Modal Backdrop -->
-                                <div 
+                                <div
                                     class="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
                                     @click="closeQuickView"
                                 ></div>
-                            
+
                                 <!-- Modal Container -->
-                                <div 
+                                <div
                                     class="relative w-auto max-w-4xl bg-white rounded-lg overflow-hidden sm:h-[300px]"
-                                    style="width: 850px; height: 650px;" 
+                                    style="width: 850px; height: 650px;"
                                     @click.stop
                                 >
                                     <!-- Close Button -->
-                                    <button 
+                                    <button
                                         class="absolute top-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full"
                                         style="background-color:#e5e7eb;"
                                         @click="closeQuickView"
@@ -149,7 +149,7 @@
                                     <img src="https://cdn.jsdelivr.net/npm/heroicons@2.0.16/24/outline/x-mark.svg" alt="Close" class="h-4 w-4">
                                     </button>
 
-                        
+
                                     <!-- Modal Content - Using flex instead of grid -->
                                     <div class="flex flex-row h-[600px]">
                                         <!-- Left Side - Image -->
@@ -161,31 +161,31 @@
                                                 ::alt="selectedProduct?.name"
                                             />
                                         </div>
-                    
+
                                         <!-- Right Side - Product Details -->
                                         <div class="w-1/2 p-4 overflow-y-auto flex flex-col">
                                             <h2 class="mb-2 text-2xl font-semibold text-gray-900">
                                                 @{{ selectedProduct?.name }}
                                             </h2>
-                    
+
                                             <div class="mb-4 text-xl font-semibold text-gray-900" v-html="selectedProduct?.price_html"></div>
-                    
+
                                             <div class="mb-4 border-t border-b py-4 space-y-2">
                                                 <!-- SKU -->
-                                                <div v-if="settings.show_sku === true && selectedProduct?.sku" 
+                                                <div v-if="settings.show_sku === true && selectedProduct?.sku"
                                                     class="flex items-center gap-2 text-sm text-blue-700">
-                                                    <span class="icon-product text-black font-bold" style="font-size: x-large;"></span>                
+                                                    <span class="icon-product text-black font-bold" style="font-size: x-large;"></span>
                                                     <span>@lang('productquickview::app.productquickview.sku'): @{{ selectedProduct?.sku }}</span>
                                                 </div>
-                                        
+
                                                 <!-- Availability -->
                                                 <div class="mt-3 font-semibold flex items-center gap-1 text-sm">
                                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                         <path d="M5 8h14l1 12H4L5 8z" />
                                                         <path d="M9 11V6a3 3 0 0 1 6 0v5" />
-                                                    </svg>                                    
+                                                    </svg>
 
-                                                    <span 
+                                                    <span
                                                         :class="[
                                                             selectedProduct?.is_saleable ? 'text-emerald-600' : 'text-red-600',
                                                             'icon-check text-lg'
@@ -201,15 +201,15 @@
                                                         (@{{ selectedProduct?.qty }} available)
                                                     </span>
                                                 </div>
-                    
+
                                                 <!-- Product Number -->
-                                                <div v-if="settings.show_product_number === true && selectedProduct?.product_number" 
+                                                <div v-if="settings.show_product_number === true && selectedProduct?.product_number"
                                                     class="mt-3 flex items-center gap-2 text-sm text-red-600">
-                                                    <span class="icon-product text-black font-bold" style="font-size: x-large;"></span>                
+                                                    <span class="icon-product text-black font-bold" style="font-size: x-large;"></span>
                                                     <span>@lang('productquickview::app.productquickview.product_number'): @{{ selectedProduct?.product_number }}</span>
                                                 </div>
                                             </div>
-                    
+
                                                 <!-- Short Description -->
                                                 <div v-if="selectedProduct?.short_description" class="mb-4 text-sm text-gray-600 prose prose-sm"
                                                     style="max-height: 100px; overflow-y: auto;"
@@ -222,14 +222,14 @@
                                                         <summary class="px-4 py-2 text-lg font-semibold cursor-pointer bg-gray-200 hover:bg-gray-300">
                                                             @lang('productquickview::app.productquickview.description')
                                                         </summary>
-                                                        <div 
-                                                            v-html="formattedFullDescription" 
+                                                        <div
+                                                            v-html="formattedFullDescription"
                                                             class="p-4 text-sm text-gray-600 overflow-y-auto"
                                                             style="max-height: 200px;"
                                                         ></div>
                                                     </details>
                                                 </div>
-                    
+
                                             <!-- Add to Cart Button -->
                                             <button class="secondary-button w-full max-w-full p-2.5 text-sm font-medium"
                                                     :disabled="!selectedProduct?.is_saleable || isAddingToCart"
@@ -250,7 +250,7 @@
             <div class="-mt-9 grid max-w-[291px] translate-y-9 content-start gap-2.5 bg-white p-2.5 transition-transform duration-300 ease-out group-hover:-translate-y-0 group-hover:rounded-t-lg max-md:relative max-md:mt-0 max-md:translate-y-0 max-md:gap-0 max-md:px-0 max-md:py-1.5 max-sm:min-w-[170px] max-sm:max-w-[192px]">
 
                 {!! view_render_event('bagisto.shop.components.products.card.name.before') !!}
-                    
+
                 <p class="text-base font-medium max-md:mb-1.5 max-md:max-w-56 max-md:whitespace-break-spaces max-md:leading-6 max-sm:max-w-[192px] max-sm:text-sm max-sm:leading-4">
                     @{{ product.name }}
                 </p>
@@ -283,7 +283,7 @@
 
                         {!! view_render_event('bagisto.shop.components.products.card.add_to_cart.after') !!}
                     @endif
-                    
+
                     {!! view_render_event('bagisto.shop.components.products.card.wishlist_option.before') !!}
 
                     @if (core()->getConfigData('customer.settings.wishlist.wishlist_option'))
@@ -314,7 +314,7 @@
                     @endif
 
                     {!! view_render_event('bagisto.shop.components.products.card.compare_option.after') !!}
-                    <span 
+                    <span
                         class="cursor-pointer p-2.5 text-2xl max-sm:hidden"
                         @click="openQuickView(product)"
                         aria-label="Quick View"
@@ -329,12 +329,12 @@
         </div>
 
         <!-- List Card -->
-        
+
         <div
             class="relative flex max-w-max grid-cols-2 gap-4 overflow-hidden rounded max-sm:flex-wrap"
             v-else
         >
-            <div class="group relative max-h-[258px] max-w-[250px] overflow-hidden"> 
+            <div class="group relative max-h-[258px] max-w-[250px] overflow-hidden">
 
                 {!! view_render_event('bagisto.shop.components.products.card.image.before') !!}
 
@@ -372,7 +372,7 @@
                         {!! view_render_event('bagisto.shop.components.products.card.wishlist_option.before') !!}
 
                         @if (core()->getConfigData('customer.settings.wishlist.wishlist_option'))
-                            <span 
+                            <span
                                 class="absolute top-5 flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-md bg-white text-2xl ltr:right-5 rtl:left-5"
                                 role="button"
                                 aria-label="@lang('shop::app.components.products.card.add-to-wishlist')"
@@ -400,7 +400,7 @@
 
                         {!! view_render_event('bagisto.shop.components.products.card.compare_option.after') !!}
 
-                        <span 
+                        <span
                             class="absolute top-16 flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-md bg-white text-2xl ltr:right-5 rtl:left-5"
                             @click="openQuickView(product)"
                             aria-label="Quick View"
@@ -506,7 +506,7 @@
                 return {
 
                     showModal: false,
-                    
+
                     selectedProduct: null,
 
                     isCustomer: '{{ auth()->guard('customer')->check() }}',
@@ -546,7 +546,7 @@
                 async loadSettings() {
                     try {
                         const response = await this.$axios.get(SETTINGS_URL);
-                        
+
                         // Explicitly convert to boolean values
                         this.settings = {
                             show_full_description: Boolean(response.data.show_full_description),
@@ -562,11 +562,11 @@
                     this.isLoading = true;
                     try {
                         const response = await axios.post(route('admin.productquickview.update'), this.settings);
-                        
+
                         if (response.data.settings) {
                             this.$set(this, 'settings', { ...response.data.settings });
                         }
-                        
+
                         // Re-fetch settings to update frontend state
                         await this.loadSettings();
 
@@ -594,13 +594,13 @@
                 },
                 addToCart(product) {
                     this.isAddingToCart = true;
-                    
+
                     // Add to cart logic here
                     alert(`${this.quantity} item(s) added to cart`);
-                    
+
                     // Close the modal immediately
                     this.closeQuickView();
-                    
+
                     // Reset the adding to cart state
                     this.isAddingToCart = false;
                 },
@@ -701,7 +701,7 @@
                             if (error.response.data.redirect_uri) {
                                 window.location.href = error.response.data.redirect_uri;
                             }
-                            
+
                             this.isAddingToCart = false;
                         });
                 },

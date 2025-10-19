@@ -20,7 +20,7 @@ class ProductQuickViewServiceProvider extends ServiceProvider
         $this->app->singleton(ProductResource::class, function ($app) {
             return new CustomProductResource(null);
         });
-        
+
         $this->loadMigrationsFrom(__DIR__ . '/../Database/Migrations');
 
         $this->loadRoutesFrom(__DIR__ . '/../Routes/admin-routes.php');
@@ -50,7 +50,7 @@ class ProductQuickViewServiceProvider extends ServiceProvider
         $this->app->singleton(ProductResource::class, function ($app) {
             return new CustomProductResource(null);
         });
-        
+
         // Alternative approach using extend if singleton doesn't work
         $this->app->extend(ProductResource::class, function ($service, $app) {
             return new CustomProductResource(null);

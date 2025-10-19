@@ -30,3 +30,9 @@ yarn.lock
 yarn-error.log
 /test-results
 /playwright-report
+# Laravel - ignora cachés y archivos generados
+/bootstrap/cache/*.php
+!bootstrap/cache/.gitignore
+
+/storage/*
+!storage/.gitignore
