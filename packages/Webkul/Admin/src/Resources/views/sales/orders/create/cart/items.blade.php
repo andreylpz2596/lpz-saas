@@ -434,8 +434,19 @@
                 },
 
                 addToCart(params) {
+                    const product = this.searchedProducts.find(product => product.id == params.product_id);
+
+                    if (! product) {
+                        this.$emitter.emit('add-flash', {
+                            type: 'warning',
+                            message: "@lang('admin::app.sales.orders.create.cart.items.search.empty-info')",
+                        });
+
+                        return;
+                    }
+
                     this.$emit('add-to-cart', {
-                        product: this.searchedProducts.find(product => product.id == params.product_id),
+                        product,
                         qty: params.qty
                     });
 

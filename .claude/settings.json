@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(head -20)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\xampp\\\\htdocs\\\\lpz-saas\\\\packages\\\\Brainstream\\\\ProductPdfGenerate\" -Recurse -Depth 2 | Select-Object FullName | Where-Object {$_.FullName -match '\\\\.\\(php|json|md\\)$'})",
+      "Bash(git -C c:/xampp/htdocs/lpz-saas status --short)",
+      "Bash(git -C \"c:/xampp/htdocs/lpz-saas\" log --oneline --diff-filter=M -- \"packages/Webkul/**\")"
+    ]
+  }
+}

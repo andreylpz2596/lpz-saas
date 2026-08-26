@@ -1,0 +1,18 @@
+{
+    "name": "bylopez/corte-confeccion",
+    "description": "Modulo administrativo de corte y confeccion para Bagisto.",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "ByLopez\\CorteConfeccion\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "ByLopez\\CorteConfeccion\\Providers\\CorteConfeccionServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "dev"
+}

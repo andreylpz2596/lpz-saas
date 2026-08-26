@@ -188,6 +188,15 @@
                     },
 
                     configureAddToCart(params) {
+                        if (! params?.product?.id) {
+                            this.$emitter.emit('add-flash', {
+                                type: 'warning',
+                                message: "@lang('admin::app.sales.orders.create.cart.items.search.empty-info')",
+                            });
+
+                            return;
+                        }
+
                         this.selectedProductOptions = params;
 
                         if (
@@ -214,6 +223,15 @@
                                 ...params.additional,
                             };
                         } else {
+                            if (! this.selectedProductOptions?.product?.id) {
+                                this.$emitter.emit('add-flash', {
+                                    type: 'warning',
+                                    message: "@lang('admin::app.sales.orders.create.cart.items.search.empty-info')",
+                                });
+
+                                return;
+                            }
+
                             formData = new FormData(this.$refs.addToCartForm);
 
                             formData.append('product_id', this.selectedProductOptions.product.id);
