@@ -108,7 +108,8 @@
             "Webkul\\Theme\\": "packages/Webkul/Theme/src",
             "Webkul\\User\\": "packages/Webkul/User/src",
             "Brainstream\\ProductPdfGenerate\\": "packages/Brainstream/ProductPdfGenerate/src/",
-            "ByLopez\\CorteConfeccion\\": "packages/ByLopez/CorteConfeccion/src/"
+            "ByLopez\\CorteConfeccion\\": "packages/ByLopez/CorteConfeccion/src/",
+            "ByLopez\\VentasAsesor\\": "packages/ByLopez/VentasAsesor/src/"
         }
     },
     "autoload-dev": {

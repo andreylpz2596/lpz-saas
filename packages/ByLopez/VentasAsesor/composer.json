@@ -1,0 +1,18 @@
+{
+    "name": "bylopez/ventas-asesor",
+    "description": "Capa de ventas por asesor sobre el motor oficial de pedidos de Bagisto.",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "ByLopez\\VentasAsesor\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "ByLopez\\VentasAsesor\\Providers\\VentasAsesorServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "dev"
+}

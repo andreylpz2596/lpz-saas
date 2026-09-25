@@ -16,6 +16,15 @@
             <directory suffix="Test.php">packages/Webkul/Core/tests/Unit</directory>
         </testsuite>
 
+        <!-- VentasAsesor package testsuites. -->
+        <testsuite name="VentasAsesor Unit Test">
+            <directory suffix="Test.php">packages/ByLopez/VentasAsesor/tests/Unit</directory>
+        </testsuite>
+
+        <testsuite name="VentasAsesor Feature Test">
+            <directory suffix="Test.php">packages/ByLopez/VentasAsesor/tests/Feature</directory>
+        </testsuite>
+
         <!-- Customer package testsuites. -->
         <testsuite name="Customer Unit Test">
             <directory suffix="Test.php">packages/Webkul/Customer/tests/Unit</directory>
