@@ -1281,3 +1281,361 @@ Rango de fechas de los inactivos: 2025-10-04 a 2026-09-20.
 - **Origen indeterminable:** la tabla `cart` no guarda de dónde viene un carrito, así que no se
   puede distinguir uno del panel de uno de la tienda. La política de limpieza futura debe
   excluir los enlazados a pedidos.
+
+---
+
+## 25. Fase 03C: líneas del borrador (2026-09-26)
+
+**Estado:** 03C **IMPLEMENTADA con stock suficiente**, pendiente de revisión de Camilo Gaitán y sin
+commit. El caso en que lo solicitado supera el stock queda **parcialmente bloqueado** por la
+decisión **D-39** (§25.8). No hay migración nueva, ni UI, ni pedido, dirección, envío o pago.
+
+### 25.1 Auditoría dirigida del Cart de Bagisto 2.4.9
+
+| Clase::método | Efecto real (verificado en código y con pruebas) |
+|---|---|
+| `Checkout\Cart::addProduct($producto, $datos)` | Llama a `TypeInstance::prepareForCart()`; con `getItemByProduct()` localiza una línea existente y la **actualiza**, o crea una nueva. Después ejecuta `collectTotals()`. **Si `prepareForCart` devuelve un texto de error y el carrito está vacío, llama a `removeCart()` (BORRA el carrito) antes de lanzar `Exception`** |
+| `Product\Type\Configurable::prepareForCart` | Exige `selected_configurable_option`. Suma la cantidad ya presente en el carrito (`getQtyRequest`) y, si la variante no tiene stock para ese **total**, lanza `InsufficientProductInventoryException` antes de escribir. Devuelve dos filas: la del configurable (precio, totales, `additional` con los atributos) y la fila interna de la variante (`parent_id`). **No comprueba que la variante sea hija del configurable** |
+| `Product\Type\Simple::prepareForCart` | Igual con una fila. Si hay opciones personalizables obligatorias y no se envían, devuelve texto (el caso que borra el carrito vacío) |
+| `…::compareOptions($opciones1, $opciones2)` | Exige `product_id` en los datos enviados. Sin él falla en cuanto el carrito tiene líneas. El configurable compara `selected_configurable_option`; el simple, las opciones personalizables |
+| `Simple::haveSufficientQuantity` | `manage_stock = 0` equivale a siempre vendible. Si no, `qty <= índice de inventario del canal`; si no alcanza, depende de `catalog.inventory.stock_options.back_orders` (0 en `lpz_saas`, sin valor en testing, desactivado en ambos) |
+| `Checkout\Cart::updateItems(['qty' => [id => n]])` | Si `n <= 0`, quita la línea y lanza excepción. Con stock insuficiente lanza `Exception` genérica **sin escribir**. Si no, escribe cantidad y totales y llama a `collectTotals()`. **Omite en silencio** un item cuyo `cart_id` no es el del carrito actual |
+| `Checkout\Cart::removeItem($id)` | Solo si el id está entre las líneas de primer nivel del carrito. Borra las tarifas de envío y la línea; la fila de la variante cae en cascada (FK `cart_items.parent_id` con CASCADE). **No** recalcula |
+| `Checkout\Cart::collectTotals()` | `validateItems()`: **borra un carrito sin líneas**, quita las inactivas y reprecia cada línea con `getFinalPrice($qty)`, respetando `custom_price`. Luego aplica las reglas de carrito (listener de CartRule), impuestos y totales, y guarda |
+| `Checkout\Cart::isItemHaveQuantity($item)` | El predicado de stock que usa `updateItems` (en el configurable, el stock de la variante) |
+
+**Controladores del core (referencia, no reutilizados):** `Admin\Sales\CartController` hace
+`removeItem` seguido de `collectTotals`, lo que borraría el carrito del borrador al quitar la
+última línea. No hay una abstracción intermedia reutilizable: se usan directamente los métodos
+del facade `Cart`, envueltos en las garantías del módulo.
+
+### 25.2 `LineasBorradorService`
+
+Métodos:
+
+- `listar(borradorId)`
+- `agregar(borradorId, productoId, varianteId, cantidad, actor)`
+- `cambiarCantidad(borradorId, cartItemId, cantidad, actor)`
+- `eliminar(borradorId, cartItemId, actor)`
+
+Todos devuelven `VistaLineasBorrador`. Solo trabaja con líneas: nada de cliente, envío, pago,
+confirmación, producción ni costos.
+
+**Reutilización:**
+
+- `BorradorVentaService::bloquearParaEditar()` es el único método nuevo en 03B. Exige permiso,
+  estado editable y propietario, y bloquea borrador y carrito.
+- `CatalogoVentaService::variante()` aporta la verificación I-5, el grupo apto y el stock.
+- `ContextoPrecioComercial::durante()` aporta RT-03.
+- `DesgloseAbastecimiento` aporta I-12 y D-37.
+
+### 25.3 Configurables, simples e identidad de la línea
+
+- **Configurable:** la variante se verifica contra su padre **antes** de llamar a Bagisto.
+  Después se llama `Cart::addProduct(padre, {product_id, selected_configurable_option,
+  quantity})`. No hace falta `super_attribute`.
+- **Simple sin padre:** `varianteId = productoId`. Un hijo de configurable enviado como simple se
+  rechaza con `producto_no_vendible`; una variante inactiva, también.
+- **Identidad:** es la de Bagisto, sin clave paralela. La misma variante se consolida en **una**
+  línea con la cantidad sumada (3 + 2 = 5), y otra variante crea otra línea. La «línea» es la
+  fila de primer nivel; la fila interna de la variante nunca se opera directamente.
+
+### 25.4 Cantidad, precio y `custom_price`
+
+- **Cantidad:** solo enteros ≥ 1 o su texto decimal exacto (`"4"`). Se rechazan 0, negativos,
+  decimales (incluido `2.0`), espacios, ceros a la izquierda, booleanos y null. El tope técnico
+  `1_000_000` responde a `INT UNSIGNED`, no a una regla comercial. Bagisto sigue validando stock
+  y producto.
+- **Precio:** toda operación que reprecia corre en `durante(cart, cliente del carrito)`, después
+  de validar el grupo **actual** del cliente (`durante` comprueba la pertenencia del carrito, pero
+  sin grupo caería a invitado). No se acepta ningún precio de entrada.
+- **Probado:**
+  - dos grupos dan dos precios;
+  - si el cliente cambia de A a B, recalcular y cambiar cantidad dan el precio de B;
+  - la sesión de la tienda de otro cliente no contamina el precio;
+  - un cliente que pasa a invitado no puede operar.
+- **`custom_price`:** sigue NULL tras agregar, cambiar cantidad, recalcular y cambiar de cliente
+  (D-18). Ningún flujo de Bagisto lo escribe en estas operaciones.
+
+### 25.5 Stock (D-36, D-37)
+
+- **Cifras de cada línea:** `stockVendible` es el índice del canal, igual que en el catálogo, y
+  `abastecimiento` es `DesgloseAbastecimiento::desdeStock(cantidad, stock actual)`. Si el stock
+  baja después de agregar (por otra venta), la línea muestra `faltanteInmediato > 0` y
+  `cubreEntregaInmediata() = false`.
+- **Producción:** `enProduccion` y `porFabricar` son siempre `null` en 03C; no hay contrato con
+  CorteConfeccion ni se leen sus tablas.
+
+### 25.6 Carrito vacío (caso obligatorio)
+
+- **Al quitar la última línea:** se llama `Cart::removeItem` y **no** `collectTotals`. Los totales
+  agregados del carrito vacío se ponen a cero (no hay nada que sumar). El borrador sigue activo con
+  el mismo `cart_id` y se puede volver a agregar.
+- **No se tocan:** `coupon_code` ni `applied_cart_rule_ids`. El siguiente `collectTotals` los
+  recalcula (D-38 sigue pendiente).
+- **Rechazo del primer producto:** si Bagisto rechaza el primer producto y borra el carrito vacío,
+  la transacción del servicio **revierte** el borrado. Está probado con una opción personalizable
+  obligatoria.
+
+### 25.7 Errores de dominio
+
+- **Reutilizados:**
+  - `VarianteInvalidaException`: producto, variante, pertenencia al padre, cantidad;
+  - `BorradorVentaInvalidoException`: inexistente, no editable, no propietario, sin permiso,
+    cliente;
+  - `GrupoComercialInvalidoException`;
+  - `ContextoPrecioComercialInvalidoException`.
+- **Nuevo:** `LineaBorradorInvalidaException`, con tres códigos:
+  - `linea_no_pertenece_al_borrador`: item de otro carrito o fila interna de una variante;
+  - `stock_insuficiente`: trae `abastecimiento` con el desglose de lo pedido;
+  - `rechazada_por_carrito`: la `Exception` genérica de Bagisto, como causa previa.
+- **Datos personales:** ningún mensaje contiene PII.
+
+### 25.8 Lo solicitado supera el stock: comportamiento real y decisión D-39 (BLOQUEO PARCIAL)
+
+*(RESUELTO por §26: Camilo Gaitán aprobó la alternativa 4, la solicitud comercial fuera del Cart y sin aceptación automática de parciales. El comportamiento real de Bagisto descrito aquí sigue vigente.)*
+
+- **Comportamiento real de Bagisto:** opción **A, rechaza la línea completa**. No recorta la
+  cantidad ni la guarda marcando un error. Sin backorders, **un Cart no puede contener más
+  unidades que el stock vendible**. Aplica tanto al agregar (sobre el total consolidado) como al
+  cambiar la cantidad.
+- **Qué hace hoy 03C:** lanza `stock_insuficiente` con el desglose, por ejemplo
+  `{solicitado 100, disponibleInmediato 30, faltanteInmediato 70, enProduccion null,
+  porFabricar null}`, y no escribe nada. La UI o la IA podrán ofrecer las 30 disponibles.
+- **Qué se pierde:** el compromiso comercial de que el cliente pidió 100. Hoy no queda registrado
+  en ninguna parte.
+- **Alternativas:**
+  1. **No persistir**, como ahora: el faltante vive solo en la conversación. Es simple, pero pierde
+     el dato que Camilo considera importante (§18 del prompt de 03C).
+  2. **Activar backorders:** prohibido, porque es una configuración global y mentiría a Bagisto
+     sobre el stock.
+  3. **Guardar la cantidad solicitada en `cart_items.additional`:** `addProduct` **reemplaza**
+     `additional` en cada consolidación y la copia al pedido. Es frágil, depende de detalles
+     internos del core y no se puede consultar. No se recomienda.
+  4. **Tabla propia mínima (recomendada):** `bylopez_va_borrador_solicitudes` con
+     `borrador_id` (FK CASCADE), `producto_id`, `variante_id`, `cantidad_solicitada`,
+     timestamps y UNIQUE(`borrador_id`, `variante_id`).
+     - El Cart guarda solo lo materializable: `min(solicitado, vendible)`.
+     - El desglose de la línea usa `solicitado` de esta tabla, `disponibleInmediato` del stock y
+       `faltanteInmediato = solicitado − disponible`.
+     - `enProduccion` y `porFabricar` se completarán con el contrato de CorteConfeccion.
+     - La confirmación futura (03D o posterior) decide qué hacer con el faltante: pedido parcial
+       más pedido especial, o esperar.
+- **Decisiones que necesita Camilo (D-39):**
+  1. ¿Se persiste la cantidad solicitada aparte del Cart (alternativa 4)?
+  2. Al agregar más que el stock, ¿el sistema pone automáticamente lo disponible en el carrito y
+     registra el faltante, o rechaza y deja decidir al asesor?
+
+  Hasta entonces, 03C solo materializa cantidades con stock suficiente.
+
+### 25.9 Concurrencia
+
+- **Bloqueos:** cada mutación ocurre en una transacción que bloquea (`FOR UPDATE`) primero el
+  borrador y después el carrito, en el mismo orden que 03B, así que no hay interbloqueos entre
+  ellas. Dos peticiones sobre el mismo borrador se serializan y un fallo revierte todo. Está
+  probado el orden de bloqueos antes del primer `INSERT` en `cart_items`.
+- **Qué no se bloquea:** no se bloquea el `cart_item` (el bloqueo del carrito ya serializa) ni el
+  stock. Bagisto solo reserva stock al crear el pedido (`product_ordered_inventories`), así que
+  entre agregar y confirmar otra venta puede consumirlo. La línea lo mostrará como faltante y la
+  confirmación deberá revalidar.
+- **Riesgo residual:** las rutas del panel de Bagisto (`admin.sales.cart.*`) pueden modificar un
+  carrito por id sin pasar por este bloqueo. La pantalla Nueva Venta no las usará.
+
+### 25.10 Pruebas
+
+`Fase03cLineasBorradorTest`: 48 casos (196 aserciones), agrupados así:
+
+- **A:** configurable, variante ajena, hijo como simple, simple, 15 cantidades inválidas, texto
+  exacto, consolidación;
+- **B:** dos grupos, cambio de grupo, sesión de la tienda, `custom_price` en 4 operaciones,
+  invitado;
+- **C:** stock suficiente, rechazo real de más que el stock con el carrito vivo, total
+  consolidado, stock que baja, borrado del carrito revertido;
+- **D:** cambiar cantidad, item ajeno o fila interna, cantidad inválida, revalidación de stock;
+- **E:** eliminar, item ajeno, **última línea**;
+- **F:** otro asesor, reclamo, sin permiso, 3 estados no editables, P-09;
+- **G:** orden de bloqueos, agregados repetidos y descarte, contrato plano con totales de
+  Bagisto.
+
+**Regresión (2026-09-26):** VentasAsesor 503 pasadas (2061 aserciones = 455 + 48 casos y 1865 + 196 aserciones), CorteConfeccion 384 (2100) y Pint sin errores. El core de Bagisto no se volvió a ejecutar: 03C no registra bindings nuevos, y el único cambio en 03B es un método público nuevo en `BorradorVentaService`.
+
+---
+
+## 26. D-39: solicitud comercial frente a Cart (2026-09-26)
+
+**Estado:** D-39 **IMPLEMENTADA**, pendiente de revisión de Camilo Gaitán y sin commit. Con esto,
+03C queda completa. Supera el bloqueo parcial de §25.8.
+
+### 26.1 Invariantes
+
+- **I-13, solicitud frente a carrito:**
+  - **Solicitud comercial** = lo que el cliente **quiere** (`bylopez_va_borrador_solicitudes`).
+  - **Cart de Bagisto** = lo que hoy se puede **procesar** bajo sus reglas.
+  - **Ninguna de las dos reserva stock:** Bagisto solo reserva al crear el pedido.
+  - **El carrito solo materializa lo solicitado:** cada unidad del carrito tiene la solicitud de
+    su variante, y el total del carrito por variante ≤ cantidad solicitada.
+- **Sin aceptación automática de parciales:** crear o cambiar una solicitud **nunca** toca el
+  Cart. Llevar unidades al carrito es una acción explícita del asesor
+  (`LineasBorradorService::agregar`).
+
+### 26.2 Tabla `bylopez_va_borrador_solicitudes` (migración 000007, solo en testing)
+
+| Columna o restricción | Justificación |
+|---|---|
+| `borrador_id` (FK a borradores, CASCADE) | La solicitud es parte del borrador. El borrador nunca se borra (se descarta), así que las solicitudes **sobreviven al carrito** como rastro de lo pedido (probado al descartar) |
+| `variante_id` (FK a `products`, CASCADE) | La variante concreta: hijo del configurable o simple sin padre. CASCADE, como `cart_items`: sin la variante no hay nada que vender. RESTRICT impediría borrar productos desde el catálogo de Bagisto (probado) |
+| `cantidad_solicitada` (INT UNSIGNED) | El único dato comercial nuevo |
+| UNIQUE(`borrador_id`, `variante_id`) | Ver §26.3 |
+| timestamps | Trazabilidad mínima |
+
+**Qué NO lleva, y por qué:**
+
+- **Producto padre:** se deriva de `products.parent_id`, y el simple es su propio padre.
+  Guardarlo duplicaría el dato y podría contradecir al catálogo.
+- **`cart_item_id`:** Bagisto consolida una línea por variante, borra y recrea ítems y borra el
+  carrito al confirmar. La solicitud puede existir sin ítem. Lo «en carrito» se calcula en
+  tiempo real por (carrito, variante) con `LineasBorradorService::cantidadEnCarrito()`.
+- **Snapshots de SKU, nombre o precio:** el borrador no es histórico. SKU, nombre, estado, stock
+  y precio se leen en tiempo real (probado con un SKU cambiado y una variante desactivada). El
+  histórico lo guardará el pedido.
+- **Precio, `custom_price` o autorizaciones:** la solicitud no es una fuente de precio (D-18).
+- **`external_reference`:** ver §26.8.
+
+### 26.3 Identidad: UNIQUE(borrador, variante)
+
+Una intención agregada por variante, por tres motivos verificados:
+
+1. **Consolidación de Bagisto:** el Cart consolida una línea por variante (§25.3); una segunda
+   solicitud de la misma variante no tendría una línea propia a la que mapearse.
+2. **Reparto por origen:** el futuro compromiso comercial documentado (§23.4) reparte **una**
+   línea por origen (stock, producción, fabricar): colgará de esta fila, no la multiplicará.
+3. **Documentación existente:** no hay ningún requisito escrito de dos intenciones para la misma
+   variante (distintas entregas o fulfillment separado).
+
+Si aparece ese requisito, se añadirá una tabla hija de asignaciones sin romper esta identidad.
+
+### 26.4 Responsabilidades
+
+- **`SolicitudBorradorService` (intención):**
+  - `listar`;
+  - `crear`: rechaza duplicados con `solicitud_ya_existe`;
+  - `cambiarCantidad`: absoluta, y nunca por debajo de lo que ya está en el carrito
+    (`solicitud_menor_que_carrito`);
+  - `eliminar`: `solicitud_en_carrito` si quedan unidades en el carrito.
+  
+  En todas: borrador activo, propietario, variante verificada por el catálogo (I-5), cliente con
+  grupo comercial apto y cantidad entera ≥ 1.
+- **Cambiar de variante:** no es una operación propia. Otra variante es otra identidad, así que
+  se hace eliminando y creando, sin estados intermedios ambiguos.
+- **`LineasBorradorService` (materialización):**
+  - `agregar`, `cambiarCantidad` y `eliminar` sobre el Cart;
+  - `agregar` y `cambiarCantidad` exigen I-13 (códigos `linea_sin_solicitud` y
+    `linea_excede_solicitud`);
+  - retirar del carrito siempre está permitido.
+- **Cantidad compartida:** la validación vive en `Support\Venta\CantidadVenta`, sin duplicarse.
+
+### 26.5 Vista de la solicitud (`SolicitudBorradorVenta`)
+
+| Campo | Semántica |
+|---|---|
+| `cantidadSolicitada` | Lo que quiere el cliente (persistido) |
+| `cantidadEnCarrito` | Unidades hoy en el Cart de Bagisto. **No** es una reserva ni una garantía; la confirmación revalidará |
+| `stockVendible` | Índice de inventario del canal (0 si la variante no es vendible hoy) |
+| `abastecimiento` | Desglose de lo **solicitado** contra el stock vendible actual (I-12, D-36). **No** depende de lo que haya en el carrito. `enProduccion` y `porFabricar` son null (D-37) |
+| `excesoCarritoSobreStock` | Unidades del carrito que el stock actual ya no cubre |
+| `vendible` | La variante y su padre siguen activos y verificados |
+| `precioUnitarioReferencia` | Precio de Bagisto para el grupo **actual** del cliente (RT-03) y la cantidad solicitada. Informativo, **no se guarda** y es null si la variante no es vendible o el grupo no es apto |
+
+**Totales:** `VistaSolicitudesBorrador` solo lleva los totales **reales** del Cart. No existe
+«total solicitado» ni ninguna cifra financiera paralela a Bagisto.
+
+### 26.6 Casos canónicos (probados)
+
+| Situación | Solicitado | En carrito | Vendible | Disponible inmediato | Faltante inmediato | Producción | Por fabricar | Exceso |
+|---|---|---|---|---|---|---|---|---|
+| Pide 100 con 30 vendibles | 100 | 0 | 30 | 30 | 70 | null | null | 0 |
+| El asesor lleva 30 al carrito | 100 | 30 | 30 | 30 | 70 | null | null | 0 |
+| El stock baja a 20 después | 100 | 30 | 20 | 20 | 80 | null | null | 10 |
+
+**Qué no se hace:**
+
+- en el tercer caso **no se toca** ni el carrito ni el inventario: la vista informa y la
+  confirmación revalidará;
+- llevar al carrito más de 30 lo rechaza Bagisto (`stock_insuficiente`), aunque quepa en la
+  solicitud.
+
+### 26.7 Concurrencia
+
+- **Un solo punto de bloqueo:** toda mutación de solicitudes, líneas, reclamo o descarte bloquea
+  primero la **fila del borrador** (`FOR UPDATE`, probado). Dos altas simultáneas, dos cambios de
+  cantidad, una materialización simultánea, un reclamo o un cambio de estado se serializan.
+- **Carrera de dos altas:** si llegaran a la vez, el UNIQUE la resuelve: la segunda recibe
+  `solicitud_ya_existe`.
+- **I-13 dentro del mismo bloqueo:** se comprueba con la solicitud leída bajo el bloqueo del
+  borrador, así que no hay una ventana entre leer lo solicitado y escribir en el carrito.
+
+### 26.8 Idempotencia
+
+- **Sin `external_reference` propia en esta etapa:** la idempotencia del borrador (mecanismo +
+  referencia) ubica el borrador, y las operaciones de solicitud son idempotentes por diseño:
+  - un segundo `crear` de la misma variante no duplica ni suma (`solicitud_ya_existe`);
+  - `cambiarCantidad` fija el valor, así que repetirlo no cambia nada.
+- **Mensajes duplicados de WhatsApp:** un «quiero 6» reenviado no se convierte en 12.
+- **Cuándo añadirla:** si los canales externos necesitan distinguir dos pedidos iguales
+  legítimos, se añadirá con la API, no antes.
+
+### 26.9 Pruebas
+
+- **`Fase03cSolicitudBorradorTest`:** 28 casos, que cubren:
+  - caso canónico, carrito vacío intacto, materialización explícita, más que el stock, I-13;
+  - stock que baja;
+  - variante ajena e hijo como simple, 6 cantidades inválidas;
+  - cambio absoluto y mínimo del carrito, eliminar con y sin carrito, solicitud de otro borrador;
+  - UNIQUE en servicio y en base de datos, borrador ajeno y reclamo, 3 estados no editables,
+    descarte con rastro, invitado;
+  - precio de referencia que sigue al grupo y no se guarda, RT-03 y D-18 con materialización;
+  - catálogo en tiempo real, cascada al borrar el producto, orden de bloqueos.
+- **`Fase03cLineasBorradorTest`:** sus 48 casos se adaptaron a I-13 (cada línea parte de una
+  solicitud amplia, para que el stock lo decida Bagisto). Siguen en verde.
+- **Inventarios de esquema:** se actualizaron (7 migraciones y 9 FK).
+
+**Regresión D-39 (2026-09-26):** VentasAsesor 531 pasadas (2155 aserciones; 503 + 28 casos), CorteConfeccion 384 (2100) y Pint sin errores. El core de Bagisto no se volvió a ejecutar: no hay bindings nuevos ni cambios en su comportamiento.
+
+---
+
+## 27. Cierre formal de 03C (2026-09-26)
+
+**Estado:** 03C **CERRADA** (líneas y D-39), revisada y aprobada por Camilo Gaitán. **03D:
+pendiente, no iniciada.**
+
+### 27.1 Reglas confirmadas
+
+- **Stock al operar:** al incorporar o modificar unidades en el Cart, `cantidad en carrito ≤
+  stock vendible actual de Bagisto` **y** `cantidad en carrito ≤ cantidad solicitada` (I-13).
+  Si se supera el stock, se **rechaza** (`stock_insuficiente`) informando lo disponible
+  (`abastecimiento.disponibleInmediato`).
+- **Qué no hace el sistema:** no recorta en silencio, no agrega automáticamente el máximo, no
+  activa backorders, no crea stock y no suma producción.
+- **Solicitud frente a Cart:** son conceptos distintos y **ninguno es una reserva**. El stock
+  puede cambiar después; la confirmación deberá revalidarlo.
+- **CASCADE en `bvabs_variante_fk`:** aprobado **solo para solicitudes de borrador**, que no son
+  el histórico de una venta. No se extrapola a pedidos: el histórico de un pedido confirmado lo
+  preservarán el Order de Bagisto, sus snapshots y la futura confirmación.
+- **Producción:** stock vendible ≠ producción ≠ por fabricar. `enProduccion` y `porFabricar`
+  quedan en null hasta que exista el contrato con CorteConfeccion.
+- **Precio:** grupo actual del cliente → RT-03 → Bagisto. D-38 sigue pendiente y no bloquea 03C.
+
+### 27.2 Contexto para 03D (solo documentado, NO diseñado ni implementado)
+
+- **Primero reutilizar Bagisto:** antes de crear nada propio, auditar y reutilizar lo que ya
+  tiene (direcciones, `CartAddress`, métodos de envío, tarifas, carriers, checkout de envío) y
+  sus módulos de transportadoras como referencia.
+- **Necesidades de ByLopez:**
+  - transportadora nacional (Inter Rapidísimo, Servientrega…), con la guía inmediata o
+    pendiente;
+  - agregador (p. ej. 99envíos);
+  - domiciliario local de Bogotá, sin guía oficial pero con trazabilidad interna del despacho;
+  - recogida en bodega, sin transportadora ni guía.
+- **Distinción conceptual:** método de entrega ≠ transportadora ≠ despacho ≠ guía/tracking.
+
+**Regresión del cierre:** pruebas de 03C 77 pasadas (293 aserciones), VentasAsesor 532 (2166), CorteConfeccion 384 (2100) y Pint sin errores. Frente a la referencia (531 / 2155), la diferencia es la prueba de cierre «carrito ≤ stock vendible al operar» (+1 caso, +11 aserciones). El core de Bagisto no se volvió a ejecutar: no hay bindings nuevos ni cambios en su comportamiento.

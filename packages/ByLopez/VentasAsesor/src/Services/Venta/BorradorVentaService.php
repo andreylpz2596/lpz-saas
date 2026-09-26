@@ -34,7 +34,8 @@ use Webkul\User\Contracts\Admin;
  *   una transaccion; la idempotencia externa la garantiza un UNIQUE, no un if de PHP.
  * - Propiedad: el creador es propietario durante N dias habiles (calendario laboral);
  *   despues otro asesor autorizado puede reclamarlo. Solo el propietario lo edita.
- * - No agrega lineas ni confirma pedidos (03C y siguientes). Nunca escribe precios.
+ * - Las lineas las gestiona LineasBorradorService (03C). No confirma pedidos. Nunca
+ *   escribe precios.
  *
  * P-09: un cliente inactivo o suspendido PUEDE tener borrador; la vista lo avisa y la
  * futura confirmacion lo bloqueara.
@@ -209,6 +210,22 @@ class BorradorVentaService
         });
 
         return $this->obtener($borradorId);
+    }
+
+    /**
+     * Para otros servicios del borrador (03C, LineasBorradorService). Se llama DENTRO de
+     * una transaccion del llamador: exige permiso, estado editable y propietario, y
+     * bloquea borrador y carrito en el mismo orden que las mutaciones de este servicio.
+     *
+     * @return array{0: BorradorVenta, 1: \Webkul\Checkout\Contracts\Cart}
+     */
+    public function bloquearParaEditar(int $borradorId, Admin $actor): array
+    {
+        $this->exigirPermiso($actor);
+        $borrador = $this->bloquearEditable($borradorId);
+        $this->exigirPropietario($borrador, $actor);
+
+        return [$borrador, $this->carritoBloqueado($borrador)];
     }
 
     /**

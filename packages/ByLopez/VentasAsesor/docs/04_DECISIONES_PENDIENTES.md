@@ -2,7 +2,7 @@
 
 Decisiones de negocio del módulo `ByLopez\VentasAsesor`.
 
-**Última actualización:** 2026-09-15 (Fase 02A) · **2026-09-26 (Fase 03, Camilo Gaitán):** decididas **D-18** y **D-19** (03B) y **D-35 a D-38** (cierre 03B; la nota de numeración está antes del resumen). D-38 queda bloqueada por la fuente de costo.
+**Última actualización:** 2026-09-15 (Fase 02A) · **2026-09-26 (Fase 03, Camilo Gaitán):** decididas **D-18** y **D-19** (03B) y **D-35 a D-38** (cierre 03B; la nota de numeración está antes del resumen). D-38 queda bloqueada por la fuente de costo. **D-39** (03C) decidida e implementada.
 
 **Estado global:** 6 decididas (D-01, D-02, D-05, D-06, **D-16**, **D-27**) ·
 **27 pendientes** · 1 retirada (D-23). La Fase 01 añadió **D-27**. La Fase 01B
@@ -914,6 +914,39 @@ motor de reglas de carrito de Bagisto. Nunca `custom_price` (D-18) ni un cambio 
 
 ---
 
+## D-39 · Cantidad solicitada por encima del stock vendible — **DECIDIDA**
+
+**Estado:** ✅ **DECIDIDA** (2026-09-26, Camilo Gaitán) e implementada (Doc. 05 §26).
+
+**Decisión.** La cantidad que pide el cliente se persiste **fuera** del Cart. **Solicitud
+comercial** = lo que el cliente quiere; **Cart** = lo que Bagisto puede procesar hoy. Ninguna
+de las dos reserva stock. Crear la solicitud **no** agrega automáticamente lo disponible: llevar
+unidades al carrito es una acción explícita. Al operar, el carrito nunca supera lo solicitado
+(invariante **I-13**) ni el **stock vendible actual** (si lo supera, se rechaza informando lo
+disponible; no se recorta ni se agrega solo). El CASCADE al borrar una variante está aprobado
+**solo para solicitudes de borrador**, no para pedidos (cierre 03C, Doc. 05 §27). Tabla `bylopez_va_borrador_solicitudes`, con una solicitud por variante y borrador.
+
+*Texto original de la pregunta:*
+
+**Hecho verificado.** Sin backorders, Bagisto rechaza entera cualquier línea que supere el stock
+vendible, ya sea al agregar (sobre el total consolidado) o al cambiar la cantidad. Un Cart
+**no puede** guardar «pidió 100, hay 30» (Doc. 05 §25.8). Hoy 03C responde `stock_insuficiente`
+con el desglose y no guarda la cantidad pedida.
+
+**Preguntas:**
+
+1. ¿Se persiste la cantidad solicitada aparte del Cart?
+   - **Recomendado:** una tabla propia mínima, `bylopez_va_borrador_solicitudes`, con borrador,
+     producto, variante y `cantidad_solicitada`, UNIQUE(borrador, variante).
+   - **Descartados:** backorders (configuración global) y `cart_items.additional` (Bagisto lo
+     reemplaza en cada consolidación).
+2. Al pedir más que el stock, ¿el sistema pone automáticamente lo disponible en el carrito y
+   registra el faltante, o rechaza y deja decidir al asesor?
+
+**Límites que se mantienen:** el faltante nunca cuenta como entrega inmediata (D-36, I-12) y la
+producción sigue siendo informativa y null mientras no exista el contrato con CorteConfeccion
+(D-37). No se crea ninguna migración hasta que Camilo decida.
+
 ## Resumen
 
 | # | Decisión | Fase bloqueada | Recomendación técnica | Estado |
@@ -957,6 +990,7 @@ motor de reglas de carrito de Bagisto. Nunca `custom_price` (D-18) ni un cambio 
 | D-36 | Disponibilidad para entrega inmediata | 03 | — | ✅ **DECIDIDA** (2026-09-26): solo stock vendible de Bagisto (I-12) |
 | D-37 | Producción como información comercial | 03 | — | ✅ **DECIDIDA** (2026-09-26): informativa, nunca stock; desconocida = NULL |
 | D-38 | Descuento limitado por rentabilidad | 03 | Reglas de carrito de Bagisto (Doc. 05 §24.3) | ✅ principio decidido (2026-09-26); **bloqueada** por fuente de costo y política de margen |
+| D-39 | Cantidad solicitada por encima del stock vendible | 03C | Solicitud comercial fuera del Cart (Doc. 05 §26) | ✅ **DECIDIDA 2026-09-26** (Camilo Gaitán): tabla propia, sin parcial automático, I-13 |
 
 ### Requisitos técnicos obligatorios (no son decisiones de negocio)
 

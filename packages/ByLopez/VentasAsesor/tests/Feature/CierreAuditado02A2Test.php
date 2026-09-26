@@ -286,8 +286,12 @@ test('12. el esquema conserva RESTRICT y sigue sin claves foraneas hacia admins'
         // y un pedido con borrador no desaparece en silencio.
         ->and($reglas->get('bvabv_cart_fk'))->toBe('SET NULL -> cart')
         ->and($reglas->get('bvabv_order_fk'))->toBe('RESTRICT -> orders')
+        // Fase 03C (D-39): las solicitudes son partes del borrador y, como cart_items, caen
+        // con la variante (RESTRICT impediria borrar productos desde el catalogo).
+        ->and($reglas->get('bvabs_borrador_fk'))->toBe('CASCADE -> bylopez_va_borradores_venta')
+        ->and($reglas->get('bvabs_variante_fk'))->toBe('CASCADE -> products')
         ->and($reglas->filter(fn ($regla) => str_contains($regla, '-> admins'))->all())->toBe([])
-        ->and($reglas)->toHaveCount(7);
+        ->and($reglas)->toHaveCount(9);
 });
 
 test('el historial inicial de un fallo tecnico es el unico portador del codigo', function () {
