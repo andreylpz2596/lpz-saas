@@ -383,9 +383,9 @@ test('21. no existen campos ni metodos que afirmen comision', function () {
 test('22. ninguna migracion del modulo altera tablas del core', function () {
     $migraciones = glob(dirname(__DIR__, 2).'/src/Database/Migrations/*.php');
 
-    // Tres de la Fase 02A/02A1, la cola de incidencias de la Fase 02B1A y el indice de
-    // telefonos de RT-04B1a.
-    expect($migraciones)->toHaveCount(5);
+    // Tres de la Fase 02A/02A1, la cola de incidencias de la Fase 02B1A, el indice de
+    // telefonos de RT-04B1a y los borradores de venta de la Fase 03B.
+    expect($migraciones)->toHaveCount(6);
 
     foreach ($migraciones as $archivo) {
         $contenido = file_get_contents($archivo);

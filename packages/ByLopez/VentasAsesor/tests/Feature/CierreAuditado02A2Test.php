@@ -282,8 +282,12 @@ test('12. el esquema conserva RESTRICT y sigue sin claves foraneas hacia admins'
         // RT-04B1a: excepcion DELIBERADA. El indice de telefonos es derivado del cliente;
         // RESTRICT impediria borrar clientes desde el panel de Bagisto.
         ->and($reglas->get('bvacp_customer_fk'))->toBe('CASCADE -> customers')
+        // Fase 03B: el borrador sobrevive a su carrito (Bagisto lo borra al crear el pedido)
+        // y un pedido con borrador no desaparece en silencio.
+        ->and($reglas->get('bvabv_cart_fk'))->toBe('SET NULL -> cart')
+        ->and($reglas->get('bvabv_order_fk'))->toBe('RESTRICT -> orders')
         ->and($reglas->filter(fn ($regla) => str_contains($regla, '-> admins'))->all())->toBe([])
-        ->and($reglas)->toHaveCount(5);
+        ->and($reglas)->toHaveCount(7);
 });
 
 test('el historial inicial de un fallo tecnico es el unico portador del codigo', function () {

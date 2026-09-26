@@ -2,7 +2,7 @@
 
 Decisiones de negocio del módulo `ByLopez\VentasAsesor`.
 
-**Última actualización:** 2026-09-15 (Fase 02A)
+**Última actualización:** 2026-09-15 (Fase 02A) · **2026-09-26 (Fase 03, Camilo Gaitán):** decididas **D-18** y **D-19** (03B) y **D-35 a D-38** (cierre 03B; la nota de numeración está antes del resumen). D-38 queda bloqueada por la fuente de costo.
 
 **Estado global:** 6 decididas (D-01, D-02, D-05, D-06, **D-16**, **D-27**) ·
 **27 pendientes** · 1 retirada (D-23). La Fase 01 añadió **D-27**. La Fase 01B
@@ -843,6 +843,77 @@ recogida; cancelaciones y cambios; operación sin conexión; numeración e idemp
 
 ---
 
+> **Nota de numeración (cierre 03B, 2026-09-26; identificadores D-35 a D-38 CONFIRMADOS como definitivos por Camilo Gaitán, no se renumeran).** Camilo Gaitán presentó estas cuatro decisiones
+> como «D-20 a D-23». Esos identificadores ya existían: D-20 (cambios tras confirmar), D-21 (envío
+> y transporte) y D-22 (KPIs monetarios) siguen pendientes y los citan el roadmap, `00_STATUS` y
+> el Doc. 05; D-23 está retirada (RT-01). Para no romper la trazabilidad se registran como
+> **D-35 a D-38**. Equivalencia: D-20 de la instrucción → **D-35**, D-21 → **D-36**, D-22 → **D-37**
+> y D-23 → **D-38**.
+
+## D-35 · Días laborales del borrador — **DECIDIDA**
+
+**Estado:** ✅ **DECIDIDA** (2026-09-26, Camilo Gaitán).
+
+**Decisión.** Son laborales de **lunes a sábado**; el domingo no lo es. El borrador queda asignado
+a su propietario **1 día hábil**: viernes 10:00 → sábado 10:00; sábado 10:00 → lunes 10:00. Los
+festivos colombianos **no** se codifican: la lista es configurable y empieza vacía.
+
+**Implementación.** `ventasasesor.calendario_laboral.dias_laborales = [1..6]` con
+`CalendarioLaboralConfigurable` (Doc. 05 §23.7, §24.1).
+
+## D-36 · Disponibilidad para entrega inmediata — **DECIDIDA**
+
+**Estado:** ✅ **DECIDIDA** (2026-09-26, Camilo Gaitán).
+
+**Decisión.** Para entrega inmediata **solo** cuenta el stock vendible real de Bagisto:
+`disponible_inmediato = stock_vendible`. **Nunca** se suman prendas en corte, en confección,
+pendientes de recibir, planeadas ni pedidos especiales. Si piden 100 y hay 30 vendibles, 50 en
+confección y 20 por fabricar, la entrega inmediata es **30**, no 80 ni 100.
+
+**Implementación.** Invariante **I-12** en `DesgloseAbastecimiento` (Doc. 05 §24.2).
+
+## D-37 · Producción y fabricación como información comercial — **DECIDIDA**
+
+**Estado:** ✅ **DECIDIDA** (2026-09-26, Camilo Gaitán).
+
+**Decisión.** «En producción», «en confección» y «por fabricar» son información para conversar
+con el cliente sobre la espera. **No** son stock vendible, **no** habilitan entrega inmediata,
+**no** modifican el índice de inventario y **no** crean reservas. Sin una fuente fiable de
+CorteConfeccion, la producción es **desconocida (NULL), nunca 0**. El sistema no promete fechas
+sin una fuente fiable para calcularlas.
+
+## D-38 · Descuento limitado por rentabilidad — **DECIDIDA en principio; bloqueada por datos**
+
+**Estado:** ✅ principio **DECIDIDO** (2026-09-26, Camilo Gaitán). La implementación está
+**bloqueada** hasta definir las fuentes de abajo.
+
+**Decisión.** Un descuento **nunca** puede dejar la venta por debajo del margen mínimo de
+rentabilidad aprobado:
+
+```text
+precio de Bagisto → costo relevante → margen mínimo → precio mínimo → descuento máximo
+```
+
+No hay porcentaje máximo global (ni 5, ni 10, ni 20 %): el máximo varía según producto, costo,
+precio y grupo.
+
+**Falta, antes de implementar:**
+
+1. una fuente **autoritativa** de `costo_base_para_precio_minimo`. No se usa el atributo `cost`
+   de Bagisto sin demostrar que es esa fuente, ni costos copiados de documentación;
+2. una política de `margen_minimo_requerido`: global, por categoría o por producto, y quién la
+   aprueba.
+
+**No confundir** el margen mínimo para autorizar precio con la utilidad final de la empresa, que
+incluye nómina, arriendo, plataformas, devoluciones, empaques, comisiones y desperdicios. Tampoco
+con **D-31** (costo unitario comisionable), aunque podrían compartir fuente de costo: el diseño
+debe permitirlo sin mezclarlos.
+
+**Mecanismo técnico** (auditoría de CartRule en Doc. 05 §24.3): el descuento se aplicará con el
+motor de reglas de carrito de Bagisto. Nunca `custom_price` (D-18) ni un cambio de grupo.
+
+---
+
 ## Resumen
 
 | # | Decisión | Fase bloqueada | Recomendación técnica | Estado |
@@ -864,8 +935,8 @@ recogida; cancelaciones y cambios; operación sin conexión; numeración e idemp
 | D-15 | Periodo de corte | 09 | Mensual por fecha de entrega | pendiente |
 | D-16 | Cuándo nace el pedido | — | Carrito/borrador; pedido al confirmar | ✅ **DECIDIDA** (01B) |
 | D-17 | Identidad del cliente | 03, 04 | Teléfono normalizado; nunca correos falsos | pendiente |
-| D-18 | Precios y descuentos | 03, 04 | Precio oficial; excepción con permiso y auditoría | pendiente |
-| D-19 | Sobreventa | 03 | Impedirla salvo flujo autorizado | pendiente |
+| D-18 | Precios y descuentos | 03, 04 | Precio oficial; excepción con permiso y auditoría | ✅ **DECIDIDA 2026-09-26** (Camilo Gaitán): sin precios manuales, nunca `custom_price`; descuento autorizado = fase aparte (Doc. 05 §23.1, §23.10) |
+| D-19 | Sobreventa | 03 | Impedirla salvo flujo autorizado | ✅ **DECIDIDA 2026-09-26** (Camilo Gaitán): compromiso disponible / en producción / pedido especial, nunca stock falso (Doc. 05 §23.1, §23.4) |
 | D-20 | Cambios tras confirmar | 04 | Cancelación parcial + pedido nuevo | pendiente |
 | D-21 | Envío y transporte | 04, 08 | Tarifa calculada; transporte fuera de la base | pendiente |
 | D-22 | KPIs monetarios | 10 | Métricas separadas; cifra principal = entregado | pendiente |
@@ -882,6 +953,10 @@ recogida; cancelaciones y cambios; operación sin conexión; numeración e idemp
 | D-32 | Porcentaje inicial de comisión | 08 | 20 % de la utilidad bruta positiva (propuesta) | pendiente |
 | D-33 | Comisión en ventas POS | POS | — | pendiente |
 | D-34 | Alcance operativo y fiscal del POS | POS | — | pendiente |
+| D-35 | Días laborales del borrador | 03 | — | ✅ **DECIDIDA** (2026-09-26): lunes a sábado; 1 día hábil |
+| D-36 | Disponibilidad para entrega inmediata | 03 | — | ✅ **DECIDIDA** (2026-09-26): solo stock vendible de Bagisto (I-12) |
+| D-37 | Producción como información comercial | 03 | — | ✅ **DECIDIDA** (2026-09-26): informativa, nunca stock; desconocida = NULL |
+| D-38 | Descuento limitado por rentabilidad | 03 | Reglas de carrito de Bagisto (Doc. 05 §24.3) | ✅ principio decidido (2026-09-26); **bloqueada** por fuente de costo y política de margen |
 
 ### Requisitos técnicos obligatorios (no son decisiones de negocio)
 

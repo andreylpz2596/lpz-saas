@@ -4,12 +4,14 @@ namespace ByLopez\VentasAsesor\Providers;
 
 use ByLopez\VentasAsesor\Console\Commands\IndexarTelefonosClientesCommand;
 use ByLopez\VentasAsesor\Console\Commands\ReconciliarAtribucionesCommand;
+use ByLopez\VentasAsesor\Contracts\CalendarioLaboral;
 use ByLopez\VentasAsesor\Contracts\NormalizadorTelefono;
 use ByLopez\VentasAsesor\Listeners\Correo\CustomerConDestinatarioVerificado;
 use ByLopez\VentasAsesor\Listeners\Correo\InvoiceConDestinatarioVerificado;
 use ByLopez\VentasAsesor\Listeners\Correo\OrderConDestinatarioVerificado;
 use ByLopez\VentasAsesor\Listeners\Correo\RefundConDestinatarioVerificado;
 use ByLopez\VentasAsesor\Listeners\Correo\ShipmentConDestinatarioVerificado;
+use ByLopez\VentasAsesor\Support\Calendario\CalendarioLaboralConfigurable;
 use ByLopez\VentasAsesor\Support\ClasificadorOrigenPedido;
 use ByLopez\VentasAsesor\Support\ContextoComercialDePeticion;
 use ByLopez\VentasAsesor\Support\ContextoPrecioComercial;
@@ -60,6 +62,9 @@ class VentasAsesorServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../Config/ventasasesor.php', 'ventasasesor');
 
         $this->app->bind(NormalizadorTelefono::class, NormalizadorTelefonoBasico::class);
+
+        // Fase 03B. Calendario laboral por configuracion (sin festivos en el codigo).
+        $this->app->bind(CalendarioLaboral::class, CalendarioLaboralConfigurable::class);
 
         $this->registrarGuardDeCorreosAlCliente();
     }
