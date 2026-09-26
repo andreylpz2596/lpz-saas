@@ -1,11 +1,11 @@
 # 13 — RT-04B0: diseño técnico del cliente comercial
 
 **Estado:** RT-04B0 **CERRADO** (diseño, 2026-09-25). **RT-04B1a CERRADO** (aprobado 2026-09-26, §36).
-RT-04B1b **pendiente** (no iniciado).
+**RT-04B1b CERRADO** (aprobado 2026-09-26, §37). Fase 03 no iniciada.
 
 > **Cómo leer este documento.** Las secciones 1–35 son el diseño RT-04B0 tal como se aprobó y se
 > conservan como historia. Lo que la implementación de RT-04B1a confirmó, corrigió o aplazó está en
-> la **§36**, con etiquetas HALLAZGO / DECISIÓN / IMPLEMENTADO / PENDIENTE / SUPERADO / DEUDA. Donde
+> la **§36** (y lo de RT-04B1b en la **§37**), con etiquetas HALLAZGO / DECISIÓN / IMPLEMENTADO / PENDIENTE / SUPERADO / DEUDA. Donde
 > una sección antigua quedó superada lleva una nota «SUPERADO — §36.x». En caso de contradicción,
 > manda la §36.
 
@@ -978,6 +978,9 @@ Si la búsqueda es ambigua, el flujo se detiene y pide selección humana.
 > `customers.phone`), P-05 (teléfono), P-07 (direcciones siguen en B2), P-12 (sin librería en B1a),
 > P-14 (B1a + B1b adoptado). Aplazadas: P-04 (procedencia) y P-11 (ACL, sin consumidor). El resto
 > sigue pendiente.
+>
+> **Actualizado — §37.10 (RT-04B1b):** P-03, P-06, P-08 y P-10 quedan **cerradas para RT-04**.
+> P-09 se aplaza con evidencia del core. P-02 quedó aplicada (invitado prohibido, §36.15).
 
 | Id | Pregunta | Recomendación |
 |---|---|---|
@@ -1499,6 +1502,8 @@ la Fase 03 junto con su primer consumidor.
 
 ### 36.22 Lo que queda para RT-04B1b
 
+> **Implementado en RT-04B1b (§37)**, salvo lo que §37.9 deja pendiente.
+
 - **Servicio de teléfonos del cliente:** alta del principal con escritura transaccional de
   `customers.phone` y de la fila; secundarios; promoción; cambio y eliminación del principal.
 - **Búsqueda y alta:** `BuscarClienteComercialService` (teléfono, nombre y email; 0, 1 o N
@@ -1594,3 +1599,235 @@ propia de que no hubo envío es `NotificacionClienteOmitida` y su log.
 - Pint en verde.
 - `lpz_saas`: solo SELECT, sin migración ni indexador.
 - Webkul: 0 cambios.
+
+---
+
+## 37. RT-04B1b — cliente comercial operativo (2026-09-26)
+
+**Estado: CERRADO** (aprobado 2026-09-26; commit propio, sin push). No crea pedidos. Webkul tiene
+0 cambios y `lpz_saas` solo se leyó. Base: commit `cf7a57c` (B1a). Cubre lo que quedaba abierto en
+§36.22, salvo lo indicado en §37.9.
+
+### 37.1 Servicios y contratos
+
+Todos viven en `src/Services/Clientes`. Lanzan excepciones con código estable y sin datos
+personales, y devuelven DTOs de solo lectura (`toArray()` donde lo consumirá una API).
+
+| Servicio | Responsabilidad | Entrada → salida |
+|---|---|---|
+| `BuscarClienteComercialService` | Búsqueda única de solo lectura | `buscar(ConsultaClienteComercial{telefono?, email?, nombre?, channelId?})` → `ResultadoBusquedaCliente{tipo, cliente?, candidatos[], conflicto?, clientesEnConflicto[], avisos[]}`. Auxiliares: `idPorEmail()` y `candidatosPorNombre()` |
+| `CrearClienteComercialService` | Alta de un Customer real, sin cuenta ecommerce | `crear(DatosClienteComercial{nombre, apellido, telefono, customerGroupId, email?, channelId?})` → `Customer` |
+| `TelefonosClienteService` | Única puerta de escritura de teléfonos | `establecerPrincipal(id, tel, conservarAnterior = true)`, `promoverAPrincipal()`, `agregarSecundario()`, `eliminarSecundario()` |
+| `ResolverClienteComercialService` | Decide sin escribir: existente, nuevo o conflicto | `resolver(telefono, email?, nombre?, channelId?)` → `ResolucionCliente{estado, cliente?, candidatos[], conflicto?, avisos[]}` |
+| `GuardarDireccionClienteComercialService` | Dirección guardada del cliente, sin los Form Requests de la UI | `guardar(customerId, DireccionComercial, ?addressId)` → `CustomerAddress` |
+| `Support\Telefono\LocalizadorTitularTelefono` | Dueño de un número normalizado (índice + fichas históricas) | `titular(TelefonoNormalizado)` → `?TitularTelefono{customerId, fuente}` |
+
+Excepciones nuevas:
+
+- `DatosClienteComercialInvalidosException` (campo => código);
+- `ClienteComercialExistenteException` (id, `telefono` | `email`);
+- `ConflictoIdentidadClienteException` (id por teléfono, id por email);
+- `OperacionTelefonoInvalidaException` (`telefono_no_normalizable`, `cliente_inexistente`,
+  `telefono_no_es_del_cliente`, `principal_no_eliminable`);
+- `TelefonoEnVariasFichasException`.
+
+Se reutiliza `TelefonoPerteneceAOtroClienteException` de B1a.
+
+### 37.2 Identidad y búsqueda
+
+| Criterio | Semántica | Resultado |
+|---|---|---|
+| Teléfono | Identidad fuerte: un número normalizado = un Customer (principal, secundario o ficha histórica) | `TELEFONO_EXACTO` y `via` (`indice_principal`, `indice_secundario` o `ficha_sin_indexar`) |
+| Email | Identifica **dentro del canal**, que es la unicidad real de Bagisto `(email, channel_id)` (Doc. 12 §3). La collation de MariaDB (`utf8mb4_unicode_ci`) no distingue mayúsculas (probado) | `EMAIL_EXACTO`, solo si el teléfono no coincidió |
+| Nombre | Solo candidatos: cada palabra en «nombre apellido», con el grupo precargado (una consulta, sin N+1), límite de 20 (máximo 50) | `CANDIDATOS_NOMBRE`; nunca identidad ni fusión |
+| Teléfono de A y email de B | Contradicción | `CONFLICTO` (`telefono_y_email_de_clientes_distintos`), fail closed |
+| Mismo número en varias fichas | Datos históricos inconsistentes | `CONFLICTO` (`telefono_en_varias_fichas`) |
+| Teléfono no normalizable o email inválido | No se busca por ese criterio | Aviso en `avisos[]` |
+
+**Transición de clientes históricos** (indexador no ejecutado en `lpz_saas`, §36.11): el
+localizador busca también en `customers.phone` con las variantes que el core pudo guardar. El
+core solo admite `^\+?\d+$` (§36.3), así que las variantes son finitas: `+57n`, `0057n`, `57n` y
+`n` para Colombia, o `+d` y `00d` para internacionales. Solo se conservan las que el normalizador
+devuelve al mismo E.164. La consulta usa el UNIQUE de `customers.phone`, es de solo lectura y
+**no indexa ni modifica** nada. Un valor escrito fuera de ese patrón (SQL directo) no se detecta
+hasta que corra el indexador.
+
+### 37.3 Creación
+
+Validación previa, sin escribir nada:
+
+- nombre y apellido obligatorios (≤ 255);
+- email opcional: vacío o espacios → **NULL**; si existe, formato válido con el mismo criterio que
+  el mailer (§36.14);
+- teléfono normalizable;
+- grupo validado por `ValidadorGrupoComercial` (NULL, inexistente o invitado → rechazo, sin crear
+  nada).
+
+Identidad libre:
+
+- teléfono ya usado (principal, secundario, otro formato o ficha histórica) →
+  `ClienteComercialExistenteException(telefono)`;
+- email ya usado en el canal → `ClienteComercialExistenteException(email)`;
+- teléfono de A y email de B → `ConflictoIdentidadClienteException`.
+
+Nunca se crea un duplicado ni se fusiona.
+
+**Transacción:** `CustomerRepository::create` (sin cuenta: `password` NULL, `is_verified` 0, sin
+token; canal por defecto) más `TelefonosClienteService::establecerPrincipal` en **una**
+transacción. Si el teléfono falla (por ejemplo, en una carrera), se revierte también el Customer
+(probado). Una carrera por el email se traduce a `ClienteComercialExistenteException`.
+
+**Eventos** (§16.2, verificado):
+
+- `customer.create.before` y, **después del commit**, `customer.create.after`, protegido con
+  `try/catch (Throwable)`. Un listener roto no deshace el alta (probado).
+- **No** se disparan `customer.registration.*`, porque en el core significan registro de cuenta y
+  disparan verificación o bienvenida (§16.1, N4).
+- No se envían `NewCustomerNotification` ni `RegistrationNotification` (probado con `Mail::fake`).
+
+### 37.4 Teléfonos principal y secundarios
+
+Todas las operaciones de `TelefonosClienteService` corren en una transacción con el Customer
+bloqueado (`lockForUpdate`):
+
+| Operación | Comportamiento |
+|---|---|
+| `establecerPrincipal` | Normaliza, comprueba que el número no sea de otro cliente y lo deja como principal. Si ya era secundario, lo promueve. El principal anterior queda como secundario, o se retira si `conservarAnterior = false`. Escribe `customers.phone` en E.164 |
+| Cliente histórico sin fila en el índice | Al establecer un principal nuevo, su `customers.phone` anterior pasa a secundario si es normalizable y está libre |
+| `promoverAPrincipal` | Exige que el número ya sea del cliente |
+| `agregarSecundario` | Idempotente, en cualquier formato equivalente |
+| `eliminarSecundario` | Sí para secundarios. **El principal no se elimina**: primero se establece otro. Así, un cliente comercial nunca se queda sin principal por estos servicios |
+| Número de otro cliente | `TelefonoPerteneceAOtroClienteException`; nunca se reasigna |
+
+- **Sincronización:** `customers.phone` coincide con el principal del índice en cada operación.
+- **Carreras:** si el UNIQUE de `customers.phone` choca, el servicio revierte la transacción
+  completa, incluida la fila del índice (probado).
+- **Cambios externos:** los hechos desde el panel o el importador siguen siendo cosa del indexador
+  (§36.8–§36.9).
+
+### 37.5 Dirección
+
+**Evidencia del core:**
+
+- `CustomerAddress` fija `address_type = customer` con un scope global.
+- `CustomerAddressRepository` no tiene lógica.
+- La validación vive solo en `Admin/Http/Requests/AddressRequest.php:28-41`.
+- `AddressController::store/update` une las líneas con `PHP_EOL` y dispara
+  `customer.addresses.create|update.before/after`.
+- En `addresses`, `postcode`, `state`, `country`, `email` y `phone` admiten NULL.
+
+**El servicio replica ese contrato con dos diferencias del flujo comercial:**
+
+- email NULL permitido;
+- teléfono normalizado a E.164, que cumple `PhoneNumber`.
+
+Reutiliza la regla `PostCode` del core, no una copia. Los campos obligatorios son los mismos que en
+el core (el código postal es obligatorio y usa la regla `PostCode`, como en el core; decisión P-06 en §37.10). Si se actualiza,
+la dirección debe ser del mismo cliente.
+
+**Teléfono de la dirección:** lo indica el llamador. **No** se asume el principal (quien recibe
+puede ser otra persona) y **no** entra en el índice comercial.
+
+**HALLAZGO del core:** `AddressController` desmarca la dirección predeterminada anterior usando el
+`customer_id` que llega en el **request**, no el de la ruta. El servicio lo hace por el cliente
+correcto (probado: no toca las direcciones de otros clientes).
+
+**Compatibilidad probada:** la dirección guardada sirve tal cual como origen de
+`Cart::saveAddresses()`: `parent_address_id`, teléfono y `email` NULL, y `cart.customer_email`
+queda NULL (nunca `""`).
+
+**Fuera de alcance:** domicilio frente a recogida, transportadora, tarifa, guía y `vat_id`.
+
+### 37.6 DECISIÓN — ACL: aplazada hasta el primer endpoint
+
+Evidencia: el `Bouncer` del core autoriza por **nombre de ruta** (`Route::currentRouteName()` →
+`acl()->getRoles()`, `User/src/Http/Middleware/Bouncer.php:136-142`). Estos servicios no tienen
+ruta ni pantalla. Una clave ACL sin ruta no protege nada y sería configuración muerta.
+
+Se crearán `ventas_asesor.clientes.search`, `.create` y `.edit` junto con el primer endpoint o
+pantalla que consuma estos servicios (Fase 03 o 04), y la autorización se hará en esa capa.
+
+### 37.7 DECISIÓN — procedencia: sigue aplazada
+
+B1b no demostró una necesidad real: ningún consumidor pregunta quién creó al cliente ni por qué
+canal. La atribución de pedidos (02B) no se mezcla con esto.
+
+### 37.8 Pruebas
+
+| Archivo | Casos | Cubre |
+|---|---|---|
+| `tests/Feature/Rt04b1bTelefonosClienteServiceTest.php` | 12 | Servicio de teléfonos |
+| `tests/Feature/Rt04b1bClienteComercialTest.php` | 28 | Crear, buscar, resolver (casos A–F, §37.10) y eventos |
+| `tests/Feature/Rt04b1bDireccionComercialTest.php` | 6 | Dirección |
+| `tests/helpersRt04b1b.php` | — | Helpers compartidos |
+
+**Resultados:**
+
+- VentasAsesor: **424 passed**, 1736 aserciones (antes 381 / 1595). Las pruebas del guard de B1a
+  siguen en verde.
+- CorteConfeccion y core: ver `00_STATUS`.
+
+### 37.9 Deuda y pendiente antes de la Fase 03
+
+- **Datos en `lpz_saas`** (con autorización expresa): aplicar la migración `000005` y ejecutar el
+  indexador. Hasta entonces la búsqueda funciona por la transición de §37.2.
+- **Decisiones abiertas:**
+  - P-06, P-03, P-08 y P-10: **cerradas para RT-04** en §37.10.
+  - P-09 (clientes suspendidos o inactivos): aplazada con evidencia en §37.10.
+  - Agregar email a un cliente existente y activar su cuenta ecommerce (§24): diseñado, no
+    implementado.
+- **ACL** con el primer endpoint (§37.6).
+- **Deuda:** el teléfono de las direcciones no se indexa (B2) y los internacionales no se verifican
+  (§36.10).
+- **Para la Fase 03:** `CrearPedidoComercialService` consumirá lo siguiente:
+  - `ResolverClienteComercialService`, y `CrearClienteComercialService` si el estado es NUEVO;
+  - `TelefonosClienteService` para asociar un número nuevo a un cliente existente;
+  - `GuardarDireccionClienteComercialService`;
+  - `ContextoPrecioComercial::durante()` de RT-03.
+
+  Antes de preciar, deberá comprobar que el grupo actual del cliente sigue siendo apto
+  (`ValidadorGrupoComercial`), porque el grupo pudo cambiar después del alta (§13).
+
+### 37.10 Revisión final de RT-04B1b: identidad y decisiones cerradas (2026-09-26)
+
+**Resolución A–F.** Probado en `Rt04b1bClienteComercialTest`: cada caso registra con `DB::listen`
+todas las sentencias no-SELECT y el resultado es **0**, así que `ResolverClienteComercialService`
+es de **solo lectura**.
+
+| Caso | Teléfono | Email | Resultado |
+|---|---|---|---|
+| A | → A | → A | `EXISTENTE` A, sin avisos |
+| B | → A | inexistente | `EXISTENTE` A + aviso `email_distinto_al_registrado` (el email de A no cambia) |
+| C | inexistente | → A | `EXISTENTE` A (`via = email`) + aviso `telefono_no_registrado`. **El teléfono NO se agrega a A**: si procede, lo hace el llamador con `TelefonosClienteService` |
+| D | → A | → B | `CONFLICTO` (`telefono_y_email_de_clientes_distintos`) con ambos ids |
+| E | inexistente | inexistente | `NUEVO`, sin crear nada |
+| F | (nombre parecido) | — | `NUEVO` + candidatos + aviso `nombres_parecidos`; nunca identidad automática |
+
+**SUPERADO:** la primera versión de B1b devolvía `CONFLICTO (email_de_cliente_existente)` en el
+caso C. Se eliminó esa constante. `CrearClienteComercialService` sigue sin crear un duplicado en
+ese caso (`ClienteComercialExistenteException(email)`).
+
+| Decisión | Estado | Contenido |
+|---|---|---|
+| **P-06** Código postal | **CERRADA para RT-04** | No hay regla comercial nueva. La dirección guardada mantiene la misma obligatoriedad y validación que Bagisto (`AddressRequest`: obligatorio + `PostCode`). **Crear un Customer no depende del código postal**, porque el alta no pide dirección. Si una transportadora lo exige de otra forma, será responsabilidad del flujo logístico, no de la identidad |
+| **P-03** Grupo | **CERRADA para RT-04** | El grupo es explícito, existente y distinto del invitado (identificado como en el core, §36.15). No hay grupo comercial por defecto ni grupos hardcodeados por nombre. Si «Nueva venta» necesita una política de grupo por defecto, la decidirá esa fase |
+| **P-08** Bienvenida | **CERRADA para RT-04** | Crear un cliente comercial ≠ crear una cuenta ecommerce: no se envían bienvenida ni credenciales (probado, §37.3). Activar la cuenta ecommerce será un flujo aparte (§24) |
+| **P-09** Suspendidos o inactivos | **APLAZADA** | Ver abajo |
+| **P-10** API y privacidad | **PRINCIPIO** | Las futuras API, n8n, WhatsApp o IA recibirán solo los datos que necesite cada operación. No se expone el Customer completo (modelo, relaciones, campos de cuenta). `ClienteEncontrado` ya es una vista reducida; cada endpoint definirá su propio recorte y enmascarado. No hay API en RT-04 |
+
+**P-09, evidencia del core (solo lectura).** Bagisto tiene dos campos reales en `customers`:
+
+- **`status`** (activo o inactivo): impide el login de la tienda
+  (`Shop/…/Customer/SessionController.php:46`, `Shop/Http/Middleware/AuthenticateCustomer.php:28`)
+  y el checkout de la API de la tienda (`Shop/…/API/OnepageController.php:222`).
+- **`is_suspended`**: impide el checkout de la tienda (`Shop/…/OnepageController.php:40`,
+  `API/OnepageController.php:215`).
+- Ambos se editan en el panel (`Admin/…/CustomerController.php:159-160`; `status` también en
+  edición masiva, l. 303).
+- **Solo se aplican al cliente con sesión en la tienda** (guard `customer`). El carrito y el pedido
+  del panel (`Admin/…/Sales/CartController`, `OrderController`) **no** los consultan.
+
+Hoy nada del dominio comercial los tiene en cuenta: el alta crea `status = 1` e `is_suspended = 0`,
+y la búsqueda y el resolver no los filtran. No se inventa un estado nuevo ni se implementa nada.
+La Fase 03 decidirá, ante una necesidad funcional concreta, si una venta comercial a un cliente
+inactivo o suspendido se bloquea, se avisa o se permite, usando estos mismos campos del core.

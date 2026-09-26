@@ -2,10 +2,10 @@
 
 Estado consolidado de las fases del módulo `ByLopez\VentasAsesor`.
 
-**Última actualización:** 2026-09-26 (RT-04A, RT-04B0 y RT-04B1a cerrados en el commit de cierre)
+**Última actualización:** 2026-09-26 (RT-04B1b cerrado en su commit)
 
 **Resumen rápido:** 02B1B = CERRADO · RT-03 = CERRADO · **RT-04A = CERRADO** · **RT-04B0 = CERRADO** ·
-**RT-04B1a = CERRADO** · RT-04B1b = PENDIENTE (no iniciado) ·
+**RT-04B1a = CERRADO** · **RT-04B1b = CERRADO** ·
 Fase 03 = NO INICIADA. **RT-04 no está completo.**
 
 > **El paquete está registrado y carga.** PSR-4 en el `composer.json` raíz, provider en
@@ -65,7 +65,7 @@ Fase 03 = NO INICIADA. **RT-04 no está completo.**
 | RT-04A | AUDITORIA_CLIENTE_COMERCIAL_SIN_EMAIL | **CERRADO** (auditado) | Solo análisis y 14 pruebas de caracterización: email NULL admitido en BD pero exigido en admin y en direcciones de carrito; notificaciones con email NULL lanzan TypeError no capturado; teléfono UNIQUE global sin normalización ni búsqueda; grupo opcional al crear (invitado). Sin cambios de comportamiento. | RT-03 | — (decisiones tomadas: D-RT04-01…10, Doc. 12 §14) | Doc. 12 | 2026-09-25 |
 | RT-04B0 | DISENO_TECNICO_CLIENTE_COMERCIAL | **CERRADO** (diseño; parcialmente superado por RT-04B1a, Doc. 13 §36.20) | Diseño sin código: teléfono normalizado en tabla propia `bylopez_va_customer_phones` (INDEX, no UNIQUE global); `customers.phone UNIQUE` intacto (política U1/U2); guard de notificaciones por **binding de subclases de listeners del Shop**; alta comercial con `customer.create.*` y sin `customer.registration.*`; grupo validado en alta y resolución; servicios de búsqueda/alta/resolución y contrato para Fase 03. | RT-04A | P-01…P-15 (Doc. 13 §33) | Doc. 13 | 2026-09-25 |
 | RT-04B1a | INFRAESTRUCTURA_CLIENTE_COMERCIAL | **CERRADO** (aprobado 2026-09-26) | Auditoría real del teléfono (matriz de consumidores). **D-RT04-PHONE-01**: un número normalizado → un Customer; principal en `customers.phone` y secundarios en `bylopez_va_customer_phones` (UNIQUE del normalizado, principal 1/NULL). Normalizador E.164 sin dependencias. Indexador histórico con dry-run. `ValidadorGrupoComercial`. Guard de correos al cliente por binding de 5 listeners del Shop (extension point probado antes). Sin listeners de Customer, sin procedencia ni ACL (aplazadas). Migración aplicada **solo** en testing. **Revisión final** (Doc. 13 §36.23): restricción 1/NULL verificada con SQL directo; `ESTRUCTURA_RECONOCIDA` sustituye a `VALIDO` (normalizar ≠ validar); reembolso verificado con `RefundRepository` real; 26 fallos de base del core clasificados por causa (iguales con y sin B1a); `email_sent` no prueba entrega. **381 casos propios en verde (1595 aserciones).** | RT-04B0 | revisión del usuario | Doc. 13 §36 | 2026-09-26 |
-| RT-04B1b | SERVICIOS_IDENTIDAD_CLIENTE_COMERCIAL | **PENDIENTE** (no iniciado) | Servicio de teléfonos (principal ↔ `customers.phone` transaccional), búsqueda, alta, resolución, dirección comercial, ACL y procedencia. | RT-04B1a | aprobación de B1a; P-03, P-06, P-08, P-09, P-10 | — | 2026-09-26 |
+| RT-04B1b | CLIENTE_COMERCIAL_OPERATIVO | **CERRADO** (aprobado 2026-09-26) | Servicios `BuscarClienteComercialService` (teléfono → email del canal → candidatos por nombre; conflicto teléfono A/email B; transición de fichas históricas sin indexar), `CrearClienteComercialService` (Customer real sin cuenta, email NULL, grupo validado, sin duplicados, transacción con el principal, `customer.create.*` sin `registration.*`), `TelefonosClienteService` (principal ↔ `customers.phone` transaccional, secundarios, promoción; el principal no se elimina), `ResolverClienteComercialService` (solo lectura) y `GuardarDireccionClienteComercialService` (contrato del core, email NULL, teléfono de contacto explícito). ACL y procedencia aplazadas con evidencia. **Revisión final** (Doc. 13 §37.10): resolución A–F probada y de solo lectura (email de A con teléfono nuevo = EXISTENTE A, sin agregar el teléfono); P-03, P-06, P-08 y P-10 cerradas para RT-04; P-09 aplazada (status e is_suspended del core solo actúan en la tienda). 427 casos propios en verde (1758 aserciones); CorteConfeccion 384/2100; core 225/26 igual al baseline (no repetido en la revisión final: ningún cambio afecta al core). | RT-04B1a | revisión del usuario | Doc. 13 §37 | 2026-09-26 |
 | 03 | MOTOR_CREACION_PEDIDO_ASESOR | BLOQUEADA — **NO INICIADA** | Servicio común sobre el flujo oficial de Bagisto; nombre recomendado `CrearPedidoComercialService`. Consumirá el contrato de RT-04 (Doc. 13 §25). | 02B | D-17, D-18, D-19, D-28 + req. téc. RT-03 (cerrado), RT-04 (en diseño) | — | 2026-09-25 |
 | 04 | INTERFAZ_CREACION_PEDIDO_ASESOR | BLOQUEADA | Pantalla propia de venta adaptada a WhatsApp. | 03 | D-17, D-18, D-20, D-21, D-28, D-29, D-30 + req. téc. RT-03 | — | 2026-09-13 |
 | 05 | LISTADO_DETALLE_ASIGNACION_Y_BACKFILL | BLOQUEADA | DataGrid propio con aislamiento, detalle, bandeja sin asignar, backfill. | 02B | D-12, D-13 | — | 2026-09-15 |
@@ -118,7 +118,9 @@ Detalle en `04_DECISIONES_PENDIENTES.md`.
 - **Fases 03 y 04:** RT-03 (precio heredado, defecto del core reproducido) y D-28 (clientes sin
   correo, con RT-04), además de sus decisiones previas. *(Actualizado 2026-09-25: RT-03 está
   cerrado; D-28 queda decidida en su núcleo por D-RT04-01/02; RT-04 sigue abierto: diseño
-  pendiente de revisión y B1 sin iniciar.)*
+  pendiente de revisión y B1 sin iniciar.)* *(Actualizado 2026-09-26: RT-04B1a y RT-04B1b
+  cerrados; la Fase 03 sigue sin iniciar y queda pendiente aplicar la migración 000005 y el
+  indexador en `lpz_saas`, con autorización.)*
 
 ## Decisiones de RT-04 (cliente comercial) — hacia dónde va la arquitectura
 
