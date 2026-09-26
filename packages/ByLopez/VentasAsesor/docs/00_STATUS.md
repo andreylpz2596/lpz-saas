@@ -2,11 +2,13 @@
 
 Estado consolidado de las fases del módulo `ByLopez\VentasAsesor`.
 
-**Última actualización:** 2026-09-26 (RT-04B1b cerrado en su commit)
+**Última actualización:** 2026-09-26 (datos reales de RT-04 preparados en `lpz_saas`)
 
 **Resumen rápido:** 02B1B = CERRADO · RT-03 = CERRADO · **RT-04A = CERRADO** · **RT-04B0 = CERRADO** ·
 **RT-04B1a = CERRADO** · **RT-04B1b = CERRADO** ·
-Fase 03 = NO INICIADA. **RT-04 no está completo.**
+Fase 03 = NO INICIADA. **RT-04 cerrado y con datos reales preparados** (migración 000005 + índice
+telefónico en `lpz_saas`, 2026-09-26, Doc. 13 §37.11): listo para que la Fase 03 pueda empezar
+cuando se autorice.
 
 > **El paquete está registrado y carga.** PSR-4 en el `composer.json` raíz, provider en
 > `bootstrap/providers.php` y dos testsuites en `phpunit.xml`. Expone una sola pantalla,
@@ -270,6 +272,9 @@ supera, llevan una nota «Superado por…» en el punto afectado.
 29. **(RT-04B1a)** La migración `2026_09_26_000005_create_bylopez_va_customer_phones_table` está
     aplicada **solo en `lpz_saas_testing`** (batch 12). En `lpz_saas` no existe, y el indexador
     (`ventas-asesor:indexar-telefonos`) no se ejecutó allí. Aplicarla exige autorización y `--path`.
+    *(Actualizado 2026-09-26: con autorización expresa, la 000005 se aplicó en `lpz_saas` (batch 25,
+    solo con `--path`, con respaldo previo local fuera del repo) y el índice se persistió: 10
+    teléfonos principales, sin anomalías. Doc. 13 §37.11.)*
 30. **(RT-04B1a)** `.env.testing` no define `MAIL_FROM_ADDRESS`: los listeners de correo de
     **Admin** reciben un correo de administrador NULL y lanzan `TypeError`. Esto causa, de forma
     demostrada, **14 de los 26** fallos de base del core. Los demás se deben a moneda/fábricas

@@ -1769,8 +1769,8 @@ canal. La atribución de pedidos (02B) no se mezcla con esto.
 
 ### 37.9 Deuda y pendiente antes de la Fase 03
 
-- **Datos en `lpz_saas`** (con autorización expresa): aplicar la migración `000005` y ejecutar el
-  indexador. Hasta entonces la búsqueda funciona por la transición de §37.2.
+- **Datos en `lpz_saas`:** *hecho el 2026-09-26* (§37.11): migración `000005` aplicada e índice
+  persistido.
 - **Decisiones abiertas:**
   - P-06, P-03, P-08 y P-10: **cerradas para RT-04** en §37.10.
   - P-09 (clientes suspendidos o inactivos): aplazada con evidencia en §37.10.
@@ -1831,3 +1831,24 @@ Hoy nada del dominio comercial los tiene en cuenta: el alta crea `status = 1` e 
 y la búsqueda y el resolver no los filtran. No se inventa un estado nuevo ni se implementa nada.
 La Fase 03 decidirá, ante una necesidad funcional concreta, si una venta comercial a un cliente
 inactivo o suspendido se bloquea, se avisa o se permite, usando estos mismos campos del core.
+
+### 37.11 Datos reales preparados en `lpz_saas` (2026-09-26)
+
+Hecho con autorización expresa y por pasos, sin modificar código. Lo único que se escribió en
+`lpz_saas` fue el DDL de la 000005 y las filas del índice creadas por el comando.
+
+| Paso | Resultado |
+|---|---|
+| Respaldo previo | `mysqldump --single-transaction` completo de `lpz_saas`, guardado localmente **fuera del repositorio**. Contiene datos personales |
+| Migración `2026_09_26_000005` | Aplicada **solo** con `--path` (era la única pendiente), batch 25. Esquema verificado igual al de §36.6: UNIQUE del normalizado, UNIQUE `(customer_id, principal)` y FK CASCADE hacia `customers`. La estructura de `customers` no cambió |
+| Dry-run inicial | 10 `indexable`; 0 inválidos, ambiguos, duplicados, conflictos, divergentes o errores |
+| `--persistir` (una sola vez) | 10 `indexado` |
+| Integridad | 10 filas, 10 clientes, 10 números distintos, 10 principales, 0 secundarios. Ningún cliente con más de un principal ni ningún número en más de un cliente. Los 5 clientes sin `customers.phone` siguen sin fila |
+| Sincronía | Para los 10, `normalizar(customers.phone)` = `telefono_normalizado` de su principal, y `telefono_original` = `customers.phone` |
+| Sin efectos colaterales | `customers.phone` idéntico (comparación fila a fila). `CHECKSUM TABLE` de `customers`, `addresses`, `orders`, `cart` y `customer_groups` igual al previo. Conteos: 15 clientes, 88 direcciones, 24 pedidos |
+| Dry-run posterior (idempotencia) | 10 `ya_indexado` y 0 escrituras propuestas; la tabla sigue igual |
+
+Con esto, la búsqueda por teléfono en `lpz_saas` usa el índice. La transición por fichas
+históricas (§37.2) queda solo como red de seguridad para cambios hechos fuera del módulo.
+**RT-04 queda preparado para que la Fase 03 pueda empezar cuando se autorice. La Fase 03 no se ha
+iniciado.**
