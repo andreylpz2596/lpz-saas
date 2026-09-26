@@ -5,9 +5,12 @@ namespace ByLopez\VentasAsesor\Providers;
 use ByLopez\VentasAsesor\Console\Commands\ReconciliarAtribucionesCommand;
 use ByLopez\VentasAsesor\Support\ClasificadorOrigenPedido;
 use ByLopez\VentasAsesor\Support\ContextoComercialDePeticion;
+use ByLopez\VentasAsesor\Support\ContextoPrecioComercial;
+use ByLopez\VentasAsesor\Support\CustomerRepositoryConContextoComercial;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Webkul\Core\Http\Middleware\PreventRequestsDuringMaintenance;
+use Webkul\Customer\Repositories\CustomerRepository;
 
 class VentasAsesorServiceProvider extends ServiceProvider
 {
@@ -27,6 +30,15 @@ class VentasAsesorServiceProvider extends ServiceProvider
         $this->app->scoped(ContextoComercialDePeticion::class);
 
         $this->app->scoped(ClasificadorOrigenPedido::class);
+
+        /*
+         * RT-03B. Contexto de precio comercial por peticion (scoped, nunca singleton) y
+         * CustomerRepository que lo respeta. Sin contexto explicito, el repositorio
+         * delega en el core: la tienda y cualquier flujo sin contexto no cambian.
+         */
+        $this->app->scoped(ContextoPrecioComercial::class);
+
+        $this->app->bind(CustomerRepository::class, CustomerRepositoryConContextoComercial::class);
     }
 
     private function comandos(): void
