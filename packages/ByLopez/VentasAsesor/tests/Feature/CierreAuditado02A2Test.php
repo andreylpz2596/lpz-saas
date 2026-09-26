@@ -279,8 +279,11 @@ test('12. el esquema conserva RESTRICT y sigue sin claves foraneas hacia admins'
         // Fase 02B1A: la cola de incidencias sigue la misma politica.
         ->and($reglas->get('bvaai_order_fk'))->toBe('RESTRICT -> orders')
         ->and($reglas->get('bvaai_attribution_fk'))->toBe('RESTRICT -> bylopez_va_order_attributions')
+        // RT-04B1a: excepcion DELIBERADA. El indice de telefonos es derivado del cliente;
+        // RESTRICT impediria borrar clientes desde el panel de Bagisto.
+        ->and($reglas->get('bvacp_customer_fk'))->toBe('CASCADE -> customers')
         ->and($reglas->filter(fn ($regla) => str_contains($regla, '-> admins'))->all())->toBe([])
-        ->and($reglas)->toHaveCount(4);
+        ->and($reglas)->toHaveCount(5);
 });
 
 test('el historial inicial de un fallo tecnico es el unico portador del codigo', function () {

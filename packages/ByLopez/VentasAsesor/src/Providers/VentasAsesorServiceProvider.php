@@ -2,15 +2,28 @@
 
 namespace ByLopez\VentasAsesor\Providers;
 
+use ByLopez\VentasAsesor\Console\Commands\IndexarTelefonosClientesCommand;
 use ByLopez\VentasAsesor\Console\Commands\ReconciliarAtribucionesCommand;
+use ByLopez\VentasAsesor\Contracts\NormalizadorTelefono;
+use ByLopez\VentasAsesor\Listeners\Correo\CustomerConDestinatarioVerificado;
+use ByLopez\VentasAsesor\Listeners\Correo\InvoiceConDestinatarioVerificado;
+use ByLopez\VentasAsesor\Listeners\Correo\OrderConDestinatarioVerificado;
+use ByLopez\VentasAsesor\Listeners\Correo\RefundConDestinatarioVerificado;
+use ByLopez\VentasAsesor\Listeners\Correo\ShipmentConDestinatarioVerificado;
 use ByLopez\VentasAsesor\Support\ClasificadorOrigenPedido;
 use ByLopez\VentasAsesor\Support\ContextoComercialDePeticion;
 use ByLopez\VentasAsesor\Support\ContextoPrecioComercial;
 use ByLopez\VentasAsesor\Support\CustomerRepositoryConContextoComercial;
+use ByLopez\VentasAsesor\Support\Telefono\NormalizadorTelefonoBasico;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Webkul\Core\Http\Middleware\PreventRequestsDuringMaintenance;
 use Webkul\Customer\Repositories\CustomerRepository;
+use Webkul\Shop\Listeners\Customer as ShopCustomerListener;
+use Webkul\Shop\Listeners\Invoice as ShopInvoiceListener;
+use Webkul\Shop\Listeners\Order as ShopOrderListener;
+use Webkul\Shop\Listeners\Refund as ShopRefundListener;
+use Webkul\Shop\Listeners\Shipment as ShopShipmentListener;
 
 class VentasAsesorServiceProvider extends ServiceProvider
 {
@@ -39,12 +52,43 @@ class VentasAsesorServiceProvider extends ServiceProvider
         $this->app->scoped(ContextoPrecioComercial::class);
 
         $this->app->bind(CustomerRepository::class, CustomerRepositoryConContextoComercial::class);
+
+        /*
+         * RT-04B1a. Normalizacion de telefonos detras de un contrato: una futura
+         * implementacion con libphonenumber se enlaza aqui sin tocar consumidores.
+         */
+        $this->mergeConfigFrom(__DIR__.'/../Config/ventasasesor.php', 'ventasasesor');
+
+        $this->app->bind(NormalizadorTelefono::class, NormalizadorTelefonoBasico::class);
+
+        $this->registrarGuardDeCorreosAlCliente();
+    }
+
+    /**
+     * RT-04B1a (D-RT04-06). Los EventServiceProvider del core registran sus listeners
+     * como [Clase, 'metodo'] y Laravel los instancia con container->make() en cada
+     * disparo (Illuminate\Events\Dispatcher::createClassCallable). Enlazar la clase
+     * del core a una subclase la sustituye sin añadir un segundo listener: con email
+     * valido se ejecuta el cuerpo del core (parent::); sin destinatario se omite el
+     * correo y se registra. Los listeners de Admin no se tocan: escriben al
+     * administrador, no al cliente.
+     */
+    private function registrarGuardDeCorreosAlCliente(): void
+    {
+        $this->app->bind(ShopOrderListener::class, OrderConDestinatarioVerificado::class);
+        $this->app->bind(ShopInvoiceListener::class, InvoiceConDestinatarioVerificado::class);
+        $this->app->bind(ShopShipmentListener::class, ShipmentConDestinatarioVerificado::class);
+        $this->app->bind(ShopRefundListener::class, RefundConDestinatarioVerificado::class);
+        $this->app->bind(ShopCustomerListener::class, CustomerConDestinatarioVerificado::class);
     }
 
     private function comandos(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([ReconciliarAtribucionesCommand::class]);
+            $this->commands([
+                ReconciliarAtribucionesCommand::class,
+                IndexarTelefonosClientesCommand::class,
+            ]);
         }
     }
 

@@ -199,6 +199,13 @@ registrado sin correo: el panel y la tienda exigen correo en la dirección.
 **Descartados:** invitado (pierde grupo e historial) y correos sintéticos, incluido un
 correo compartido de la empresa (C8 mezclaría pedidos de clientes distintos).
 
+> **Actualización 2026-09-25 — SUPERADO PARCIALMENTE POR D-RT04-01/02 (Doc. 12 §14) Y EL DOC. 13.**
+> El punto 1 queda decidido. El punto 2 **no** se implementa como ficha de contacto: se sustituye
+> por un índice de teléfonos sin identidad paralela (Doc. 13 §9). La opción del punto 3(a)
+> (subclases de listeners resueltas por el contenedor) se **confirmó** con evidencia
+> (`Illuminate/Events/Dispatcher.php:536`) y es el extension point elegido (Doc. 13 §15.3), ampliado
+> a `Shop\Listeners\Customer`.
+
 ---
 
 ## 3. Teléfono y duplicados

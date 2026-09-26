@@ -422,6 +422,13 @@ documentado y reversible.
 >   de facturación cuando el cliente no tiene; la dirección exige correo
 >   (`Admin\Http\Requests\CartAddressRequest`).
 
+> **Actualización 2026-09-25 — SUPERADO POR D-RT04-01…09 / DOC. 13.** La «ficha de contacto
+> propia» se sustituye por el índice `bylopez_va_customer_phones`, sin nombre ni email (Doc. 13 §9).
+> La dirección comercial usa el email del cliente o `NULL`, sin exigir un email de facturación
+> (Doc. 13 §14). Las notificaciones se protegen con un binding de subclases de listeners (Doc. 13 §15.3).
+> El grupo es obligatorio en el alta comercial (Doc. 13 §13). La búsqueda común es
+> `BuscarClienteComercialService` (Doc. 13 §11).
+
 ---
 
 ## 16. Métodos de pago y envío

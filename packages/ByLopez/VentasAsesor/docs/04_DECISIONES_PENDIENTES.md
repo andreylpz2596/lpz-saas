@@ -746,6 +746,13 @@ más una ficha de contacto propia con teléfono original y normalizado. El invit
 (3) se descarta porque pierde grupo de precios e historial. Los correos sintéticos
 siguen prohibidos.
 
+> **Actualización 2026-09-25 — SUPERADO EN SU NÚCLEO POR D-RT04-01/02 (Doc. 12 §14) y el Doc. 13.**
+> Se decidió el cliente Bagisto con correo `NULL` creado por un servicio propio (1). La «ficha de
+> contacto propia» (2) **no** se crea como entidad paralela: se sustituye por un **índice de
+> teléfonos** sin nombre, email ni grupo (`bylopez_va_customer_phones`, Doc. 13 §9). RT-04 queda
+> resuelto en diseño (guard de notificaciones por binding, Doc. 13 §15.3) y pendiente de
+> implementación (RT-04B1).
+
 ---
 
 ## D-29 · Teléfonos compartidos y cambio de titular
@@ -763,6 +770,15 @@ una tabla propia no única.
 **Recomendación técnica.** Proceso «normalizar → buscar → mostrar → usar, corregir o
 crear con confirmación y motivo» [B-§3.4]; historial de titularidad en la ficha de
 contacto propia; nunca índice único absoluto sobre el teléfono normalizado.
+
+> **Actualización 2026-09-25 — D-RT04-09 (Doc. 12 §14) confirma el índice no único.** La
+> confirmación con motivo al crear un cliente con un teléfono ya indexado está diseñada en el Doc. 13
+> §12 (P-04, P-05). El historial de titularidad sigue **pendiente**: no hay «ficha de contacto»
+> (D-RT04-01), así que se registrará en la procedencia del alta o en una fase posterior.
+>
+> **Actualización 2026-09-26 — SUPERADO POR D-RT04-PHONE-01 (Doc. 13 §36.1):** un teléfono
+> normalizado pertenece a **un solo** Customer (índice UNIQUE). Ya no existe «crear con motivo»
+> para un teléfono de otro cliente: se localiza al titular.
 
 ---
 
@@ -859,7 +875,7 @@ recogida; cancelaciones y cambios; operación sin conexión; numeración e idemp
 | D-25 | Habilitación de RMA | 07 | Solo uso interno como paso intermedio | pendiente |
 | D-26 | Reposición y garantía | 08 | Pedido nuevo de importe cero, no comisionable | pendiente |
 | D-27 | Propiedad comercial cuando vende un administrador | — | Nunca automática para `all`; elige empresa, él mismo u otro asesor | ✅ **DECIDIDA** (01B) |
-| D-28 | Clientes sin correo | 03, 04 | Cliente Bagisto con correo nulo + contacto propio, sujeto a RT-04 | pendiente |
+| D-28 | Clientes sin correo | 03, 04 | Cliente Bagisto con correo nulo + contacto propio, sujeto a RT-04 | pendiente → **núcleo decidido 2026-09-25 por D-RT04-01/02** (índice de teléfonos en lugar de ficha de contacto; Doc. 12 §14, Doc. 13) |
 | D-29 | Teléfono compartido y cambio de titular | 04 | Confirmación con motivo; sin índice único absoluto | pendiente |
 | D-30 | Datos mínimos por modalidad de entrega | 04, POS | Aprobado para despacho; pendiente recogida y POS | pendiente (parcial) |
 | D-31 | Costo unitario comisionable | 08 | Definir componentes antes de calcular utilidad | pendiente |
@@ -874,7 +890,7 @@ recogida; cancelaciones y cambios; operación sin conexión; numeración e idemp
 | **RT-01** | Idempotencia de la devolución: una acción repetida no puede producir un segundo reembolso, descuento ni movimiento de inventario | 07, 08, 09 | `[R-§26.1]` |
 | **RT-02** | Trazabilidad del reembolso: el módulo debe distinguir reembolso por RMA, administrativo, repetido, parcial y múltiple válido | 07, 08, 09 | `[R-§26.2]` |
 | **RT-03** | Precio por grupo del **cliente del carrito**: los precios, descuentos y totales no pueden depender del cliente autenticado en la sesión; al cambiar de cliente se recalculan todos los ítems y se bloquea la confirmación ante inconsistencia | 03, 04 | `[B-§4, B-§5]` |
-| **RT-04** | Compatibilidad de clientes sin correo: ningún pedido con `customer_email` nulo puede llegar a una notificación que construya `Address(null)`, y ningún cliente sin correo puede disparar la sincronización de pedidos por correo | 03, 04 (si D-28 adopta correo nulo) | `[B-§2]` |
+| **RT-04** | Compatibilidad de clientes sin correo: ningún pedido con `customer_email` nulo puede llegar a una notificación que construya `Address(null)`, y ningún cliente sin correo puede disparar la sincronización de pedidos por correo | 03, 04 (si D-28 adopta correo nulo) — **lo adoptó** (D-RT04-02); RT-04A auditado, RT-04B0 diseñado (Doc. 12, 13) | `[B-§2]` |
 
 **Estado tras la Fase 01B.** Fases 01, 01A y 01B completadas. D-16 y D-27 están
 decididas, por lo que **la Fase 02 ya no tiene decisiones bloqueantes**; no se ha

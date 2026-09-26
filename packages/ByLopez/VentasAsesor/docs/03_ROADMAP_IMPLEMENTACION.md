@@ -345,6 +345,9 @@ D-19 (sobreventa), **D-28** (clientes sin correo).
 precio con el grupo del cliente autenticado en la **sesión**, no con el del cliente
 del carrito; está reproducido [B-§4]. **RT-04**, si D-28 adopta clientes con correo
 nulo [B-§2].
+*(Actualización 2026-09-25: RT-03 está **cerrado** (Doc. 11). D-28 adoptó el correo nulo
+(D-RT04-02), así que RT-04 aplica: auditado (Doc. 12), diseñado (Doc. 13) y con B1 sin iniciar.
+La Fase 03 consumirá el contrato del Doc. 13 §25.)*
 
 **Capas previstas.** `CrearPedidoAsesorService`, DTOs de contexto, solicitud y
 resultado; `ResolverClienteService`; `ValidacionPedidoAsesor`;

@@ -248,6 +248,12 @@ obligatoria con despacho. El teléfono se guarda original y normalizado (`+57…
 de crear se buscan coincidencias y el asesor decide usar, corregir o crear con motivo
 [B-§3.4]. Nunca se inventan correos.
 
+> **Actualización 2026-09-25:** la estrategia técnica quedó decidida por D-RT04-01…10 (Doc. 12 §14)
+> y diseñada en el Doc. 13 (RT-04B0): cliente Bagisto con correo `NULL`, grupo obligatorio y
+> teléfono normalizado E.164 en un índice propio no único.
+> *(2026-09-26: el «no único» fue SUPERADO por D-RT04-PHONE-01: un número normalizado pertenece a
+> un solo Customer; principal en `customers.phone`. Doc. 13 §36.)*
+
 ---
 
 ## 6. Canal comercial y mecanismo de creación (corregido en Fase 00B)
@@ -882,7 +888,7 @@ pero solo cuenta en «ventas de asesor» si se le eligió expresamente como ases
 | CL-24 | Venta a cliente fijo de ByLopez (p. ej. Rosario) | `company`, sin asesor ni comisión; el creador sigue registrado |
 | CL-25 | Se cambia la preferencia comercial del cliente | Los pedidos anteriores conservan su propiedad histórica |
 | CL-26 | Cambio de cliente durante la creación del pedido | Recalcular todos los ítems con el grupo del nuevo cliente; bloquear confirmación ante inconsistencia (RT-03) |
-| CL-27 | Cliente de WhatsApp sin correo | No se inventa correo; estrategia D-28 sujeta a RT-04 |
+| CL-27 | Cliente de WhatsApp sin correo | No se inventa correo; estrategia D-28 sujeta a RT-04 *(2026-09-25: D-RT04-02, correo `NULL`; Doc. 13)* |
 | CL-28 | Teléfono ya registrado a otro cliente | Mostrar coincidencia; usar, corregir o crear con motivo (D-29) |
 
 ---

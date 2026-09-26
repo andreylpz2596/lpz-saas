@@ -383,8 +383,9 @@ test('21. no existen campos ni metodos que afirmen comision', function () {
 test('22. ninguna migracion del modulo altera tablas del core', function () {
     $migraciones = glob(dirname(__DIR__, 2).'/src/Database/Migrations/*.php');
 
-    // Tres de la Fase 02A/02A1 mas la cola de incidencias de la Fase 02B1A.
-    expect($migraciones)->toHaveCount(4);
+    // Tres de la Fase 02A/02A1, la cola de incidencias de la Fase 02B1A y el indice de
+    // telefonos de RT-04B1a.
+    expect($migraciones)->toHaveCount(5);
 
     foreach ($migraciones as $archivo) {
         $contenido = file_get_contents($archivo);
@@ -398,7 +399,8 @@ test('22. ninguna migracion del modulo altera tablas del core', function () {
         // Puede REFERENCIAR tablas del core en claves foraneas, pero nunca modificarlas.
         expect($contenido)->not->toContain("Schema::table('orders'")
             ->and($contenido)->not->toContain("Schema::table('admins'")
-            ->and($contenido)->not->toContain("Schema::table('cart'");
+            ->and($contenido)->not->toContain("Schema::table('cart'")
+            ->and($contenido)->not->toContain("Schema::table('customers'");
     }
 
     foreach (['orders', 'admins', 'cart'] as $tabla) {

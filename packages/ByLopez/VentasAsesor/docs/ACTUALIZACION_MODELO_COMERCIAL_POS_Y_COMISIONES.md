@@ -179,6 +179,10 @@ No se aprueba como solución definitiva el uso de correos sintéticos. La altern
 > **Recomendación (D-28):** cliente Bagisto con correo nulo más contacto comercial
 > propio, condicionada a **RT-04**. El invitado se descarta porque pierde grupo de
 > precios e historial.
+>
+> **Actualización 2026-09-25 — SUPERADO POR D-RT04-01/02 / DOC. 13:** cliente Bagisto con
+> correo `NULL`, sin contacto comercial paralelo; el teléfono vive en un índice propio no único.
+> *(2026-09-26: el «no único» fue SUPERADO por D-RT04-PHONE-01, Doc. 13 §36.1.)*
 
 ## 6. Asignación cuando vende un administrador y ventas propias de la empresa
 
