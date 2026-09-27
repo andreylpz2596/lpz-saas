@@ -3,7 +3,8 @@
 namespace ByLopez\VentasAsesor\DataObjects;
 
 /**
- * Direccion guardada de un cliente comercial (addresses.address_type = customer).
+ * Direccion comercial: la guardada de un cliente (addresses.address_type = customer) o
+ * una puntual del borrador de venta (03D).
  *
  * `telefono` es el contacto de ESA direccion y lo indica el llamador: no se asume el
  * principal del cliente (quien recibe puede ser otra persona). No entra en el indice
@@ -22,7 +23,8 @@ final class DireccionComercial
         public readonly string $departamento,
         /** ISO 3166-1 alfa-2 (addresses.country). */
         public readonly string $pais,
-        public readonly string $codigoPostal,
+        /** Obligatorio en direcciones guardadas (RT-04); opcional en el borrador (D-46). */
+        public readonly ?string $codigoPostal,
         public readonly string $telefono,
         public readonly ?string $email = null,
         public readonly ?string $empresa = null,

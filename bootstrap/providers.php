@@ -1,6 +1,7 @@
 <?php
 
 use App\Providers\AppServiceProvider;
+use ByLopez\Logistica\Providers\LogisticaServiceProvider;
 use ByLopez\VentasAsesor\Providers\VentasAsesorServiceProvider;
 use Webkul\Admin\Providers\AdminServiceProvider;
 use Webkul\Attribute\Providers\AttributeServiceProvider;
@@ -55,6 +56,7 @@ return [
      */
     AdminServiceProvider::class,
     AttributeServiceProvider::class,
+    LogisticaServiceProvider::class,
     VentasAsesorServiceProvider::class,
     BookingProductServiceProvider::class,
     CMSServiceProvider::class,

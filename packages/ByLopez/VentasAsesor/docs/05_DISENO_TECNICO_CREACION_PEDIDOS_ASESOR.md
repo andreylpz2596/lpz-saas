@@ -1639,3 +1639,562 @@ pendiente, no iniciada.**
 - **Distinción conceptual:** método de entrega ≠ transportadora ≠ despacho ≠ guía/tracking.
 
 **Regresión del cierre:** pruebas de 03C 77 pasadas (293 aserciones), VentasAsesor 532 (2166), CorteConfeccion 384 (2100) y Pint sin errores. Frente a la referencia (531 / 2155), la diferencia es la prueba de cierre «carrito ≤ stock vendible al operar» (+1 caso, +11 aserciones). El core de Bagisto no se volvió a ejecutar: no hay bindings nuevos ni cambios en su comportamiento.
+
+---
+
+## 28. Auditoría 03D: dirección, entrega, envío y logística (2026-09-26)
+
+**Solo auditoría:** Camilo Gaitán todavía no ha decidido y no se ha escrito código, migraciones ni
+configuración. Evidencia del código instalado (Bagisto 2.4.9) y de `lpz_saas` (solo SELECT,
+conteos agregados, sin datos personales).
+
+### 28.1 Direcciones
+
+| Tema | Evidencia |
+|---|---|
+| Tabla | Una sola tabla, `addresses`, con `address_type` = `customer`, `cart_billing`, `cart_shipping`, `order_billing` u `order_shipping` |
+| Obligatorio en base de datos | `first_name`, `last_name`, `address`, `city`. **`email`, `phone`, `postcode`, `state` y `country` admiten NULL** |
+| Obligatorio en HTTP | El `CartAddressRequest` del panel y de la tienda exige `email`, `postcode` (PostCode), `phone` (PhoneNumber), `state` y `country`. Es validación de formulario, no del dominio |
+| Del cliente al carrito | `Cart::saveAddresses()` **copia** los campos al carrito. Si viene `address_type = customer` e `id`, guarda `parent_address_id` (vínculo informativo). Una dirección puntual **no** se guarda en el cliente |
+| Facturación y envío | La facturación es obligatoria. La de envío solo existe si el carrito tiene productos con stock (`haveStockableItems`); `use_for_shipping` la copia de la facturación. Guardar direcciones **resetea el método de envío** |
+| Del carrito al pedido | `OrderResource` y `OrderAddressResource` copian un **snapshot** completo a `order_billing` y `order_shipping`: el histórico del pedido no depende del cliente |
+| Email del pedido | `setCustomerPersonnelDetails()`: `cart.customer_email = customer.email ?? billing.email`. `orders.customer_email` admite NULL, así que un cliente RT-04 sin email ni email en la dirección da un pedido con email NULL. RT-04 ya protege los correos (listeners con destinatario verificado, incluido el de shipment) |
+| RT-04 | `GuardarDireccionClienteComercialService` ya guarda direcciones **del cliente** con email opcional, teléfono E.164 y la regla PostCode del core. Falta solo el paso al **carrito**: `Cart::saveAddresses()` directamente (sin el FormRequest que exige email), dentro del bloqueo del borrador |
+
+### 28.2 Envío nativo
+
+- **Motor:** `Shipping::collectRates()` recorre `config('carriers')`. Cada clase hereda de
+  `AbstractShipping`, `calculate()` devuelve una o **varias** `CartShippingRate` (carrier, título,
+  método, descripción, precio) y se guardan en `cart_shipping_rates` **solo si existe dirección
+  de envío**. `Cart::saveShippingMethod(code)` exige que el código esté entre las tarifas y lo
+  guarda en `cart.shipping_method`.
+- **Disponibilidad:** `isAvailable()` = `sales.carriers.<code>.active`.
+- **Tarifa:** la calcula cada clase. Las reglas de carrito pueden descontar el envío
+  (`apply_to_shipping`, `free_shipping`).
+- **Qué pasa al pedido:** `shipping_method`, `shipping_title` (carrier − método),
+  `shipping_description`, `shipping_amount` (con y sin impuesto), `shipping_discount_amount` y la
+  dirección de envío.
+- **Extensión prevista:** un paquete registra su carrier con `mergeConfigFrom(…, 'carriers')` y
+  sus campos del panel con `mergeConfigFrom(…, 'core')` (`sales.carriers.<code>.*`), sin tocar
+  el core.
+- **Instalado:** solo `flatrate` y `free`. Ningún paquete de envío, recogida o tracking en
+  `packages/` ni en `composer.lock`.
+- **Activos en `lpz_saas`:**
+  - `flatrate`, reutilizado como «Envío por pagar (se cobra al recibir)», con tarifa 0 por
+    unidad: el cliente paga el flete a la transportadora;
+  - `free`, «Envío gratuito».
+  
+  Pedidos: 17 con `free` y 7 con `flatrate`; todos tienen `shipping_method`.
+- **Pago:** contra entrega (`isAvailable` exige solo `hasOnlyStockableItems`, sin relación con
+  el envío) y transferencia.
+- **Orden de pasos:** el pedido exige dirección de facturación, dirección de envío y tarifa
+  elegida (si hay productos con stock) y pago. El pago no depende técnicamente del envío; el
+  panel solo lo pide después.
+
+### 28.3 Recogida en bodega
+
+- **En el código:** no existe; no hay carrier de recogida.
+- **Residuo del Store Pickup retirado:** en `lpz_saas` siguen `pickup_orders` (0 filas) y
+  `pickup_timeslots` (40 filas), con sus migraciones registradas y **sin código** que las use.
+  No se tocan.
+- **Restricción de Bagisto:** con productos con stock **siempre** exige dirección de envío y una
+  tarifa elegida. La recogida debe ser un **método de entrega**, es decir, una tarifa de un
+  carrier. Queda por decidir qué dirección de envío lleva (§28.9).
+
+### 28.4 Shipment (despacho) y tracking
+
+- **Qué hace Shipment:** es el **despacho físico**. `ShipmentRepository::create` crea el shipment
+  y sus ítems con las cantidades por bodega, **descuenta inventario** (`updateProductInventory`),
+  suma `qty_shipped` y cambia el estado del pedido: `processing`; `completed` si está facturado y
+  enviado del todo; `pending_payment` si hay una factura abierta. Admite envíos parciales.
+- **Campos:**
+  - `carrier_title` es **texto libre**;
+  - `track_number` es TEXT **nullable** y el formulario no lo exige;
+  - `carrier_code` existe pero **Bagisto nunca lo escribe**;
+  - `status` existe pero **Bagisto no lo usa** (sin estados de envío).
+- **Guía pendiente:** sí; se puede crear sin guía.
+- **Guía posterior:** **no hay ruta, método de repositorio ni pantalla** para editar un
+  shipment. Añadir la guía después exige una extensión.
+- **Auditoría:** el shipment no guarda quién lo creó. Solo hay eventos
+  `sales.shipment.save.before/after` y `order_comments` manuales.
+- **Datos reales (22 shipments):**
+  - `carrier_title` libre, con nombres de personas (domiciliarios), «BYLOPEZ», «PICAP»,
+    «RECOGE EN BODEGA» y un «INTERRAPIDISMO» mal escrito;
+  - `carrier_code` y `status` NULL en todos;
+  - **21 de 22 con una «guía» de 1 a 3 dígitos**, que no es una guía real. Solo uno tiene 12
+    dígitos (Inter Rapidísimo). Es un hábito operativo: el formulario no lo exige.
+- **Defecto del core:** `Shop\Listeners\Shipment::afterCreated` hace
+  `$shipment->query()->update(['email_sent' => 1])` sin `where`, así que marca **todos** los
+  shipments. Explica los 22 con `email_sent = 1`. Solo se reporta.
+
+### 28.5 Modelo conceptual contra Bagisto
+
+| Concepto | Bagisto | Brecha ByLopez |
+|---|---|---|
+| **Método de entrega** (recogida, domicilio local, envío nacional) | Carrier y método (`shipping_method`, `shipping_title`); estructurado y con tarifa | Definir los métodos propios (hoy `flatrate` y `free` mezclan método con política de cobro del flete) |
+| **Transportadora** (Inter, Servientrega, 99envíos, domiciliario, BYLOPEZ) | `shipments.carrier_title` libre y `carrier_code` sin usar | Un **catálogo** con códigos estables que alimente `carrier_code` y `carrier_title` |
+| **Despacho** | `Shipment`, con inventario, cantidades y estado del pedido | Ninguna para crearlo. Registrar quién lo hizo |
+| **Guía externa** | `track_number` | Poder añadirla o corregirla después, con auditoría |
+| **Referencia interna** | `shipments.id`: ya es un identificador único del despacho | Ninguna: **no** hace falta un campo nuevo, y **no** deben ponerse números falsos en `track_number` |
+| **Estado de la entrega** (en tránsito, entregado, incidencia) | No existe (`status` sin uso) | Extensión futura |
+| **Costo pagado a la transportadora** | No existe | Extensión futura de logística o finanzas; distinto de `shipping_amount` (lo cobrado al cliente) |
+
+- **Estados que se derivan de Bagisto:** «pendiente de despacho» = pedido con `qty_to_ship > 0`;
+  «pendiente de guía» = shipment sin `track_number`; «despachado» = shipment existente.
+- **No se debe duplicar:** direcciones, tarifas, `shipping_method`, Shipment, inventario, estado
+  del pedido ni snapshots de dirección.
+
+### 28.6 Integraciones futuras (sin decidir)
+
+- **Al vender:** una API de cotización (Inter, Servientrega, 99envíos) encaja como carrier de
+  Bagisto cuyo `calculate()` consulta un servicio ByLopez (patrón A + B).
+- **Al despachar:** pedir la guía encaja como servicio ByLopez que crea o actualiza el Shipment
+  (`track_number`, `carrier_code`) al recibir la respuesta.
+- **Módulos externos:** no hay ninguno instalado. Si se evalúan, será aparte y como referencia.
+
+### 28.7 Flujo recomendado (mínimo, sobre Bagisto)
+
+| Caso | Al vender (03D) | Al despachar (logística) |
+|---|---|---|
+| **A. Recogida en bodega** | Método `recogida`, tarifa 0 | Shipment al entregar al cliente: transportadora «recogida», sin guía |
+| **B. Domiciliario de Bogotá** | Método `domicilio local`, tarifa según política | Shipment con la transportadora del catálogo (empresa o persona), **sin guía**; referencia = número de despacho |
+| **C. Nacional con guía inmediata** | Método `envío nacional` | Shipment con transportadora y `track_number` |
+| **D. Nacional con guía posterior** | Igual | Shipment sin guía; la guía se añade después (extensión con auditoría) |
+| **E. 99envíos** | Igual; más adelante, cotización por API | Servicio de integración que crea o actualiza el Shipment con transportadora y guía |
+
+### 28.8 Riesgos para 03D
+
+- **Tarifas desactualizadas:** `addProduct` y `updateItems` **no** recalculan las tarifas;
+  `removeItem` las borra y deja `shipping_method` sin tarifa. Todo cambio de líneas en el borrador
+  deberá **resetear el método de envío**, como ya hace `cambiarCliente`.
+- **Guardar direcciones:** en el panel lo bloquea `Cart::hasError()` (stock insuficiente); el
+  servicio del borrador debe tratarlo explícitamente. Guardar direcciones resetea el envío.
+- **Momento del Shipment:** descuenta inventario, así que solo se crea cuando la mercancía sale
+  o se entrega.
+- **Calidad del histórico:** la transportadora en texto libre y las guías falsas no se migran
+  ahora.
+
+### 28.9 Decisiones pendientes para Camilo (D-40 a D-45, Doc. 04)
+
+1. Catálogo de **métodos de entrega** y qué hacer con `flatrate` y `free`.
+2. **Dirección de envío** en la recogida (bodega o dirección del cliente) y exigencia de
+   dirección de facturación.
+3. **Catálogo de transportadoras** (incluidas personas) y uso de `carrier_code`.
+4. **Referencia interna** = número de Shipment, sin campo nuevo.
+5. Guía **posterior** y estados de entrega (extensión futura).
+6. **Ubicación** de los carriers (VentasAsesor o un paquete ByLopez de logística, porque también
+   afectan a la tienda) y **división** de subfases.
+
+---
+
+## 29. Diseño 03D: dirección y método de entrega (2026-09-26)
+
+**Estado:** **DISEÑO**, pendiente de aprobación de Camilo Gaitán. No hay código, carriers,
+migraciones ni cambios de configuración. Se apoya en la auditoría de §28; aquí solo se añade la
+evidencia nueva.
+
+### 29.1 División de fases (confirmada, sin dependencia técnica que la impida)
+
+| Fase | Contenido | Por qué puede ir sola |
+|---|---|---|
+| **03D** | Direcciones del borrador y método de entrega (tarifa) | `saveAddresses`, `collectRates` y `saveShippingMethod` operan sobre el Cart, sin pedido |
+| **03E** | Pago (contra entrega y transferencia) | `savePaymentMethod` no depende del envío; el contra entrega solo exige `hasOnlyStockableItems` |
+| **03F** | Confirmación: revalidar y crear el Order | Solo `validateOrder` y `OrderResource` exigen todo junto |
+| **Logística** (fase aparte) | Shipment, transportadora (D-42), guía posterior y estados (D-44), integraciones | `ShipmentRepository` necesita un Order con dirección de envío: siempre ocurre después de 03F |
+
+### 29.2 D-40: métodos de entrega (recomendación)
+
+**Tres carriers de Bagisto, uno por método de entrega.** Cada uno hereda de `AbstractShipping`
+(el mismo patrón que `flatrate`):
+
+| Método | Código del carrier | `method` | Tarifa | Configuración del panel |
+|---|---|---|---|---|
+| A. Recogida en bodega | `recogida` | `recogida_bodega` | 0, fija | `active`, `title`, `description` |
+| B. Domicilio local | `domicilio_local` | `domicilio_local` | Pendiente (§29.6) | `active`, `title`, `description`, `default_rate` |
+| C. Envío nacional | `envio_nacional` | `envio_nacional` | Configurable; hoy 0 («flete por pagar al recibir») | `active`, `title`, `description`, `default_rate` |
+
+**Por qué tres carriers y no uno con tres tarifas:** la configuración nativa de Bagisto es por
+carrier (`sales.carriers.<code>.*`). Así cada método se activa, titula y tarifica desde el panel
+sin interfaz propia, y `orders.shipping_method` guarda un código estable por método.
+
+**El envío gratis no es un método, es una política de precio:** se hace con `CartRule`
+(`free_shipping` y `apply_to_shipping`, nativos), aplicable a cualquier método. Así no se repite
+la mezcla actual de `free`.
+
+**Principio registrado:** método de entrega ≠ transportadora.
+
+- `envio_nacional` → Inter Rapidísimo, Servientrega o lo que elija 99envíos, **al despachar**.
+- `domicilio_local` → empresa o persona domiciliaria, al despachar.
+- `recogida` → sin transportadora.
+
+### 29.3 `flatrate` y `free` actuales: transición sin romper nada
+
+- **Histórico:** `orders.shipping_method`, `shipping_title` y `shipping_description` son
+  **textos snapshot** sin FK, y la dirección está copiada. Los 24 pedidos y 22 shipments quedan
+  intactos aunque los carriers se desactiven.
+- **Plan de transición:**
+  1. activar los carriers nuevos;
+  2. comprobar la tienda y el borrador;
+  3. **desactivar** (`sales.carriers.flatrate.active = 0` y `free.active = 0`), sin borrar
+     configuración ni clases.
+  
+  Es un cambio de configuración en producción que necesitará autorización expresa.
+- **Equivalencias:**
+  - `flatrate` («Envío por pagar», 0) ≈ `envio_nacional` con tarifa 0 y descripción de flete
+    por pagar;
+  - `free` ≈ cualquier método con una `CartRule` de envío gratis.
+- **No** se reescriben pedidos antiguos.
+
+### 29.4 D-41: recogida en bodega
+
+- **Limitación técnica de Bagisto (verificada):** con productos con stock, **la dirección de
+  envío es obligatoria** en cuatro puntos:
+  1. `validateOrder` del panel y de la tienda;
+  2. `Shipping::saveAllShippingRates()` no guarda tarifas sin dirección, así que
+     `selected_shipping_rate` queda en null;
+  3. `OrderResource` copia la dirección de envío al pedido;
+  4. `ShipmentRepository::create` usa `$order->shipping_address->id`.
+  
+  Un pedido de recogida **sin** dirección de envío no es posible sin tocar el core.
+
+| Alternativa | Cart y tarifas | OrderResource y OrderAddress | Shipment e histórico | Semántica | Impacto |
+|---|---|---|---|---|---|
+| **A. Envío = copia de la facturación del cliente** (`use_for_shipping`) | Compatible | Compatible | Compatible | El pedido muestra como «envío» un lugar al que no va nada; solo el método dice «recogida». Exige que el cliente tenga dirección | Es la **práctica actual**: los 24 pedidos, incluida la recogida registrada, tienen envío = facturación |
+| **B. Envío = punto de recogida: la bodega (`inventory_sources`)** con nombre y teléfono de quien recoge | Compatible | Compatible | Compatible, y es la misma bodega de la que saldrá el Shipment | La dirección de envío de Bagisto es el **lugar de entrega**; en la recogida ese lugar es la bodega. Los datos son reales (fuente `BODEGA1`, con campos obligatorios) y **no** se presentan como domicilio del cliente: el método `recogida_bodega` y la empresa «Recogida en bodega» lo marcan | Si mañana hay varias bodegas, se elige la fuente de inventario |
+| **C. Sin dirección de envío** | Sin tarifa guardada | `OrderResource` falla | El Shipment falla | — | **Inviable** sin modificar Webkul (prohibido) |
+| **D. Entidad propia de «punto de recogida»** | Compatible, con datos duplicados | Compatible | Compatible | Igual que B | **Duplica** `inventory_sources`: no se recomienda |
+
+**Recomendación: B.** Al elegir `recogida_bodega`, el servicio escribe como dirección de envío la
+de la fuente de inventario activa, con el nombre y teléfono del cliente o de quien recoge. **No**
+toca la dirección de facturación ni las direcciones guardadas del cliente. Si Camilo prefiere
+mantener la práctica actual, A también es compatible.
+
+### 29.5 Facturación mínima y dirección puntual
+
+- **Datos que exige la base de datos (NOT NULL):** `first_name`, `last_name`, `address` (≥ 1
+  línea), `city`.
+- **Datos que exige nuestra operación** (se piden al asesor): nombre, apellido, teléfono de
+  contacto, dirección (≥ 1 línea), ciudad, departamento y país.
+- **Opcionales:** email (RT-04), empresa y NIT (`vat_id`).
+- **Código postal:** la base de datos lo admite NULL y hoy no hay tasas de impuesto en
+  `lpz_saas`, así que no afecta al cálculo. **RT-04 lo exige** en las direcciones guardadas.
+  Decisión D-46: mantenerlo obligatorio u opcional (1 de los 24 pedidos históricos no lo tiene).
+- **Validaciones artificialmente estrictas que no se aplican:** el email obligatorio del
+  `CartAddressRequest` (contradice RT-04) y su regla `PhoneNumber` (RT-04 usa E.164).
+- **Cliente sin ninguna dirección:** la facturación **siempre** es obligatoria en Bagisto, así
+  que hay que pedir al cliente una dirección real. **No se inventa.** Si el cliente no la da, no
+  hay pedido (D-46).
+
+**Flujo de dirección (servicio `EntregaBorradorService`, VentasAsesor):**
+
+```text
+facturación: guardada del cliente (addressId verificado contra el cliente del carrito)
+           | puntual (DireccionComercial de RT-04, validada con las MISMAS reglas)
+           [+ opción explícita "guardar en el cliente" → GuardarDireccionClienteComercialService]
+envío:       igual que la facturación | otra guardada | otra puntual | punto de recogida (§29.4)
+→ Cart::saveAddresses() (copia al carrito; parent_address_id si es guardada)
+→ el método de envío se resetea (lo hace Bagisto) → collectRates → métodos disponibles
+→ en 03F, OrderResource copia el snapshot a OrderAddress
+```
+
+- **Dirección puntual:** **no** se guarda en el cliente salvo que se pida expresamente.
+- **Sin duplicar reglas:** las validaciones de `GuardarDireccionClienteComercialService` se
+  extraerán a un validador compartido, en lugar de copiarse.
+- **Sin el FormRequest del panel:** se llama a `Cart::saveAddresses()` directamente.
+- **Bloqueo y precios:** todo corre bajo el bloqueo del borrador y dentro de RT-03 (el
+  `collectTotals` posterior reprecia).
+
+### 29.6 Domicilio local y envío nacional
+
+- **Qué pide 03D:** en los dos casos, solo método + dirección de destino + tarifa. Ni
+  domiciliario, ni transportadora, ni Shipment, ni guía.
+- **Tarifa del domicilio local:** **no hay una regla aprobada.** Alternativas compatibles con
+  Bagisto:
+  1. fija configurable (`default_rate` en el panel);
+  2. 0 «por pagar al domiciliario» con descripción;
+  3. gratis con `CartRule`;
+  4. por zonas (una tarifa futura en `calculate()`).
+  
+  Un **valor manual por venta** no es nativo y sería una segunda fuente de precio: no se
+  recomienda. Está pendiente, igual que si el método se limita a Bogotá: `calculate()` puede
+  ofrecerlo solo si la ciudad o el departamento de envío coinciden, pero la ciudad es texto
+  libre y habría que fijar el criterio (D-47).
+- **Envío nacional:** tarifa configurable, hoy 0 con «flete por pagar al recibir», equivalente al
+  `flatrate` actual. Queda pendiente si ByLopez cobrará alguna vez el flete dentro del pedido
+  (D-47).
+- **Compatible con el futuro:** la tarifa guarda `carrier = envio_nacional`, no la
+  transportadora. Una cotización por API podrá devolver una o varias tarifas desde
+  `calculate()`. `shipments.carrier_code` (la transportadora real) es independiente.
+
+### 29.7 D-42, D-43 y D-44
+
+- **D-42 (catálogo de transportadoras):** **diferida** a logística. Se aprueba la necesidad de
+  evitar el texto libre en el flujo nuevo, sin estructura definida ni personas registradas.
+- **D-43 (referencia interna):** **aprobada**. `Shipment.id` es la referencia interna del
+  despacho, sin `dispatch_reference`. `track_number` solo guarda guías externas **reales**; sin
+  guía, NULL. Nunca «1», «123», «NA» ni «sin guía».
+- **D-44 (guía posterior y estados de entrega):** **diferida** a logística. No bloquea 03D, 03E
+  ni 03F.
+
+### 29.8 D-45: dónde viven los carriers (recomendación)
+
+- **Estructura actual:** `packages/ByLopez/` contiene `CorteConfeccion` (producción) y
+  `VentasAsesor` (venta asesorada con bindings RT-03).
+- **Dependencias reales:** los carriers solo dependen de Webkul `Shipping`, `Checkout` y `Core`.
+  Los usarán **la tienda y VentasAsesor**.
+
+| Opción | Evaluación |
+|---|---|
+| A. VentasAsesor | Encierra el envío global en el módulo de venta asesorada: la tienda dependería de él y de sus bindings. **No** |
+| **B. Paquete nuevo `ByLopez/Logistica`** (nombre por confirmar) | Dependencia limpia: Logística depende de Webkul, y VentasAsesor usa los códigos de método. Será también la casa de D-42, D-44 e integraciones. **Recomendado** |
+| C. CorteConfeccion | Otro dominio (producción). **No** |
+
+- **Coste de B:** registrar el paquete toca `bootstrap/providers.php` y `composer.json`
+  (PSR-4), dos archivos raíz con **cambios ajenos sin commit**. Habrá que preparar solo los
+  bloques propios al implementar. El paquete no se crea todavía.
+
+### 29.9 Invalidación de tarifas al cambiar líneas
+
+**Hecho:** `addProduct` y `updateItems` no recalculan tarifas; `removeItem` las borra y deja
+`shipping_method` sin tarifa.
+
+**Regla:**
+
+| Operación | Efecto en el envío |
+|---|---|
+| `LineasBorradorService::agregar`, `cambiarCantidad`, `eliminar` (éxito) | `Cart::resetShippingMethod()` en la misma transacción. Borra tarifas y método y **conserva direcciones**. El asesor vuelve a elegir método |
+| `SolicitudBorradorService::*` | Ninguno (no tocan el Cart) |
+| `BorradorVentaService::cambiarCliente` | Ya lo hace: resetea el envío y borra direcciones y pago |
+| `BorradorVentaService::recalcular` | Mantiene el método: las tarifas de estos carriers no dependen del precio, y las reglas de carrito sobre el envío se reaplican en cada `collectTotals` |
+| **Guardia de 03F** | Repite `collectRates` y exige que el método elegido siga ofrecido con el **mismo precio**; si no, `tarifa_envio_obsoleta`. **Nunca** se confirma con una tarifa vieja |
+
+Es un cambio pequeño en 03C (se aplicará en 03D con pruebas), sin cambiar su contrato.
+
+### 29.10 Stock
+
+- **Sin efecto sobre el stock:** direcciones y envío no cambian cantidades, no crean stock, no
+  habilitan backorders y no suman producción (siguen I-12 e I-13).
+- **Igual que el panel de Bagisto:** antes de `saveAddresses` o `saveShippingMethod`, si
+  `Cart::hasError()` informa `INSUFFICIENT_QUANTITY` (una línea supera el stock actual), se
+  rechaza con el código estable **`carrito_con_stock_insuficiente`** y las líneas afectadas con
+  su desglose. Primero se ajustan las líneas. La validación no se salta.
+
+### 29.11 Contratos (DTO) propuestos
+
+- **Entrada:**
+  - `DireccionComercial` (RT-04) para las direcciones puntuales;
+  - `addressId` para las guardadas;
+  - un modo de envío: `igual_facturacion`, `guardada`, `puntual` o `punto_recogida`.
+- **`DireccionBorrador` (salida):**
+  - `rol` (facturación o envío) y `origen` (guardada, puntual o punto_recogida);
+  - `customerAddressId`, o null si es puntual;
+  - nombre, apellido, empresa, líneas, ciudad, departamento, país, código postal (nullable),
+    teléfono y email (nullable).
+- **`MetodoEntregaDisponible`:** `codigo` (method), `carrier`, `titulo`, `descripcion` y
+  `precio`, este último de la tarifa de Bagisto.
+- **`VistaEntregaBorrador`:**
+  - `facturacion` y `envio` (DireccionBorrador, nullable);
+  - `metodosDisponibles`;
+  - `metodoSeleccionado` (código, título, precio y descuento de envío de Bagisto), nullable;
+  - `entregaCompleta` (bool: facturación y, si hay productos con stock, envío y tarifa elegida);
+  - `avisos`, como `stock_insuficiente`.
+- **Sin modelos Eloquent.** Sirve para la UI futura, WhatsApp o IA: la IA propone datos, pero
+  Laravel valida y Bagisto calcula la tarifa.
+
+### 29.12 Decisiones pendientes (Doc. 04)
+
+- **D-40:** aprobar los tres carriers, el envío gratis como `CartRule` y el plan de transición
+  de `flatrate` y `free`.
+- **D-41:** recogida: B (punto de recogida = bodega de `inventory_sources`) o A (práctica
+  actual).
+- **D-45:** aprobar el paquete `ByLopez/Logistica` (nombre) y el registro en los archivos raíz.
+- **D-46:** facturación mínima: código postal obligatorio u opcional; y qué hacer si el cliente
+  no da dirección.
+- **D-47:** tarifas: domicilio local (valor y política), si el domicilio local se limita a
+  Bogotá (y con qué criterio), y si el envío nacional será siempre «por pagar».
+- **Ya resueltas:** D-43 aprobada; D-42 y D-44 diferidas a logística.
+
+---
+
+## 30. 03D implementada: dirección y método de entrega (2026-09-26)
+
+**Estado:** **IMPLEMENTADA**, pendiente de revisión de Camilo Gaitán y sin commit. Sin
+migraciones, sin cambios en Webkul ni en CorteConfeccion, y sin escrituras en `lpz_saas`.
+
+### 30.1 Paquete `ByLopez/Logistica` (D-45)
+
+- **Qué hace:** registra los carriers con los puntos de extensión nativos de Bagisto:
+  - `mergeConfigFrom(carriers.php, 'carriers')`, que recorre `Shipping::collectRates`;
+  - `mergeConfigFrom(system.php, 'core')`, para los campos del panel
+    `sales.carriers.<code>.title/description/default_rate/active`;
+  - traducciones es/en.
+- **Qué no tiene:** tablas, Shipment, transportadoras ni guías.
+- **Registro:** una línea en `bootstrap/providers.php` (más su `use`) y una en `composer.json`
+  (PSR-4).
+- **Nacen INACTIVOS:** sin fila en `core_config`, Bagisto usa el valor de
+  `config('carriers.<code>.*')` (`SystemConfig::getDefaultConfig`) y ahí `active = false`.
+  Desplegar el código **no** cambia la tienda ni el panel hasta activarlos en la configuración.
+
+| Carrier y método (código estable) | Clase | Tarifa |
+|---|---|---|
+| `recogida_bodega` | `RecogidaBodega` | 0 por naturaleza del método. **Solo** se ofrece si la dirección de envío es una bodega activa |
+| `domicilio_local` | `DomicilioLocal` (hereda de `EntregaADestino`) | `default_rate` del panel, **por pedido**. Por defecto `null`, y **sin tarifa no se ofrece** |
+| `envio_nacional` | `EnvioNacional` (hereda de `EntregaADestino`) | `default_rate` del panel, por defecto `0` con la descripción «Flete por pagar a la transportadora al recibir» |
+
+- **Destinos:** `EntregaADestino` no se ofrece si el destino es una bodega (a una bodega solo se
+  «recoge»).
+- **Envío gratis:** es una promoción con `CartRule` (`free_shipping`). Bagisto pone a 0 el
+  precio de la tarifa **elegida** y registra la regla en `applied_cart_rule_ids`; el método no
+  cambia (probado con domicilio y con nacional).
+
+### 30.2 Recogida (D-41, opción B)
+
+- **Lugar de entrega:** `PuntosRecogida` (Logística) toma el lugar de las **fuentes de
+  inventario activas del canal** (`inventory_sources`, sin id ni nombre fijos): calle, ciudad,
+  departamento, país y código postal reales, más el nombre de la bodega como `company_name`.
+  - Si hay una sola bodega activa, se usa esa.
+  - Si hay varias, hay que indicarla: `punto_recogida_ambiguo`.
+- **Persona (auditoría del punto 11):** en Bagisto una dirección de envío es **lugar +
+  destinatario** (por ejemplo, el cliente en la dirección de su oficina). En la recogida, el
+  lugar es la bodega y el destinatario es quien recibe: nombre, apellido, teléfono y email de
+  la facturación. No hay campos nuevos ni datos inventados.
+- **Límite documentado:** si recoge **otra persona**, hoy no se representa. Mejora futura.
+- **Cómo se identifica:** la dirección de envío coincide con una bodega activa (calle, ciudad,
+  departamento y país normalizados) y el método es `recogida_bodega`.
+
+### 30.3 Direcciones y D-46
+
+- **Facturación:** guardada del cliente (se verifica que sea suya) o puntual.
+- **Envío:** igual que la facturación (`use_for_shipping`), guardada, puntual o punto de
+  recogida. Todo pasa por `Cart::saveAddresses()`; la guardada deja `parent_address_id`.
+- **Dirección puntual:** **no** se guarda en el cliente.
+- **Reglas:** las de RT-04, extraídas a `Support\Clientes\ValidadorDireccionComercial` y
+  compartidas con `GuardarDireccionClienteComercialService`, que conserva su comportamiento.
+  - **Obligatorios:** nombre, apellido, líneas, ciudad, departamento, país y teléfono
+    (normalizado a E.164).
+  - **Opcionales:** email (RT-04), empresa y NIT.
+- **Código postal:** **opcional en el borrador.** La base de datos lo admite NULL, en
+  `lpz_saas` no hay tasas de impuesto y ningún carrier lo usa. Si viene, se valida con
+  PostCode. Las direcciones **guardadas** lo siguen exigiendo (decisión de RT-04, sin tocar).
+- **Cliente sin dirección:** Bagisto exige siempre la dirección de facturación, así que el
+  asesor debe pedir una real. **No se inventa**, y sin facturación no hay entrega
+  (`facturacion_requerida`).
+
+### 30.4 `EntregaBorradorService` (VentasAsesor)
+
+- **Operaciones:**
+  - `vista`;
+  - `establecerFacturacion`;
+  - `establecerEnvio`;
+  - `calcularMetodos`: vuelve a llamar a `Shipping::collectRates`;
+  - `seleccionarMetodo`: `Cart::saveShippingMethod`, que exige que el método esté entre las
+    tarifas, seguido de `collectTotals`.
+- **Métodos disponibles:** son los que devuelve Bagisto, sin lista propia. Un carrier nuevo
+  aparece solo (probado con un carrier de prueba).
+- **Patrón:** transacción → `bloquearParaEditar` (borrador → carrito, el mismo orden de
+  siempre) → grupo apto → RT-03 (`Support\Venta\CarritoComercial`, compartido con
+  `LineasBorradorService`) → stock → operación.
+- **Nunca:** calcula tarifas, crea Order o Shipment, elige transportadora ni toca el pago.
+- **DTO:** `DireccionBorrador`, `MetodoEntregaDisponible`, `VistaEntregaBorrador` y la entrada
+  `OrigenDireccion`. Sin modelos Eloquent.
+
+### 30.5 Invalidación de tarifas
+
+| Operación | Efecto |
+|---|---|
+| Guardar facturación o envío | Bagisto resetea el método (`saveAddresses`), y se recalculan totales y tarifas para el destino nuevo |
+| `LineasBorradorService::agregar`, `cambiarCantidad`, `eliminar` (también la última línea) | `Cart::resetShippingMethod()` **antes** del cambio (así `collectTotals` no suma el envío anterior); conserva direcciones. Si la operación falla, la transacción lo revierte. La vista avisa `metodos_por_calcular` |
+| `SolicitudBorradorService::*` | Ninguno: no tocan el Cart (probado) |
+| `BorradorVentaService::cambiarCliente` | Ya limpiaba direcciones, pago y envío (03B, confirmado) |
+| `recalcular` | Mantiene el método. **03F** deberá volver a calcular las tarifas y comparar tras `collectTotals` (el envío gratis pone el precio a 0) |
+
+### 30.6 Stock
+
+- **Rechazo:** si una línea supera el stock actual (`Cart::isItemsHaveSufficientQuantity`, la
+  misma comprobación que el panel), cualquier operación de entrega se rechaza con
+  `carrito_con_stock_insuficiente` y la lista de líneas afectadas.
+- **Qué no hace:** no recorta, no reserva, no usa producción ni backorders.
+
+### 30.7 Cobertura de los 15 casos
+
+| # | Caso | Bagisto | ByLopez | Qué se guarda | Qué NO se inventa |
+|---|---|---|---|---|---|
+| 1 | Recogida en bodega | Exige dirección de envío y tarifa; copia el snapshot al pedido | La bodega real como lugar y quien recibe como persona; carrier `recogida_bodega` | Dirección de envío = bodega + persona; `shipping_method = recogida_bodega`; 0 | Domicilio del cliente, transportadora, guía |
+| 2 | Domicilio local | Tarifa del carrier en totales | Carrier con tarifa del panel | Dirección de destino real; `domicilio_local`; tarifa | Domiciliario, tarifa manual |
+| 3 | Nacional, flete por pagar | Tarifa 0 | `envio_nacional`, 0 + descripción | `shipping_amount = 0` sin regla aplicada | Envío gratis, transportadora |
+| 4 | Nacional con promoción | CartRule `free_shipping` pone a 0 la tarifa elegida | Nada propio | `envio_nacional` + regla en `applied_cart_rule_ids` | Un método «gratis» |
+| 5 | Domicilio con promoción | Igual | Nada propio | `domicilio_local` + regla | Un método «gratis» |
+| 6 | Dirección guardada | Copia al carrito con `parent_address_id` | Verifica que sea del cliente | Dirección en el carrito vinculada | — |
+| 7 | Dirección puntual | Copia al carrito | Reglas de RT-04; no la guarda en el cliente | Solo en el carrito (y en el pedido en 03F) | Dirección del cliente nueva |
+| 8 | Sin dirección y necesita envío | Exige facturación | `facturacion_requerida`; el asesor pide una real | — | Direcciones de relleno |
+| 9 | Recoge sin domicilio de entrega | Exige envío y facturación | Envío = bodega. La facturación sigue siendo real y obligatoria (límite de Bagisto, D-46) | Bodega como lugar | Domicilio falso |
+| 10 | Cambia la dirección tras elegir método | `saveAddresses` resetea el método | Recalcula tarifas del destino nuevo | Método en null | Tarifa de otro destino |
+| 11 | Cambia cantidades tras elegir método | No recalcula tarifas | `resetShippingMethod` en agregar, cambiar cantidad y eliminar | Método en null, direcciones intactas | Tarifa obsoleta |
+| 12 | El stock baja tras elegir entrega | `isItemsHaveSufficientQuantity` | `carrito_con_stock_insuficiente` y aviso; 03F revalidará | Nada cambia | Stock ni recorte |
+| 13 | Aparece un carrier nuevo | `collectRates` lo incluye | Nada (VentasAsesor no tiene lista) | Su código en `shipping_method` | — |
+| 14 | Envío nacional con tarifa por API | — | Se reemplaza `EnvioNacional::calculate()` en Logística | La tarifa que devuelva | VentasAsesor no cambia |
+| 15 | Pedidos históricos con `free` o `flatrate` | Snapshots de texto en `orders` | No se tocan; `free` y `flatrate` siguen activos | — | Migraciones de pedidos o shipments |
+
+### 30.8 Pruebas
+
+`Fase03dEntregaBorradorTest`: 27 casos, que cubren:
+
+- facturación guardada y puntual, email NULL, reglas de RT-04 y dirección ajena;
+- envío guardado, puntual e igual a facturación;
+- recogida, con bodega inexistente, ambigua o domicilio;
+- domicilio, tarifa del panel y sin tarifa;
+- nacional por pagar, envío gratis (domicilio y nacional), método inexistente y sin productos
+  físicos;
+- carriers inactivos por defecto y extensibilidad;
+- invalidación por dirección, por agregar, cambiar o eliminar línea y por la última línea;
+- una solicitud no invalida; `cambiarCliente`;
+- stock, propiedad y límites (sin `custom_price`, Order ni Shipment).
+
+### 30.9 Pendientes y riesgos
+
+- **D-47:** valor de la tarifa del domicilio (hoy sin tarifa no se ofrece); limitar el
+  domicilio a Bogotá (no implementado); envío nacional siempre por pagar (implementado como
+  tarifa configurable en 0).
+- **Activación en producción y transición:** activar los carriers y desactivar `free` y
+  `flatrate` es una escritura de configuración que requiere autorización.
+- **Guardia de 03F:** revalidar stock, tarifa (tras `collectTotals`) y direcciones antes del
+  Order.
+- **Tienda:** la recogida solo se ofrece si la dirección de envío es una bodega, y la tienda
+  todavía no tiene cómo elegir punto de recogida.
+- **Persona que recoge:** si es distinta del cliente, hoy no se representa.
+- **Código postal:** obligatorio en las direcciones guardadas (RT-04) y opcional en el
+  borrador. Hay que decidir si también se relaja en RT-04.
+- **Caché de `core_config`:** el repositorio de configuración tiene caché activada
+  (`config/repository.php`). Los cambios desde el panel la limpian; un SQL directo no.
+
+**Regresión 03D (2026-09-26):**
+
+- VentasAsesor: 559 pasadas (2284 aserciones = 532 + 27 casos).
+- CorteConfeccion: 384 (2100).
+- Pint: sin errores (VentasAsesor y Logistica).
+- Core de Bagisto (Admin Sales, Admin Configuration y Shop Checkout): 142 pasadas y **18 fallos idénticos con y sin** `LogisticaServiceProvider`, es decir, fallos previos no causados por 03D.
+
+---
+
+## 31. Cierre formal de 03D (2026-09-27)
+
+**03D CERRADA**, revisada y aprobada por Camilo Gaitán. **03E (pago): pendiente, no iniciada.**
+
+**Decisiones:**
+
+- D-40 y D-41: aprobadas y cerradas.
+- D-43 y D-45: aprobadas.
+- D-42 y D-44: diferidas a la fase de logística.
+- D-46: implementada, con un punto abierto: si se relaja el código postal en RT-04.
+- D-47: parcial. Falta el valor de la tarifa del domicilio y la posible limitación por zona o
+  Bogotá.
+
+**Producción:** los carriers nuevos siguen **inactivos** y `free` y `flatrate` siguen activos.
+Cambiarlo requiere autorización expresa. No hay migraciones.
+
+**Deudas que no bloquean 03D y quedan donde corresponden:**
+
+- persona distinta que recoge;
+- catálogo de transportadoras, guía posterior, tracking y estados de entrega;
+- integraciones (99envíos, Inter Rapidísimo, Servientrega) — fase de logística;
+- la guardia de 03F, que revalidará stock, tarifa y direcciones.

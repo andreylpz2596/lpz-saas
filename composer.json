@@ -109,6 +109,7 @@
             "Webkul\\User\\": "packages/Webkul/User/src",
             "Brainstream\\ProductPdfGenerate\\": "packages/Brainstream/ProductPdfGenerate/src/",
             "ByLopez\\CorteConfeccion\\": "packages/ByLopez/CorteConfeccion/src/",
+            "ByLopez\\Logistica\\": "packages/ByLopez/Logistica/src/",
             "ByLopez\\VentasAsesor\\": "packages/ByLopez/VentasAsesor/src/"
         }
     },

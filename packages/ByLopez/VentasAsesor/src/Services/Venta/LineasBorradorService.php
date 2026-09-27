@@ -5,13 +5,11 @@ namespace ByLopez\VentasAsesor\Services\Venta;
 use ByLopez\VentasAsesor\DataObjects\DesgloseAbastecimiento;
 use ByLopez\VentasAsesor\DataObjects\LineaBorradorVenta;
 use ByLopez\VentasAsesor\DataObjects\VistaLineasBorrador;
-use ByLopez\VentasAsesor\Exceptions\BorradorVentaInvalidoException;
 use ByLopez\VentasAsesor\Exceptions\LineaBorradorInvalidaException as LineaInvalida;
 use ByLopez\VentasAsesor\Exceptions\VarianteInvalidaException as VarianteInvalida;
 use ByLopez\VentasAsesor\Models\SolicitudBorrador;
-use ByLopez\VentasAsesor\Support\Clientes\ValidadorGrupoComercial;
-use ByLopez\VentasAsesor\Support\ContextoPrecioComercial;
 use ByLopez\VentasAsesor\Support\Venta\CantidadVenta;
+use ByLopez\VentasAsesor\Support\Venta\CarritoComercial;
 use Closure;
 use Exception;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +18,6 @@ use Webkul\Checkout\Contracts\CartItem;
 use Webkul\Checkout\Facades\Cart;
 use Webkul\Checkout\Models\CartItemProxy;
 use Webkul\Checkout\Models\CartProxy;
-use Webkul\Customer\Models\CustomerProxy;
 use Webkul\Product\Contracts\Product;
 use Webkul\Product\Exceptions\InsufficientProductInventoryException;
 use Webkul\Product\Models\ProductProxy;
@@ -48,14 +45,16 @@ use Webkul\User\Contracts\Admin;
  *   tiene una solicitud comercial de su variante (SolicitudBorradorService) y el total
  *   del carrito por variante nunca supera la cantidad solicitada. Agregar es la accion
  *   explicita de llevar unidades al carrito; crear una solicitud nunca lo hace.
+ * - 03D: agregar, cambiar cantidad y eliminar INVALIDAN el metodo de envio
+ *   (Cart::resetShippingMethod: borra tarifas y metodo, conserva direcciones), porque
+ *   Bagisto no recalcula tarifas al cambiar lineas. El asesor vuelve a pedir metodos.
  */
 class LineasBorradorService
 {
     public function __construct(
         protected BorradorVentaService $borradores,
         protected CatalogoVentaService $catalogo,
-        protected ContextoPrecioComercial $contexto,
-        protected ValidadorGrupoComercial $validadorGrupo,
+        protected CarritoComercial $carritos,
     ) {}
 
     public function listar(int $borradorId): VistaLineasBorrador
@@ -109,6 +108,8 @@ class LineasBorradorService
             }
 
             $this->enCarrito($carrito, $customerId, function () use ($carrito, $producto, $datos, $variante, $cantidad) {
+                Cart::resetShippingMethod();
+
                 try {
                     Cart::addProduct($producto, $datos);
                 } catch (InsufficientProductInventoryException) {
@@ -149,6 +150,8 @@ class LineasBorradorService
                         $cantidad, (int) $variante->getTypeInstance()->totalQuantity(), (bool) $variante->manage_stock));
                 }
 
+                Cart::resetShippingMethod();
+
                 try {
                     Cart::updateItems(['qty' => [$item->id => $cantidad]]);
                 } catch (Exception $e) {
@@ -182,6 +185,7 @@ class LineasBorradorService
                 Cart::setCart($carrito);
 
                 try {
+                    Cart::resetShippingMethod();
                     Cart::removeItem($item->id) ?: throw new LineaInvalida(LineaInvalida::RECHAZADA_POR_CARRITO);
                 } finally {
                     Cart::resetCart();
@@ -195,6 +199,7 @@ class LineasBorradorService
             $this->exigirGrupoApto($customerId);
 
             $this->enCarrito($carrito, $customerId, function () use ($item) {
+                Cart::resetShippingMethod();
                 Cart::removeItem($item->id) ?: throw new LineaInvalida(LineaInvalida::RECHAZADA_POR_CARRITO);
                 Cart::collectTotals();
             });
@@ -206,15 +211,7 @@ class LineasBorradorService
     /** El Cart de Bagisto apunta al carrito del borrador solo durante la operacion, en RT-03. */
     protected function enCarrito(CartContract $carrito, int $customerId, Closure $operacion): void
     {
-        $this->contexto->durante((int) $carrito->id, $customerId, function () use ($carrito, $operacion) {
-            Cart::setCart($carrito);
-
-            try {
-                $operacion();
-            } finally {
-                Cart::resetCart();
-            }
-        });
+        $this->carritos->operar($carrito, $customerId, $operacion);
     }
 
     /** Linea de primer nivel de ESTE carrito; nunca la fila interna de una variante. */
@@ -282,13 +279,7 @@ class LineasBorradorService
 
     protected function exigirGrupoApto(int $customerId): void
     {
-        $cliente = CustomerProxy::modelClass()::query()->find($customerId);
-
-        if (! $cliente) {
-            throw new BorradorVentaInvalidoException(BorradorVentaInvalidoException::CLIENTE_INEXISTENTE);
-        }
-
-        $this->validadorGrupo->validar($cliente->customer_group_id === null ? null : (int) $cliente->customer_group_id);
+        $this->carritos->exigirGrupoApto($customerId);
     }
 
     /**

@@ -2,14 +2,11 @@
 
 namespace ByLopez\VentasAsesor\Services\Clientes;
 
-use ByLopez\VentasAsesor\Contracts\NormalizadorTelefono;
 use ByLopez\VentasAsesor\DataObjects\DireccionComercial;
 use ByLopez\VentasAsesor\Exceptions\DatosClienteComercialInvalidosException as Invalidos;
-use ByLopez\VentasAsesor\Support\Correo\DestinatarioCorreo;
+use ByLopez\VentasAsesor\Support\Clientes\ValidadorDireccionComercial;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Validator;
-use Webkul\Core\Rules\PostCode;
 use Webkul\Customer\Contracts\CustomerAddress;
 use Webkul\Customer\Models\CustomerProxy;
 use Webkul\Customer\Repositories\CustomerAddressRepository;
@@ -31,7 +28,7 @@ class GuardarDireccionClienteComercialService
 {
     public function __construct(
         protected CustomerAddressRepository $direcciones,
-        protected NormalizadorTelefono $normalizador,
+        protected ValidadorDireccionComercial $validador,
     ) {}
 
     /** Sin $addressId crea; con el, actualiza una direccion QUE PERTENECE a ese cliente. */
@@ -78,55 +75,9 @@ class GuardarDireccionClienteComercialService
     /** @return array<string, mixed> columnas de addresses */
     private function validar(DireccionComercial $d): array
     {
-        $errores = [];
-        $lineas = array_values(array_filter(array_map('trim', $d->lineas), fn ($l) => $l !== ''));
-
-        foreach (['nombre' => $d->nombre, 'apellido' => $d->apellido, 'ciudad' => $d->ciudad,
-            'departamento' => $d->departamento, 'pais' => $d->pais, 'codigo_postal' => $d->codigoPostal] as $campo => $valor) {
-            if (trim($valor) === '') {
-                $errores[$campo] = Invalidos::REQUERIDO;
-            }
-        }
-
-        if ($lineas === []) {
-            $errores['lineas'] = Invalidos::REQUERIDO;
-        } elseif (mb_strlen(implode(PHP_EOL, $lineas)) > 255) {
-            $errores['lineas'] = Invalidos::DEMASIADO_LARGO;
-        }
-
-        if (! isset($errores['codigo_postal'])
-            && Validator::make(['postcode' => trim($d->codigoPostal)], ['postcode' => [new PostCode]])->fails()) {
-            $errores['codigo_postal'] = Invalidos::FORMATO_INVALIDO;
-        }
-
-        $telefono = $this->normalizador->normalizar($d->telefono);
-
-        if (! $telefono->esBuscable()) {
-            $errores['telefono'] = Invalidos::TELEFONO_NO_NORMALIZABLE;
-        }
-
-        $email = $d->email === null || trim($d->email) === '' ? null : trim($d->email);
-
-        if ($email !== null && DestinatarioCorreo::motivoDeOmision($email) !== null) {
-            $errores['email'] = Invalidos::EMAIL_INVALIDO;
-        }
-
-        if ($errores !== []) {
-            throw new Invalidos($errores);
-        }
-
-        return [
-            'first_name' => trim($d->nombre),
-            'last_name' => trim($d->apellido),
-            'company_name' => $d->empresa === null || trim($d->empresa) === '' ? null : trim($d->empresa),
-            'address' => implode(PHP_EOL, $lineas),
-            'city' => trim($d->ciudad),
-            'state' => trim($d->departamento),
-            'country' => strtoupper(trim($d->pais)),
-            'postcode' => trim($d->codigoPostal),
-            'phone' => $telefono->normalizado,
-            'email' => $email,
-            'default_address' => $d->predeterminada ? 1 : 0,
-        ];
+        // Reglas compartidas con el borrador de venta (03D); aqui el codigo postal sigue
+        // siendo obligatorio (decision de RT-04).
+        return $this->validador->validar($d, exigirCodigoPostal: true)
+            + ['default_address' => $d->predeterminada ? 1 : 0];
     }
 }

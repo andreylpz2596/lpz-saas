@@ -2,7 +2,7 @@
 
 Decisiones de negocio del módulo `ByLopez\VentasAsesor`.
 
-**Última actualización:** 2026-09-15 (Fase 02A) · **2026-09-26 (Fase 03, Camilo Gaitán):** decididas **D-18** y **D-19** (03B) y **D-35 a D-38** (cierre 03B; la nota de numeración está antes del resumen). D-38 queda bloqueada por la fuente de costo. **D-39** (03C) decidida e implementada.
+**Última actualización:** 2026-09-15 (Fase 02A) · **2026-09-26 (Fase 03, Camilo Gaitán):** decididas **D-18** y **D-19** (03B) y **D-35 a D-38** (cierre 03B; la nota de numeración está antes del resumen). D-38 queda bloqueada por la fuente de costo. **D-39** (03C) decidida e implementada. **D-40 a D-47** (03D): D-43 aprobada, D-42 y D-44 diferidas, resto pendiente.
 
 **Estado global:** 6 decididas (D-01, D-02, D-05, D-06, **D-16**, **D-27**) ·
 **27 pendientes** · 1 retirada (D-23). La Fase 01 añadió **D-27**. La Fase 01B
@@ -947,6 +947,68 @@ con el desglose y no guarda la cantidad pedida.
 producción sigue siendo informativa y null mientras no exista el contrato con CorteConfeccion
 (D-37). No se crea ninguna migración hasta que Camilo decida.
 
+## D-40 a D-45 · Entrega y logística (auditoría 03D) — **PENDIENTES**
+
+**Estado:** ⏳ **PENDIENTES** (2026-09-26). Evidencia en el Doc. 05 §28. Ninguna está
+implementada.
+
+> **Actualización (diseño 03D, 2026-09-26, Doc. 05 §29):**
+> - **D-43 APROBADA** por Camilo Gaitán: `Shipment.id` es la referencia interna, sin `dispatch_reference`; `track_number` solo guarda guías reales y, sin guía, queda en NULL.
+> - **D-42 y D-44 DIFERIDAS** a la fase de logística. No bloquean 03D, 03E ni 03F. Se aprueba la necesidad de evitar el texto libre en la transportadora.
+> - **D-40, D-41 y D-45:** recomendación en el Doc. 05 §29.2, §29.4 y §29.8, pendiente de aprobación.
+> - **Nuevas:** D-46 y D-47.
+>
+> **Implementación 03D (2026-09-26, Doc. 05 §30):**
+> - **D-40 APROBADA e implementada:** carriers `recogida_bodega`, `domicilio_local` y `envio_nacional` (paquete `ByLopez/Logistica`), inactivos por defecto; el envío gratis es CartRule.
+> - **D-41 decidida (opción B) e implementada:** en la recogida, la dirección de envío es la bodega real (`inventory_sources` activa) con los datos de quien recibe.
+> - **D-45 APROBADA e implementada:** paquete `ByLopez/Logistica`.
+> - **D-46 implementada:** código postal opcional en el borrador (sigue obligatorio en las direcciones guardadas de RT-04). Cliente sin dirección real → sin entrega.
+> - **D-47 parcial:** tarifa del domicilio configurable en el panel, sin valor (sin tarifa no se ofrece); envío nacional con tarifa 0 «por pagar». Pendiente: el valor del domicilio y si se limita a Bogotá.
+
+## D-46 · Facturación mínima — **PENDIENTE**
+
+- **Pregunta 1:** ¿el código postal es obligatorio (como exige hoy RT-04 en las direcciones guardadas) u opcional (la base de datos lo admite NULL y no hay tasas de impuesto)?
+- **Pregunta 2:** si el cliente no da ninguna dirección, ¿no hay pedido? Bagisto exige siempre la dirección de facturación y no se inventan datos.
+
+## D-47 · Tarifas de entrega — **PENDIENTE**
+
+- **Pregunta 1:** política y valor del domicilio local (fija configurable, 0 «por pagar al domiciliario», gratis con CartRule o, más adelante, por zonas). No se usa un valor manual por venta.
+- **Pregunta 2:** ¿el domicilio local se limita a Bogotá? ¿Con qué criterio de ciudad o departamento?
+- **Pregunta 3:** ¿el envío nacional será siempre «flete por pagar» (0) o a veces se cobrará en el pedido?
+
+- **D-40 · Métodos de entrega.**
+  - **Pregunta:** ¿qué catálogo de métodos de entrega se usa (por ejemplo recogida en bodega,
+    domicilio local de Bogotá, envío nacional)?
+  - **Contexto:** hoy `flatrate` («Envío por pagar», tarifa 0) y `free` («Envío gratuito»)
+    mezclan método de entrega con política de cobro del flete.
+  - **Recomendación:** métodos como carriers y tarifas de Bagisto; la política de cobro del flete,
+    como tarifa o descripción del método.
+- **D-41 · Dirección en la recogida.**
+  - **Contexto:** Bagisto exige dirección de envío y tarifa si hay productos con stock, y siempre
+    dirección de facturación.
+  - **Pregunta:** en la recogida, ¿la dirección de envío es la de la **bodega** (el lugar real de
+    entrega) o la del cliente? ¿Qué dirección de facturación se exige a quien no tiene?
+- **D-42 · Catálogo de transportadoras.**
+  - **Pregunta:** ¿se aprueba un catálogo con código estable (Inter Rapidísimo, Servientrega,
+    99envíos, domiciliarios, BYLOPEZ) que escriba `shipments.carrier_code` (columna nativa sin
+    usar) y `carrier_title`, en lugar del texto libre actual?
+  - **Pregunta abierta:** ¿cómo se registran las personas domiciliarias? Son datos personales.
+- **D-43 · Referencia interna del despacho.**
+  - **Propuesta:** el número del Shipment de Bagisto, sin campo nuevo; `track_number` solo para
+    guías externas reales y se abandona la práctica de números falsos.
+- **D-44 · Guía posterior y estados de entrega.**
+  - **Contexto:** Bagisto no permite editar un shipment ni tiene estados de entrega.
+  - **Pregunta:** ¿se aprueba, para la fase de logística, una extensión mínima para añadir o
+    corregir la guía con auditoría y registrar «en tránsito», «entregado» e «incidencia»?
+- **D-45 · Ubicación y división.**
+  - **Pregunta 1:** ¿dónde viven los carriers ByLopez? En VentasAsesor, o en un paquete ByLopez de
+    logística, porque también afectan a la tienda.
+  - **Pregunta 2:** confirmar la división propuesta:
+    - 03D: dirección y método de entrega sobre el borrador;
+    - 03E: pago;
+    - 03F: confirmación del pedido;
+    - una fase de logística aparte, porque opera sobre el pedido, no sobre el borrador.
+
 ## Resumen
 
 | # | Decisión | Fase bloqueada | Recomendación técnica | Estado |
@@ -991,6 +1053,14 @@ producción sigue siendo informativa y null mientras no exista el contrato con C
 | D-37 | Producción como información comercial | 03 | — | ✅ **DECIDIDA** (2026-09-26): informativa, nunca stock; desconocida = NULL |
 | D-38 | Descuento limitado por rentabilidad | 03 | Reglas de carrito de Bagisto (Doc. 05 §24.3) | ✅ principio decidido (2026-09-26); **bloqueada** por fuente de costo y política de margen |
 | D-39 | Cantidad solicitada por encima del stock vendible | 03C | Solicitud comercial fuera del Cart (Doc. 05 §26) | ✅ **DECIDIDA 2026-09-26** (Camilo Gaitán): tabla propia, sin parcial automático, I-13 |
+| D-40 | Métodos de entrega | 03D | Carriers y tarifas de Bagisto (Doc. 05 §28–§30) | ✅ **APROBADA y CERRADA** (03D; 3 carriers inactivos por defecto; envío gratis = CartRule) |
+| D-41 | Dirección en la recogida en bodega | 03D | Bodega real (`inventory_sources`) + quien recibe | ✅ **APROBADA y CERRADA**: opción B (Doc. 05 §30.2) |
+| D-42 | Catálogo de transportadoras | Logística | `carrier_code` nativo más catálogo (Doc. 05 §28.5) | ⏸ **diferida** a logística (evitar texto libre: aprobado) |
+| D-43 | Referencia interna del despacho | Logística | Número del Shipment, sin campo nuevo | ✅ **APROBADA 2026-09-26**: `Shipment.id`; `track_number` solo para guías reales, sin guía NULL |
+| D-44 | Guía posterior y estados de entrega | Logística | Extensión mínima auditada | ⏸ **diferida** a logística |
+| D-45 | Ubicación de los carriers y división de subfases | 03D | Paquete `ByLopez/Logistica`; 03D, 03E, 03F y logística | ✅ **APROBADA** (paquete creado en 03D) |
+| D-46 | Facturación mínima | 03D | Datos reales; código postal opcional en el borrador | ✅ **implementada** (Doc. 05 §30.3); abierto: relajar también RT-04 |
+| D-47 | Tarifas de entrega | 03D | Domicilio configurable; nacional 0 «por pagar» | ◐ **parcial**: falta el valor del domicilio y la restricción a Bogotá |
 
 ### Requisitos técnicos obligatorios (no son decisiones de negocio)
 
