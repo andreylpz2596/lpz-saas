@@ -2198,3 +2198,1099 @@ Cambiarlo requiere autorización expresa. No hay migraciones.
 - catálogo de transportadoras, guía posterior, tracking y estados de entrega;
 - integraciones (99envíos, Inter Rapidísimo, Servientrega) — fase de logística;
 - la guardia de 03F, que revalidará stock, tarifa y direcciones.
+
+---
+
+## 32. Auditoría 03E: pago (2026-09-27)
+
+**Solo auditoría:** no hay código, migraciones ni cambios de configuración. Evidencia del código
+instalado (Bagisto 2.4.9) y de `lpz_saas` (solo SELECT, conteos agregados).
+
+### 32.1 Motor de pagos de Bagisto
+
+| Pieza | Evidencia |
+|---|---|
+| Registro | Cada paquete fusiona su `Config/payment-methods.php` en `config('payment_methods')` (Payment, Paypal, Stripe, PayU, Razorpay, PhonePe) |
+| Clase | Hereda de `Webkul\Payment\Payment\Payment`. `getConfigData()` lee `sales.payment_methods.<code>.*`; sin fila en `core_config`, toma el valor por defecto del archivo, igual que los carriers |
+| Disponibilidad | `Payment::getPaymentMethods()` recorre la configuración, instancia la clase, filtra por `isAvailable()` y ordena por `sort`. La base es `active`; cada método puede añadir condiciones |
+| Selección | `Cart::savePaymentMethod(['method' => code])` borra el `CartPayment` anterior y crea uno con `method` y `method_title` (título de la configuración). **No valida** que el método exista ni que esté disponible (`isAvailable`): acepta cualquier texto |
+| Persistencia en el carrito | `cart_payment(method, method_title, cart_id)`. Sin importes ni datos adicionales |
+| Paso al pedido | `OrderPaymentResource`: `method`, `method_title` y `additional = request()->input('orderData')` (**acoplado al request HTTP**: en un servicio queda null). Queda en `order_payment` |
+| Recargos o descuentos por método | **Ninguno.** `collectTotals` no toca el pago; el método no cambia precios ni totales. RT-03 sigue siendo la autoridad del precio |
+| Inventario | Seleccionar el pago no toca el inventario. La reserva ocurre al crear el pedido (`manageInventory`) |
+| Eventos | Seleccionar no dispara ninguno. Al crear el pedido, `checkout.order.save.after` dispara, **dentro de la transacción del pedido**: `GenerateInvoice`, la atribución de VentasAsesor, CartRule, notificaciones y otros |
+
+### 32.2 Métodos: en código, activos y usados
+
+| Método | Clase | ¿Disponible en `lpz_saas`? | Pedidos históricos |
+|---|---|---|---|
+| `cashondelivery` | `CashOnDelivery` | Sí (`active = 1`) | 14 |
+| `moneytransfer` | `MoneyTransfer` | Sí (`active = 1`) | 10 |
+| `paypal_standard`, `paypal_smart_button` | Paypal | No (`active = 0` en `core_config`) | 0 |
+| `stripe`, `razorpay`, `phonepe`, `payu` | Sus paquetes | `active = true` **por defecto** (sin fila en `core_config`), pero `isAvailable()` exige `hasValidCredentials()` y no hay credenciales: **no disponibles** | 0 |
+
+**Riesgo latente:** si se configuran credenciales de esos gateways, aparecerían solos, porque su
+`active` por defecto es verdadero.
+
+### 32.3 Contra entrega (`cashondelivery`)
+
+- **Disponibilidad:** `active` y `cart->hasOnlyStockableItems()`, es decir, todos los productos
+  son físicos. **No** depende del método de envío, la dirección, el país, el total ni el canal.
+  **No** revisa stock.
+- **Al crear el pedido:** estado `pending`. `GenerateInvoice`, si `generate_invoice = 1` (así en
+  `lpz_saas`), crea la factura en estado `invoice_status = pending` y fija
+  `order_status = pending_payment`.
+- **Qué implica esa factura temprana:** una factura `pending` suma igualmente las cantidades y los
+  totales «invoiced» del pedido (`InvoiceRepository::create` → `collectTotals`), y dispara el
+  correo de factura al cliente (`new_invoice = 1`, protegido por RT-04).
+- **Al despachar:** `ShipmentRepository` deja `pending_payment` si hay factura abierta.
+- **Cómo se registra el cobro:**
+  - Vía nativa: `TransactionController::store` registra transacciones hasta el total; entonces la
+    factura pasa a `paid` y el pedido a `completed` (con Shipment) o `processing`.
+  - Alternativa: `invoices.mass_update.state` cambia **solo** la factura, **sin** el estado del
+    pedido. Datos reales: **3 pedidos contra entrega en `pending_payment` con factura `paid`**, la
+    inconsistencia que produce esa vía.
+- **Datos de `lpz_saas`:** 8 pedidos `pending_payment` con factura `pending`, 2 `completed` con
+  factura `paid`, 1 `canceled` sin factura. `order_transactions` está vacía: nunca se usó la vía
+  de transacciones.
+
+### 32.4 Transferencia (`moneytransfer`) — HALLAZGO CRÍTICO
+
+- **Disponibilidad:** solo `active`. Sin condiciones.
+- **Instrucciones:** `mailing_address` en `getAdditionalDetails()`; hoy está vacía. No guarda
+  datos del pago.
+- **Configuración actual de `lpz_saas`:** `generate_invoice = 1`, **`invoice_status = paid`** y
+  **`order_status = processing`**. Al crear el pedido, `GenerateInvoice` crea la factura
+  **PAGADA** y deja el pedido en `processing`.
+
+  **Bagisto trata la transferencia como dinero recibido al crear el pedido, sin ninguna
+  verificación.**
+- **Datos reales:** las 10 transferencias históricas están `completed` con factura `paid`.
+  Coincide.
+- **No existe en Bagisto:**
+  - un estado «pendiente de verificación» propio del pago;
+  - un comprobante o adjunto.
+- **Qué sí existe en Bagisto:**
+  - facturas `pending`, `paid`, `overdue` y `refunded`;
+  - pedidos `pending_payment`;
+  - `order_transactions` (con `data` JSON);
+  - `order_comments` (texto).
+- **Solución nativa posible, sin código:** configurar `moneytransfer` con
+  `invoice_status = pending` y `order_status = pending_payment`, y confirmar el dinero con una
+  transacción (la factura pasa a `paid` sola al completar el total). Es un cambio de
+  configuración **global** (también afecta a la tienda) y en producción: requiere decisión y
+  autorización (D-48).
+
+### 32.5 Tabla factual por método (configuración actual de `lpz_saas`)
+
+| Método | CartPayment | OrderPayment | Factura al crear | Estado inicial del pedido | Qué lo cambia después |
+|---|---|---|---|---|---|
+| Contra entrega | `cashondelivery` | `cashondelivery` (`additional` null) | Sí, `pending` | `pending_payment` | Transacciones hasta el total → factura `paid` y pedido `processing` o `completed`. Shipment con factura abierta → sigue `pending_payment` |
+| Transferencia | `moneytransfer` | `moneytransfer` | Sí, **`paid`** | **`processing`** | Shipment → `completed`. **Nunca pasa por «pendiente»** |
+| Sin factura automática (si `generate_invoice = 0`) | — | — | No | `pending` | Factura manual del panel, que puede crear una transacción |
+
+Estados reales del pedido: `pending`, `pending_payment`, `processing`, `completed`, `canceled`,
+`closed` y `fraud`. De la factura: `pending`, `pending_payment`, `paid`, `overdue` y
+`refunded`. No hace falta inventar estados.
+
+### 32.6 Método de pago ≠ estado del dinero
+
+- **El método** vive en `order_payment.method`.
+- **El estado del dinero** se lee de la factura (`state`), la suma de `order_transactions` y el
+  estado del pedido.
+- **Abonos:** son nativos. `TransactionController` admite **varias transacciones por factura**
+  hasta su total, así que se puede calcular el saldo pendiente (total de la factura menos la suma
+  de transacciones).
+- **Límite:** hay un solo `order_payment` por pedido (un método) y, en la práctica, una sola
+  factura (0 pedidos con más de una).
+- **`order_transactions.payment_method`** es texto libre del formulario del panel: puede
+  registrar con qué se cobró (efectivo, datáfono, transferencia) sin crear métodos de Bagisto
+  nuevos. Queda como opción para D-50, sin decidir.
+
+### 32.7 Comprobante de transferencia
+
+- **No hay soporte nativo:** ni adjuntos en pedido, pago, factura ni transacción, ni ningún
+  módulo instalado que lo cubra.
+- **Lo que existe:** `order_transactions.data` (JSON, hoy solo `paidAmount`) y `order_comments`
+  (texto).
+- **Si se necesita** evidencia (imagen del comprobante), será una extensión futura: no se diseña
+  ahora (D-51).
+
+### 32.8 Métodos permitidos en el canal asesor
+
+- **Disponible globalmente** = `Payment::getPaymentMethods()`.
+- **Permitido para VentasAsesor** = una política del canal. El panel de Bagisto ya la tiene fija
+  en código (`OrderController::store` solo acepta `cashondelivery` y `moneytransfer`).
+- **Recomendación (sin duplicar Payment):**
+  - **métodos ofrecidos = disponibles según Bagisto ∩ lista permitida configurable** (códigos en
+    la configuración de VentasAsesor, inicialmente contra entrega y transferencia);
+  - un método nuevo de Bagisto aparece solo cuando se añade a la lista, sin tocar código;
+  - si la lista incluye un método no disponible, no se ofrece.
+  
+  Pendiente de decisión (D-49).
+- **IA futura:** interpretará la intención («pago cuando me llegue») y Laravel devolverá los
+  códigos ofrecidos; la IA nunca inventa códigos.
+
+### 32.9 Dependencias e invalidación
+
+| Cambio posterior a elegir el pago | Bagisto | Diseño propuesto para 03E |
+|---|---|---|
+| Método de envío o dirección | No toca `cart_payment` (`saveAddresses` y `resetShippingMethod` no lo borran) | Conservar el pago. Ningún método actual depende del envío; 03F revalida `isAvailable()` |
+| Líneas, cantidades o total | No lo toca | Conservar; contra entrega solo cambia si entran productos no físicos. 03F revalida |
+| Cambio de cliente | 03B ya borra `cart_payment` (confirmado) | Nada nuevo |
+| Stock | El pago no lo considera | La operación de pago aplica la misma comprobación de stock que 03D; 03F revalida |
+
+### 32.10 Frontera 03E / 03F
+
+- **03E termina** cuando el Cart tiene un pago que está **disponible según Bagisto y permitido
+  para el canal**. Como `savePaymentMethod()` no valida, esa comprobación la hace VentasAsesor
+  antes de guardar.
+- **03F repite todo antes del Order:** stock, direcciones, tarifa (tras `collectTotals`),
+  disponibilidad y permiso del pago.
+- **03F debe tener en cuenta:**
+  - `OrderPaymentResource` lee el request HTTP;
+  - `GenerateInvoice` fija el estado dentro de la transacción del pedido;
+  - si falla, `OrderRepository` escribe todo `$data` en el log (datos personales) y reintenta
+    hasta 3 veces.
+
+### 32.11 Atribución y notificaciones
+
+- **Atribución:** el listener de atribución de VentasAsesor comparte evento con `GenerateInvoice`,
+  pero **no depende del pago ni del estado**. Si cualquier listener falla, todo el pedido se
+  revierte (y se reintenta). No se modifica.
+- **Correos al crear un pedido con pago contra entrega o transferencia**:
+  - pedido nuevo: al cliente (`new_order = 1`, RT-04) y al admin (`new_order_mail_to_admin = 1`);
+  - **factura** al cliente (`new_invoice = 1`, RT-04), ya en el momento del pedido;
+  - notificación interna del panel al crear el pedido y en cada cambio de estado;
+  - envío (`new_shipment = 1`), más adelante.
+- **Defecto del core:** el listener de factura del Shop también hace `$invoice->query()->update(
+  ['email_sent' => 1])` sin `where`. Solo se reporta.
+
+### 32.12 Propuesta para 03E (sin implementar)
+
+- **`PagoBorradorService`** (VentasAsesor):
+  - `metodosDisponibles`: `Payment::getSupportedPaymentMethods()` con el Cart del borrador
+    ∩ lista permitida;
+  - `seleccionar`: valida que el código esté entre los ofrecidos y llama a
+    `Cart::savePaymentMethod()`;
+  - `vista`: expone la advertencia de estado inicial por método («la transferencia se registrará
+    como pagada» mientras D-48 no cambie).
+  
+  Mismo bloqueo del borrador, grupo apto, RT-03 y comprobación de stock que 03D.
+- **Sin** tablas, estados ni recargos propios, y sin tocar facturas o transacciones (eso es cobro
+  y posventa).
+
+### 32.13 Decisiones pendientes para Camilo (Doc. 04)
+
+- **D-48 — estado inicial de la transferencia:** mantener pagada al crear (actual) o pendiente
+  hasta confirmar (configuración nativa + transacción). Es global y en producción.
+- **D-49 — métodos permitidos en el canal asesor:** lista configurable ∩ disponibles
+  (recomendado), inicialmente contra entrega y transferencia.
+- **D-50 — cobro de contra entrega y medios de cobro:** registrar el cobro con transacciones
+  nativas (no con el cambio masivo de estado); efectivo o datáfono como medio de la transacción,
+  o como métodos de Bagisto.
+- **D-51 — comprobante de transferencia:** diferido; no hay soporte nativo.
+
+---
+
+## 33. D-52: principio de venta rápida de bodega (2026-09-27)
+
+**Estado:** requisito transversal **decidido** por Camilo Gaitán (Doc. 04 D-52). Solo
+documentación: **no** se implementa interfaz, cartera, 03E ni 03F en este paso.
+
+### 33.1 Motivación y objetivo
+
+- **Problema:** en bodega se atiende físicamente primero y se registra después, así que se
+  acumulan pedidos sin registrar. Con ello se pierden trazabilidad, inventario actualizado,
+  cartera y la cuenta de cuánto debe cada cliente.
+- **Objetivo:** el caso habitual (cliente existente, productos disponibles, recogida y método de
+  pago conocido) debe convertirse en pedido **sin salir de una pantalla, sin navegar por
+  módulos y sin volver a escribir datos conocidos**. No se fija un número de clics, pero la
+  cantidad de interacciones será criterio de diseño y de prueba.
+
+### 33.2 Capas (sin reemplazar Bagisto)
+
+```text
+UI Nueva Venta (Blade/Vue: solo presentación e interacción)
+        ↓
+Servicios comerciales ByLopez: búsqueda y alta de cliente (RT-04), CatalogoVentaService,
+BorradorVentaService, SolicitudBorradorService, LineasBorradorService,
+EntregaBorradorService, pago (03E), confirmación (03F), registrar pago (cobros)
+        ↓
+Bagisto: Customer, grupo, Cart, precios, inventario, envío, pago, Order, factura y transacciones
+```
+
+Vue y Blade no contienen reglas de negocio. El mismo contrato sirve a asesor, voz, WhatsApp, n8n
+e IA: la IA interpreta la intención y Laravel resuelve cliente, producto, variante, stock y
+precio.
+
+### 33.3 Qué se reutiliza
+
+| Pieza existente | Aporte a la venta rápida |
+|---|---|
+| RT-03 | Precio por grupo **actual** del cliente, calculado por Bagisto; la UI solo lo presenta |
+| RT-04 | Búsqueda por teléfono, nombre o email; alta comercial con email NULL y sin cuenta de tienda; resolución de identidad; direcciones guardadas |
+| 03B | `CatalogoVentaService` (variantes verificadas, stock, precio) y `BorradorVentaService` (borrador reanudable, propiedad, reclamo, bloqueos, idempotencia) |
+| 03C | Solicitud frente a Cart (I-13), materialización explícita, carrito ≤ stock vendible, desglose disponible/faltante y producción en null |
+| 03D | Métodos de entrega de Bagisto (`recogida_bodega` sin pedir domicilio: la bodega real), direcciones guardadas o puntuales, invalidación de tarifas |
+
+### 33.4 Requisitos para la futura interfaz Nueva Venta (no implementar)
+
+- **Pantalla principal:** cliente, productos, resumen (prendas, subtotal, descuentos, entrega,
+  total, calculados por Bagisto), entrega, pago y «Confirmar venta».
+- **Cliente:**
+  - búsqueda rápida;
+  - al seleccionarlo se resuelven `customer_id`, grupo y contexto de precio;
+  - alta inline (modal o drawer) solo con los datos comerciales necesarios, volviendo al mismo
+    borrador.
+- **Productos:**
+  - búsqueda por nombre o SKU;
+  - matriz compacta línea/color × talla con cantidades;
+  - stock vendible visible, y disponible/faltante sin inventar existencias.
+- **Borradores:** guardado continuo, reanudar y listar recientes (atender a otro cliente y
+  volver), con `BorradorVentaService`, sin otro sistema.
+- **Entrega y pago:** los métodos disponibles y permitidos que devuelven los servicios; nada
+  fijo en el frontend.
+- **Confirmación continua:** mensaje breve con el número de pedido, el total y el estado del
+  pago, y acciones «Nueva venta», «Registrar pago» y «Ver pedido», sin pantallas intermedias.
+- **Teclado:** autofocus, Enter, Tab y atajos seguros (requisito registrado; atajos no
+  implementados).
+- **Diseño adaptable:** probar en PC, tablet y celular; en celular, sin tablas horizontales
+  grandes ni scroll excesivo.
+- **Rendimiento:** revisar consultas repetidas, N+1, índices de búsqueda, número de requests,
+  recálculos, carga del catálogo y respuesta de variantes (sin optimizar antes de tiempo).
+- **Concurrencia y trazabilidad intactas:** propietario del borrador, reclamo, bloqueos, cliente,
+  asesor, productos, precios de Bagisto, entrega, pago, Order y atribución.
+
+### 33.5 Relación con pago (03E) y confirmación (03F)
+
+- **03E:** elegir el pago debe ser inmediato entre los métodos permitidos y disponibles (D-49).
+  El estado inicial de cada método (D-48) debe quedar claro sin que el asesor lo interprete.
+- **03F:** confirmar crea el Order con los mecanismos de Bagisto, revalidando stock, tarifa,
+  direcciones y pago. Debe devolver lo necesario para la confirmación breve y para encadenar
+  «Registrar pago».
+- **Dos hechos distintos:** (1) crear el pedido y (2) registrar el dinero recibido. «Confirmar
+  y registrar pago» puede sentirse como un solo paso, pero **no** marca «pagado» con una casilla:
+  registra el dinero con el mecanismo nativo (factura + transacción, §32.3 y §32.6), sin buscar
+  la factura a mano.
+- **Pago pendiente:** el pedido queda pendiente y aparece solo en la cartera, sin acciones
+  administrativas extra durante la venta.
+
+### 33.6 Relación con la futura cartera (no implementar)
+
+- **Nombre:** «Cartera» o «Pagos pendientes», nunca «morosos». La mora requerirá vencimiento y
+  política explícita.
+- **En Nueva Venta:** saldo pendiente del cliente **solo informativo**. No bloquea: un bloqueo
+  sería una política comercial futura explícita.
+- **Corte por periodo:** compras, pagos y saldo del periodo (por ejemplo, del 21 al 26 de
+  septiembre), más el saldo histórico total.
+  - Se derivará de Customer, Order, factura y `order_transactions` sin duplicar saldos si
+    Bagisto tiene la evidencia (§32.6: abonos nativos; saldo = total facturado − transacciones).
+  - Hay que diseñar cómo tratar los pedidos sin factura, los cancelados y los reembolsos.
+- **«Registrar pago»:** **un solo servicio de dominio**, usado desde el pedido, la cartera y la
+  ficha del cliente.
+
+### 33.7 Qué NO se implementa todavía
+
+Interfaz Nueva Venta, cartera, corte semanal, «Registrar pago», atajos, alta inline, 03E, 03F
+y cualquier cambio en producción. Orden acordado: cerrar **03E** (pago) y **03F** (confirmación
+y Order) y, después, diseñar la interfaz sobre servicios estables.
+
+### 33.8 Precisión de D-52: tiempo comercial frente a tiempo operativo (2026-09-27)
+
+- **A. Tiempo comercial:** lo que tarda el cliente en decidir línea, producto, color, talla y
+  cantidad. Es tiempo humano: **no** se le fija SLA ni se considera lentitud del sistema.
+- **B. Tiempo operativo del sistema:** tiempo e interacciones que **añade la aplicación** para
+  registrar lo ya decidido. **Este es el que se optimiza y se mide.**
+
+**Principio:** no se busca que toda venta dure X segundos, sino que, **una vez conocida la
+decisión comercial, registrarla sea extremadamente rápido**. Si el cliente tarda 4 minutos
+eligiendo colores, no es un fallo de UX. Si después el asesor tarda 3 minutos navegando,
+repitiendo datos y guardando, sí lo es.
+
+**Velocidad no significa omitir** stock, precio, cliente, atribución, entrega, pago ni
+trazabilidad. Significa **hacer automáticamente lo que el sistema ya conoce**.
+
+**Selección de productos (sin implementar):**
+
+- búsqueda rápida por nombre y SKU;
+- productos recientes y frecuentes;
+- conservar el contexto del producto;
+- selección por línea y color;
+- **matriz compacta de tallas** con cantidades editables en la propia celda;
+- stock y precio visibles (los resuelve Laravel);
+- agregar varias tallas sin repetir la búsqueda;
+- navegación con teclado;
+- sin abrir y cerrar un modal por cada variante.
+
+**Caso crítico de matriz:** elegido «Caballero / Negro» (por ejemplo, stock S 20, M 35, L 28,
+XL 12), el asesor registra S 0, M 6, L 6, XL 0 **en la misma matriz**, sin buscar «Caballero Negro
+M» y luego «Caballero Negro L». Laravel resuelve y valida cada variante real (I-5); cada cantidad
+pasa por la solicitud (D-39) y la materialización (I-13), con el carrito ≤ stock vendible.
+
+**Métricas por escenario, cuando exista la interfaz:**
+
+- tiempo total, tiempo comercial estimado o separable y **tiempo operativo**;
+- clics o taps, pulsaciones, búsquedas repetidas y cambios de página;
+- modales o drawers abiertos, requests HTTP y latencia perceptible;
+- errores y reintentos.
+
+El éxito **no** se declara porque la pantalla sea bonita.
+
+**Escenarios cronometrables:**
+
+| Id | Escenario | Qué se mide | Objetivo de diseño |
+|---|---|---|---|
+| E-01 | Venta rápida conocida: cliente existente, 6 Caballero Negro M + 6 L, recogida en bodega, transferencia pendiente | Sobre todo el tiempo operativo | Ningún cambio de página innecesario |
+| E-02 | Varias variantes: mismo producto y color, S/M/L/XL con cantidades distintas | Búsquedas y aperturas por variante | Una sola selección de producto y color + matriz de tallas; sin repetir búsqueda |
+| E-03 | Varios productos: Caballero Negro, Dama Rojo, Niño Blanco | Trabajo adicional por cambio de producto | Cambiar de producto sin perder la venta ni repetir datos |
+| E-04 | Cliente nuevo | Tiempo de alta mínima y regreso | Alta comercial mínima (RT-04, email opcional) **sin abandonar el borrador** |
+| E-05 | Pago inmediato: venta + transferencia ya recibida | Pasos entre confirmar y registrar el pago | Pedido → «Registrar pago», sin buscar la factura |
+| E-06 | Pago pendiente | Acciones extra al confirmar | Ninguna: el pedido queda en la cartera solo |
+| E-07 | Reanudar borrador tras atender otra operación | Tiempo para recuperar el contexto | Reanudación directa desde borradores recientes (03B) |
+| E-08 | Siguiente cliente tras confirmar | Tiempo hasta quedar en «Nueva venta» | Transición prácticamente inmediata |
+| E-09 | Consultar cartera de un cliente | Tiempo hasta ver saldo actual, saldo del periodo y pedidos pendientes | Un solo punto de consulta |
+| E-10 | Registrar pago desde la cartera | Navegación hasta registrar el pago | Cliente → pedido o saldo → «Registrar pago», sin pasar por Facturación; mismo servicio único |
+
+**Metas:**
+
+- **No** se fijan todavía segundos ni SLA: primero se construye y se mide, y después Camilo
+  aprobará objetivos reales basados en el uso.
+- Criterios vigentes desde ya:
+  - minimizar la navegación y la repetición;
+  - **cero datos conocidos pedidos de nuevo**;
+  - no repetir la búsqueda por cada variante;
+  - no redirigir a pantallas administrativas;
+  - ninguna regla de negocio en el frontend;
+  - trazabilidad completa.
+
+### 33.9 Navegación POS rápida de productos: auditoría del catálogo y diseño (2026-09-27)
+
+**Solo análisis:** no hay interfaz, endpoints, tablas ni cambios en `CatalogoVentaService`.
+Evidencia: código y `lpz_saas` (solo SELECT, conteos agregados; nombres de producto, no datos
+de clientes). **El POS facilita la navegación; no inventa la estructura del catálogo.**
+
+#### 33.9.1 Catálogo real (Bagisto)
+
+| Elemento | Evidencia |
+|---|---|
+| Productos | 77 configurables raíz, 300 simples hijos, 3 simples sin padre y 1 agrupado |
+| Configurables | 73 con 4 hijos y 4 con 2 hijos (tops). **Todos con 2 ejes**: `color` + `size` (73) o `color` + `grupo_de_edad_ninos` (4) |
+| Color por configurable | El padre no tiene color. **Cada configurable tiene exactamente 1 color** entre sus hijos, es decir, configurable = línea × color. No hay dos configurables con la misma línea y color |
+| Familias de atributos | `Camiseta_Hombre_DURZ` (34), `Camiseta_Mujer_DURZ` (35), `Camisetas_nino_DURZ` (4), `Crop_Top` (4); `default` sin configurables |
+| Categorías | Raíz → **HOMBRE / MUJER / NIÑO** (también CAMISETAS ESTAMPADAS, sin productos) → **CAMISETA CABALLERO** (34), **CAMISETAS DAMA** (35), **TOP Dama** (4, bajo MUJER), **CAMISETA NIÑO** (4) → una subcategoría de material («Piel Durazno»). Cada configurable está en 2 categorías: línea y material |
+| `color` | Atributo 23, select con **swatch de color**: 37 opciones, todas con swatch y 35 en uso. Por línea: Dama 35, Caballero 34, Niño 4 y Top 4 colores |
+| Tallas y edades | `size` (24): S, M, L, XL y T-Unica en uso, ordenadas por `sort_order`. `grupo_de_edad_ninos` (31): 2-4, 6-8, 10-12 y 14-16 |
+| Género | **No existe** ningún atributo de género |
+| Nombres y SKU | Configurable «Camiseta Piel Durazno Lila Hombre» / `201DURZ-H`; variante con sufijo de talla (`201DURZ-H-S`). Hay patrones inconsistentes (`203DURZN-H`). Los nombres dicen «Hombre» o «Mujer», **no** «Caballero» ni «Dama» |
+| Otros atributos | `familia_colores` definido **sin uso** (2 opciones, en ninguna familia); `product_number` en los 77 configurables (texto como `202DURZHOMBRELILA`); `tipo_tela` con opciones de prueba («Tela QA…») en producción (ruido ajeno a este alcance); **ningún atributo de código de barras** |
+| Estado y canal | `product_flat` de un solo canal y locale (`default`/`es`); los 77 configurables activos y visibles; 297 de 300 variantes activas; 259 variantes con stock > 0 en el índice |
+| Precio | Los hijos de un mismo configurable tienen el **mismo** precio base, pero hay **precios de grupo por variante** (1480 filas en 296 productos): el precio del cliente puede variar por variante |
+
+#### 33.9.2 Fuente de «Caballero / Dama / Niño»
+
+| Alternativa | Qué representa | Estabilidad y riesgos |
+|---|---|---|
+| **Categorías** (recomendada) | Organización comercial nativa, jerárquica y editable desde el panel. La tienda ya navega por ellas. Los nombres son los comerciales («CAMISETA CABALLERO», «CAMISETAS DAMA») | Cubre los 77 configurables. Riesgos: un producto está en varias categorías (línea y material), así que hay que fijar qué categorías son accesos rápidos. MUJER mezcla camisetas y tops |
+| Familia de atributos | Esquema técnico (qué atributos tiene un producto). Hoy coincide 1:1 con la línea | Nombres técnicos («Camiseta Hombre DURZ»). Una línea nueva podría reutilizar una familia. CorteConfeccion la usa como línea operativa, pero eso no la hace semántica del POS. **No recomendada** |
+| Nombre del configurable | Texto libre | Tendría que interpretar «Hombre» o «Mujer» dentro del nombre: frágil. **No** |
+| Atributo de género | — | No existe |
+
+**Recomendación:** los accesos rápidos salen de **categorías de Bagisto**, identificadas por
+**configuración** (una lista de ids de categoría en la configuración de VentasAsesor, sin nombres
+en el código), con el nombre de la categoría como etiqueta. Por ejemplo, CAMISETA CABALLERO,
+CAMISETAS DAMA, TOP Dama y CAMISETA NIÑO, o el nivel HOMBRE/MUJER/NIÑO con subnivel.
+**Pendiente:** qué categorías son accesos rápidos.
+
+#### 33.9.3 Navegación línea → color → variantes
+
+1. **Línea:** una categoría configurada. Se muestran sus configurables raíz activos.
+2. **Color:** se agrupan esos configurables por la opción `color` de sus hijos (con etiqueta y
+   swatch reales, en una sola consulta). Hoy cada color corresponde a un configurable. **No se
+   asume 1:1**: si mañana hay varios productos para una línea y color, se listan por nombre.
+3. **Variantes:** `CatalogoVentaService::variantes(configurable, cliente)`, con hijos reales
+   verificados, sus opciones de eje (sea `size`, `grupo_de_edad_ninos` u otro), stock vendible y
+   precio RT-03. Se ordenan por `sort_order` de la opción, sin S/M/L/XL fijo en la interfaz.
+
+**Casos:**
+
+- **Caballero Negro M 6 / L 6 / XL 3:** una sola matriz del configurable (Caballero, Negro) con
+  las cantidades escritas en sus celdas y una sola acción. Laravel valida cada variante.
+- **Cambiar de color** (Negro → Azul Rey, L 6): se mantiene la línea seleccionada y su lista de
+  colores ya cargada; solo se piden las variantes del nuevo configurable.
+- **Cambiar de línea** (Dama → Palo Rosa, S y M 3): otro acceso rápido → color → matriz. La venta
+  acumula varias líneas, colores y tallas en el mismo borrador.
+
+#### 33.9.4 Qué hace hoy `CatalogoVentaService`
+
+- **`buscarProductos`:**
+  - busca en `product_flat` (canal y locale por defecto), **solo productos padre** (sin padre,
+    configurable o simple) y `status = 1`;
+  - cada palabra de 2 o más caracteres debe aparecer en `name` o `sku` (LIKE `%palabra%`, todas
+    las palabras a la vez);
+  - ordena por nombre, con límite de 50 y **sin paginación**;
+  - no filtra por visibilidad ni por stock;
+  - no distingue mayúsculas ni tildes (intercalación `utf8mb4_unicode_ci`).
+- **Limitaciones reales de la búsqueda:**
+  - «caballero» o «dama» **no encuentran nada**, porque los nombres dicen «Hombre» o «Mujer»;
+  - el **SKU de una variante** (`201DURZ-H-M`) no encuentra nada;
+  - no busca por categoría, etiqueta de color ni talla;
+  - no devuelve stock en los resultados;
+  - `product_flat` no tiene índice en `name` ni `sku` (hoy son 378 filas, así que no importa).
+- **`variantes()`:** carga los atributos de eje con sus opciones una vez, pero **por cada
+  variante** consulta el stock (índice), el precio (con el precio de grupo en RT-03) y las
+  opciones (EAV). Es un N+1 pequeño con 4 variantes, que se medirá antes de optimizar.
+
+#### 33.9.5 Buscador POS futuro (sin implementar)
+
+- **Qué debe entender:**
+  - nombre;
+  - SKU del padre y **de la variante** (lleva directamente a la variante);
+  - **etiqueta de color**;
+  - **nombre de categoría** (así «caballero» encuentra la línea);
+  - talla en combinación («negro m»).
+- **Cómo muestra los resultados:** tipados (producto o variante), con stock y precio del cliente
+  al abrirlos.
+- **Código de barras:** no hay atributo. Hará falta uno real antes del escáner; `product_number`
+  existe solo en los configurables y no es un código de barras. Todo sale de Bagisto.
+
+#### 33.9.6 Cuatro caminos, un solo destino
+
+Los accesos rápidos (categoría → color → variantes), el buscador (texto o SKU → producto o
+variante), los recientes o frecuentes y el escáner futuro **convergen** en
+`CatalogoVentaService` (producto real → variante verificada → stock de Bagisto → precio RT-03),
+y de ahí en la solicitud (D-39) y el carrito (I-13). No hay caminos de negocio separados.
+
+#### 33.9.7 Recientes y frecuentes (recomendación, sin persistencia nueva)
+
+- **Recientes, MVP:** los productos que **ese asesor** agregó en sus borradores recientes. Se
+  derivan de las solicitudes y líneas de sus borradores, sin tabla nueva. Además, en la venta en
+  curso, conservar la línea y el color seleccionados.
+- **Frecuentes, MVP:** los **frecuentes del cliente seleccionado** (derivados de sus pedidos:
+  útil para mayoristas que repiten). Si no tiene historial, los más vendidos del canal en los
+  últimos N días.
+- **Evolución:** frecuentes del asesor y favoritos configurables. «Más vendido» no es siempre lo
+  más rápido; se medirá con P-06.
+- **Orden de colores:** los más vendidos de esa línea primero (derivado, por ejemplo los 8
+  principales) y «Ver todos» por el `sort_order` de Bagisto. Mientras no haya datos de uso
+  suficientes, el `sort_order` configurado.
+
+#### 33.9.8 Stock, precio y productos sin stock
+
+- **Stock:** el mismo de 03C (índice de Bagisto vía `CatalogoVentaService`), por variante. El
+  frontend no calcula stock y la producción no cuenta.
+- **Precio:** el precio de Bagisto para el cliente actual (RT-03), **por variante**, porque los
+  precios de grupo pueden diferir entre variantes. Si todos coinciden, se muestra una sola vez.
+- **Sin stock:** la variante **se muestra** (stock 0) porque es útil comercialmente. Puede
+  registrar demanda en la solicitud (D-39), pero **no** se puede llevar al carrito más allá del
+  stock. Se ve «disponible» y «faltante»; producción sigue en null (D-37).
+
+#### 33.9.9 Varias variantes en una operación
+
+**Recomendación:** una **operación comercial por lote** (producto + {variante → cantidad}) en un
+servicio de aplicación que **usa las primitivas existentes** (`SolicitudBorradorService` y
+`LineasBorradorService`), sin duplicarlas.
+
+- **Atomicidad:** un solo bloqueo del borrador y una transacción. **Todo o nada**: si una
+  variante no es válida o supera el stock al llevarla al carrito, se rechaza el lote con el
+  detalle por variante para que la interfaz lo muestre. Nada queda a medias.
+- **Solicitud frente a carrito:** el lote puede registrar la solicitud (demanda) y, de forma
+  explícita, cuánto va al carrito, siempre por debajo del stock.
+- **Rendimiento:** con las primitivas actuales hay un `collectTotals` por variante; con 3 o 4
+  variantes es aceptable. Se optimizará (recalcular una sola vez) solo si la medición lo exige.
+
+#### 33.9.10 Rendimiento y caché
+
+| Dato | Consulta propuesta | ¿Se puede cachear? |
+|---|---|---|
+| Accesos rápidos | Categorías configuradas y conteo de configurables activos | Sí (estructura), invalidando al guardar categorías o productos |
+| Colores de una línea | **Una** consulta: categoría → configurables → hijos → valor de `color` → opción (etiqueta y swatch) | Sí (estructura), con la misma invalidación |
+| Variantes | `variantes()` actual; más adelante, precargar stock y precio de las variantes del configurable si la medición lo pide | Solo la estructura (hijos y opciones) |
+| Búsqueda | LIKE sobre `product_flat` (hoy 378 filas); índice o full-text si el catálogo crece | No |
+| Stock y precio del cliente | Siempre en vivo (índice de Bagisto y RT-03) | **No** |
+
+#### 33.9.11 Dispositivos (requisitos, sin CSS)
+
+- **PC:** clic en la línea y el color, y Tab entre cantidades (6, Tab, 6, Tab, 3, Enter), sin
+  atajos definidos todavía.
+- **Tablet:** botones de línea y color grandes, y cantidades con ± táctiles, sin teclado físico.
+- **Celular:** la matriz se adapta en vertical (una fila por talla), sin tablas horizontales.
+
+#### 33.9.12 Escenarios cronometrables de producto
+
+| Id | Escenario | Qué se mide |
+|---|---|---|
+| P-01 | Caballero → Negro → M 6 / L 6 / XL 3 → agregar | Interacciones, requests y latencia operativa |
+| P-02 | Cambiar de color: Caballero Negro → Azul Rey, L 6 | Trabajo extra al cambiar de color |
+| P-03 | Cambiar de línea: Dama → Palo Rosa, S y M 3 | Trabajo extra al cambiar de línea |
+| P-04 | Buscar por SKU (incluido el de la variante) | Pulsaciones hasta la matriz o la variante |
+| P-05 | Buscar por texto («caballero negro») | Resultados correctos a la primera |
+| P-06 | Producto frecuente | Toques hasta la matriz |
+| P-07 | Producto reciente | Toques hasta la matriz |
+
+Sin SLA en segundos hasta medir (§33.8).
+
+#### 33.9.13 Contratos de dominio sugeridos (reutilizables por voz, WhatsApp, n8n e IA)
+
+- `accesosRapidos()` → `[{categoriaId, nombre, productos}]`, según la configuración.
+- `coloresDeLinea(categoriaId)` → `[{optionId, etiqueta, swatch, productos: [{productoId, nombre}]}]`.
+- `variantes(productoId, customerId)` → lo actual (id, SKU, opciones por eje, stock, precio
+  RT-03, activa), ordenado por `sort_order`.
+- `buscar(texto, customerId?)` → resultados tipados (producto o variante).
+- `registrarSeleccion(borradorId, productoId, {varianteId: cantidad}, materializar)` → lote
+  sobre las primitivas de 03C.
+
+Frases como «Caballero negro, seis M, seis L y tres XL» encajan en estos contratos: la IA
+extrae línea, color y cantidades por etiqueta, y Laravel resuelve la categoría, la opción de
+color, el configurable, las variantes, el stock y el precio. La IA no inventa ids ni valores.
+
+#### 33.9.14 No duplicar y no implementar todavía
+
+- **No duplicar:** productos, colores, tallas, variantes, stock ni precios. Nada de tablas del
+  POS: el POS consulta Bagisto.
+- **Cambios futuros en `CatalogoVentaService`**, cuando se implemente la interfaz:
+  - búsqueda por SKU de variante, etiqueta de color y nombre de categoría;
+  - `coloresDeLinea` en una sola consulta;
+  - variantes ordenadas por `sort_order`;
+  - precarga de stock y precio si la medición lo exige.
+- **No implementar todavía:** interfaz, endpoints, recientes, frecuentes, escáner, caché ni el
+  lote. Primero **03E → 03F**, y después la interfaz Nueva Venta.
+- **Pendientes para Camilo:**
+  - qué categorías son accesos rápidos;
+  - si se crea un atributo de código de barras para el escáner.
+
+---
+
+## 34. Auditoría definitiva de pagos: Transactions y Cartera (2026-09-27)
+
+**Solo auditoría y diseño:** no hay código, configuración ni cambios en producción. Amplía §32
+con verificación en código de Bagisto 2.4.9 y SELECT agregados sobre `lpz_saas`.
+
+### 34.1 Flujo nativo de la transacción (única vía de «dinero recibido» en Bagisto)
+
+**Ruta:** `POST admin/sales/transactions/create` → `TransactionController::store`, con ACL
+`sales.transactions`. El formulario del panel es un modal en `sales/transactions/index` con un
+desplegable de `Payment::getSupportedPaymentMethods()`.
+
+**Secuencia real:**
+
+1. Valida `invoice_id` (requerido), `payment_method` (**solo requerido: texto libre**) y
+   `amount` (numérico).
+2. La factura debe existir y **no** estar `paid`.
+3. `transactionAmtBefore = SUM(order_transactions.amount WHERE invoice_id)`.
+4. Rechaza si `amount + transactionAmtBefore > invoice.base_grand_total` o si `amount <= 0`.
+5. Crea `order_transactions` con estos campos:
+   - `transaction_id`: aleatorio;
+   - `type` y `payment_method`: el valor enviado;
+   - `status`: `paid`;
+   - `amount`;
+   - `data`: `{"paidAmount": amount}`;
+   - `invoice_id` y `order_id`.
+6. Si `SUM(amount) >= invoice.base_grand_total`:
+   - el pedido pasa a `completed` si existe **algún** Shipment, o a `processing` si no;
+   - `invoiceRepository->updateState(invoice, 'paid')`.
+
+**Qué no hace:**
+
+- **Ninguna** transacción de base de datos, ningún `lockForUpdate` ni eventos propios. Solo
+  `updateOrderStatus` dispara `sales.order.update-status.before/after`.
+- **No** recalcula los totales del pedido.
+- **No** toca `order_payment`.
+
+**Otra vía:** una factura creada a mano en el panel con `can_create_transaction = 1` crea una
+transacción por el total, con `status` igual al estado de la factura (`Admin\Listeners\Invoice`).
+
+**Decisión de diseño:**
+
+- **Transacción → factura → pedido** es la semántica nativa.
+- La factura es **obligatoria**: no hay transacción sin factura.
+- El pedido no guarda ningún «total pagado»: solo `grand_total`, `*_invoiced` y `*_refunded`.
+
+### 34.2 Pago total, pago parcial y segunda transacción (siguiendo el código)
+
+| Caso (factura de 400.000) | Efecto |
+|---|---|
+| Pago total de 400.000 | 1 fila en `order_transactions`; factura `pending` → `paid`; pedido → `processing` o `completed`. Eventos de cambio de estado (notificación interna del panel). Sin correo al cliente ni cambios en `order_payment` o en los totales (lo facturado ya contaba al crear la factura) |
+| Pago parcial de 150.000 | 1 fila; la factura **sigue `pending`**; el pedido **no cambia** (por ejemplo `pending_payment`). **Abono nativo** |
+| Luego 250.000 | Suma 400.000 ≥ total → factura `paid` y pedido `processing` o `completed` |
+| 100.000 y luego 350.000 | La segunda se **rechaza**: 450.000 > 400.000 («transaction-amount-exceeds») |
+| Con la factura ya `paid` | Se rechaza («already-paid») |
+
+**Riesgo de estado:** «completed si existe algún Shipment» no comprueba que el pedido esté
+enviado del todo. `OrderRepository::updateOrderStatus($order)` sin estado explícito sí lo calcula
+(`isInCompletedState`).
+
+### 34.3 Sobrepago, concurrencia e idempotencia
+
+- **Sobrepago:** solo se comprueba **dentro de la misma petición, sin bloqueo**.
+- **Concurrencia NO protegida:** los asesores A y B leen la suma a la vez (0), ambos pasan la
+  validación e insertan, y quedan **800.000 registrados** sobre 400.000. Nada lo impide.
+- **Idempotencia inexistente:** `transaction_id` es aleatorio. Un doble clic o un reintento HTTP
+  crea dos transacciones (la segunda solo se detiene si la primera ya dejó la factura `paid`).
+- **Un servicio propio** deberá bloquear (`lockForUpdate` de la factura o el pedido) y aceptar una
+  **clave de idempotencia**. Dónde persistir esa clave es la «decisión nueva propuesta 1» de
+  §34.13.
+
+### 34.4 Comparación de caminos
+
+| Camino | Evidencia de dinero | Factura | Pedido | ¿Coherente? |
+|---|---|---|---|---|
+| A. Crear con `invoice_status = paid` (transferencia hoy) | **Ninguna** (0 transacciones) | `paid` al crear | Estado de la configuración (`processing`) | **No**: marca pagado sin registrar dinero |
+| B. Factura `pending` + transacción nativa (panel) | Sí (`order_transactions`) | `paid` al completar el total | `processing` o `completed` | **Sí**, con los riesgos de §34.3 y la regla simplista de estado |
+| C. Cambiar la factura a `paid` directamente | No | `paid` | **Sin cambios** | **No**: produce el caso inconsistente |
+| D. Cambio masivo de estado de facturas | No | `paid` | Sin cambios | **No** (igual que C, en lote) |
+| E. Crear el pedido y registrar el pago con el mismo servicio que Cartera | Sí | `paid` al completar | Estado nativo calculado | **Sí (recomendado)**: la semántica de B con bloqueo, idempotencia y cálculo nativo del estado |
+
+**Equivalencias:** C = D. B ≈ E (E añade garantías). A **no** equivale a ninguno: coincide en
+estados, pero sin evidencia del dinero.
+
+### 34.5 Los 3 pedidos `pending_payment` con factura `paid`
+
+- **Hechos:**
+  - pago contra entrega;
+  - factura creada con el pedido;
+  - 0 transacciones;
+  - con Shipment.
+- **Explicación compatible:** factura `pending` → Shipment (`hasOpenInvoice` → `pending_payment`)
+  → **cambio directo de la factura a `paid`** (C o D). Ese cambio no toca el pedido.
+- **Descartado:**
+  - la vía de transacciones (0 filas);
+  - «factura creada ya `paid`»: el Shipment habría recalculado el pedido a `processing` o
+    `completed`.
+- **No concluyente:** los `updated_at` de facturas no sirven como prueba. El listener del Shop
+  hace `$invoice->query()->update(['email_sent' => 1])`, que actualiza **todas** las facturas y sus
+  fechas. No se corrigen.
+
+### 34.6 Fuente del total pagado y del saldo
+
+- **Pagado por factura** (compatible con el histórico):
+  - `SUM(order_transactions.amount)` de esa factura (moneda base COP; no existe `base_amount`);
+  - **si la factura está `paid` sin transacciones** (transferencias históricas autopagadas o
+    cambio manual), se toma `invoice.base_grand_total` como pagado heredado, marcado como «sin
+    evidencia de transacción».
+- **Pagado por pedido** = Σ del pagado de sus facturas.
+- **Saldo del pedido (MVP)** = `order.base_grand_total − pagado`, solo para pedidos que **no**
+  están `canceled`, `closed` ni `fraud`.
+- **Por qué no `order.status`:** no sirve para calcular el saldo (§34.5).
+
+### 34.7 Varias facturas, cancelaciones y reembolsos
+
+- **Varias facturas:** el panel admite facturas parciales por cantidad. Las transacciones se
+  asocian a una factura, y la parte **no facturada** no admite transacción nativa. Con
+  `GenerateInvoice` (todo facturado al crear) hay 1 factura por pedido (0 casos con más). La
+  fórmula suma por pedido.
+- **Cancelación:** `qty_to_cancel = pedidas − canceladas − facturadas`. Un pedido **ya facturado
+  no se puede cancelar**; solo reembolsar.
+- **Reembolso:** `RefundRepository` actualiza `grand_total_refunded` y el estado del pedido
+  (`closed` si se reembolsa todo). **No** cambia la factura (sigue `paid`) ni crea una transacción
+  negativa.
+- **Riesgo:** `total − transacciones` sería incorrecto con reembolsos. Un pedido pagado y
+  reembolsado del todo daría 400.000 − 400.000 pagado, pero el dinero volvió al cliente.
+- **MVP:** excluir `closed`, `canceled` y `fraud`, y marcar para revisión los pedidos con
+  reembolso parcial. La política completa es la «decisión nueva propuesta 2».
+
+### 34.8 Transferencia, contra entrega y alcance de la configuración
+
+- **Transferencia pendiente:** con la configuración `moneytransfer` en `invoice_status =
+  pending` y `order_status = pending_payment`, el flujo **pedido → factura pendiente →
+  `pending_payment` → transacción → `paid` y `processing`** es coherente y nativo (confirmado en
+  código).
+- **Transferencia confirmada:** la misma transacción que en contra entrega.
+- **Alcance:** `invoice_status` y `order_status` son campos **por canal** (`channel_based`, no por
+  locale). `lpz_saas` tiene un solo canal (`default`), así que en la práctica son **globales**:
+  tienda, panel y VentasAsesor. D-48 separa la **decisión de arquitectura** (pendiente hasta el
+  dinero real) del **despliegue** (cambio de configuración autorizado).
+- **Contra entrega:** ya nace `pending` y `pending_payment`, y se paga después con **el mismo**
+  registro de pago. No necesita lógica especial.
+
+### 34.9 Método del pedido frente a medio real del dinero
+
+- **Campos:** `order_payment.method` = método del pedido. `order_transactions`: `payment_method`
+  y `type` (texto libre, el mismo valor), `data` (JSON) y `amount`. **No** existe
+  `payment_method_title`.
+- **Semántica propuesta:** `order_transactions.payment_method` = **medio real** con que se
+  recibió el dinero (efectivo, transferencia, datáfono…), independiente de `order_payment.method`.
+- **Riesgo del texto libre:** «Transferencia», «transfer», «Nequi», «NEQUI»… El backend solo exige
+  que venga algo.
+- **Mitigación sin otro motor de pagos:** el servicio acepta **solo códigos de una lista
+  configurable de medios de cobro** (configuración de VentasAsesor, con código y etiqueta) y
+  guarda el código. El panel nativo seguiría admitiendo texto libre (límite de Bagisto).
+- **Dato curioso:** fuera de un carrito, el desplegable del panel **no ofrece contra entrega**
+  (su `isAvailable()` exige carrito).
+
+### 34.10 Comprobante
+
+- **No hay soporte nativo:** ni adjuntos en Order, Invoice, Transaction ni OrderComment
+  (comentario de texto).
+- **Principio:** **comprobante ≠ pago confirmado**. Un comprobante no crea una transacción: una
+  persona valida y registra el pago. La evidencia de archivo será una extensión futura.
+
+### 34.11 Diseño (sin implementar)
+
+- **Pago inmediato tras la venta (D-52):**
+  - Confirmar (03F) crea el pedido y hace **commit**.
+  - Después, «Registrar pago» usa **el mismo servicio que Cartera**, en otra transacción y con
+    clave de idempotencia.
+  - La interfaz puede encadenarlos en un solo gesto, pero **no** comparten transacción de base de
+    datos: si el pago falla, el pedido sigue siendo válido y el pago se reintenta sin duplicarse.
+- **Venta pendiente:** se confirma y termina ahí. El pedido aparece en Cartera con su saldo. Sin
+  bloqueos por deuda.
+- **Cliente con varios pedidos:** saldo total = Σ de saldos de sus pedidos abiertos (§34.6).
+- **Pago de un pedido (MVP):** la transacción va a **su factura**.
+- **Pago global del cliente (futuro):** la transacción nativa exige una factura, así que un abono
+  global necesitará una **política de distribución** explícita que genere una transacción por
+  factura. No se aprueba «el más antiguo primero»: es la «decisión nueva propuesta 3».
+- **Cartera (derivada, sin tabla de saldos):**
+  - por cliente: saldo total, pedidos abiertos con total, pagado y saldo, fecha, método y pagos
+    registrados (`order_transactions`);
+  - «esta semana» = saldo de los pedidos con `orders.created_at` en ese periodo;
+  - **saldo total** = todos los pedidos abiertos (por ejemplo, deuda anterior 150.000 + semana
+    400.000 = 550.000);
+  - sin vencimiento, plazo ni mora (no hay política).
+
+**`RegistrarPagoPedidoService`:**
+
+- **Entrada:** pedido (o factura), monto, medio (código de la lista), clave de idempotencia y
+  actor.
+- **Pasos:**
+  1. En una transacción, bloquear la factura (y el pedido).
+  2. Recalcular el pagado **dentro del bloqueo**.
+  3. Validar que el monto sea mayor que 0, que no supere el saldo y que la factura no esté
+     `paid`.
+  4. Crear `order_transactions` con los campos nativos.
+  5. Si se completa el total: `updateState('paid')` y `updateOrderStatus($order)` con el cálculo
+     nativo.
+- **Resultado:**
+  - `order_id`, `invoice_id` y `transaction_id`;
+  - monto registrado, total pagado y saldo pendiente;
+  - estado de pago derivado, `order_status` e `invoice_state`;
+  - `duplicado`: si la clave ya existía, devuelve el resultado original.
+- **Reutilizable** desde Nueva Venta, Cartera, API, n8n y conciliación. Bagisto **no** tiene un
+  servicio equivalente reutilizable (la lógica vive en el controlador), así que el servicio
+  replica sus efectos nativos, sin motor contable propio.
+
+**Estado de pago derivado (no persistido):**
+
+- `pendiente` si pagado = 0;
+- `parcial` si 0 < pagado < total neto;
+- `pagado` si pagado ≥ total neto;
+- `revisar` si hay reembolso parcial o una factura `paid` sin transacción que contradice el
+  pedido.
+
+Para pedidos `canceled`, `closed` o `fraud`, no aplica.
+
+### 34.12 03E, 03F y aspectos transversales
+
+- **`PagoBorradorService` (03E, antes del pedido):**
+  - métodos = disponibles según Bagisto ∩ lista permitida (D-49);
+  - selección validada y `Cart::savePaymentMethod`;
+  - informa el estado inicial esperado según la configuración vigente.
+  
+  **No registra dinero.**
+- **D-49:** la lista se guarda en la configuración de VentasAsesor (`ventasasesor.pagos.metodos_
+  permitidos`, inicialmente `cashondelivery` y `moneytransfer`), sin estar fija en el servicio.
+- **Revalidaciones en 03F:**
+  - método permitido y disponible;
+  - cliente existente, activo y no suspendido (P-09 bloquea aquí), con grupo apto;
+  - precios (`collectTotals` en RT-03);
+  - líneas ≤ solicitud y stock (I-12, I-13);
+  - direcciones;
+  - método de envío con tarifa vigente tras `collectTotals`;
+  - totales;
+  - contexto de atribución.
+  
+  **Nunca** inventa un pago.
+- **Resultado mínimo de 03F para la venta rápida:** `order_id`, `increment_id`, `grand_total`,
+  método de pago (código y título), `invoice_id` si se generó, estado de pago derivado y saldo,
+  `customer_id` y nombre, y las acciones disponibles (nueva venta, registrar pago, ver pedido).
+- **Eventos y notificaciones:**
+  - la transacción nativa solo dispara los eventos de cambio de estado del pedido (notificación
+    interna del panel);
+  - `updateState` de la factura no dispara eventos;
+  - no hay correo al cliente al registrar el pago.
+  
+  El servicio debe producir **los mismos** efectos (usar los mismos repositorios), sin correos
+  extra.
+- **Privacidad:** `OrderRepository::createOrderIfNotThenRetry` escribe
+  `Log::error(..., ['data' => $data])` con el pedido completo (direcciones, email y teléfono) en
+  cada fallo, y reintenta hasta 3 veces. Es deuda técnica del core (no se modifica Webkul); 03F
+  deberá considerarla.
+- **Defecto del core:** `Order::hasOpenInvoice()` usa `where(pending)->orWhere(pending_payment)`
+  sin agrupar, así que la condición se sale del pedido. Hoy no hay facturas `pending_payment`, por
+  lo que no se manifiesta. Solo se reporta.
+
+### 34.13 Matriz de pruebas futura y decisiones
+
+- **Pruebas previstas (PAGO-01 a PAGO-15):**
+
+  | Id | Caso |
+  |---|---|
+  | PAGO-01 | Pedido de 400.000 → pago total |
+  | PAGO-02 | Pago parcial de 150.000 → factura `pending` y pedido sin cambios |
+  | PAGO-03 | Pago del resto (250.000) → factura `paid` y estado nativo |
+  | PAGO-04 | Intento de sobrepago → rechazado |
+  | PAGO-05 | Misma clave de idempotencia → una sola transacción |
+  | PAGO-06 | Dos asesores a la vez → una transacción y la otra rechazada |
+  | PAGO-07 | Transferencia pendiente |
+  | PAGO-08 | Transferencia confirmada |
+  | PAGO-09 | Contra entrega pendiente → pago posterior |
+  | PAGO-10 | Pago inmediato después de la venta |
+  | PAGO-11 | Cliente con varios pedidos |
+  | PAGO-12 | Cartera: saldo de la semana + saldo histórico |
+  | PAGO-13 | Factura `paid` con pedido `pending_payment` → estado derivado `revisar`/`pagado` sin corregir datos |
+  | PAGO-14 | Cancelación |
+  | PAGO-15 | Reembolso → excluido o `revisar` |
+
+- **Estado de D-48 a D-51:** ver el Doc. 04.
+- **Decisiones nuevas propuestas (sin numerar):**
+  1. **Idempotencia de pagos:** dónde persistir la clave (una tabla propia mínima de registro de
+     pagos frente a `order_transactions.data`, que no admite UNIQUE).
+  2. **Política de saldo** ante reembolsos, cancelaciones y facturas `paid` sin transacción.
+  3. **Distribución de un pago global** del cliente entre facturas.
+
+---
+
+## 35. Cierre arquitectónico 03E: registro seguro de pagos (2026-09-27)
+
+**Diseño cerrado, sin implementar:** no hay migración, modelo, servicio ni configuración.
+Decisiones: D-48 a D-51 aprobadas por Camilo Gaitán y **D-53** (idempotencia y concurrencia)
+cerrada. El despliegue de D-48 en producción sigue necesitando una autorización aparte.
+
+### 35.1 Primitivas reales de Bagisto (verificadas)
+
+| Primitiva | Efecto exacto |
+|---|---|
+| `OrderTransactionRepository::create(array)` | Inserta en `order_transactions`. Sin eventos ni validación |
+| `InvoiceRepository::updateState($invoice, $status)` | `state = $status` y `save()`. **Sin eventos**; no toca el pedido ni los totales |
+| `OrderRepository::updateOrderStatus($order, $state = null)` | Dispara `sales.order.update-status.before` → calcula el estado si no se indica → guarda → `sales.order.update-status.after`, que dispara el listener de notificaciones (evento `UpdateOrderNotification`, `ShouldBroadcast`; en `lpz_saas` el broadcast va al driver `log`) |
+| Cálculo sin `$state` | `processing` por defecto; `completed` si `isInCompletedState`; `canceled` si `isInCanceledState`; si no, `closed` si `isInClosedState`. **Solo cuenta cantidades** (pedidas, facturadas, enviadas, reembolsadas y canceladas) y **no** mira el pago. `pending_payment` solo aparece si se indica explícitamente |
+| `isInCompletedState` | Todo facturado (+ cancelado) y todo enviado (los productos no físicos cuentan como enviados al facturarse), o ya estaba `completed` sin estar reembolsado del todo |
+
+**No existe un servicio nativo reutilizable** que combine transacción, factura y pedido: esa
+lógica está dentro de `TransactionController::store` (HTTP, sin bloqueos). El servicio de
+ByLopez **compone las tres primitivas** anteriores, sin reimplementar el cálculo de estado.
+
+### 35.2 Estado del pedido al completar el pago
+
+- **Regla nativa del controlador:** «existe algún Shipment → `completed`; si no, `processing`».
+- **Regla de ByLopez:** llamar a `updateState(invoice, 'paid')` y **después**
+  `updateOrderStatus($order)` **sin estado**, para que Bagisto calcule el estado por cantidades.
+  El pago parcial **no** cambia el estado del pedido (sigue, por ejemplo, `pending_payment`, igual
+  que el nativo).
+
+| Escenario (pago completo) | Regla del controlador | `updateOrderStatus($order)` | Correcto |
+|---|---|---|---|
+| A. Sin Shipment | `processing` | `processing` (facturado, nada enviado) | Iguales |
+| B. Shipment completo | `completed` | `completed` | Iguales |
+| C. Shipment parcial, una línea | **`completed`** | `processing` (enviado < facturado) | El cálculo nativo |
+| D. Varias líneas, Shipment parcial | **`completed`** | `processing` | El cálculo nativo |
+
+Cuando el envío se completa después, `ShipmentRepository` recalcula a `completed` (sin factura
+abierta). **Copiar la regla del controlador sería incorrecto** en C y D.
+
+### 35.3 Idempotencia (D-53)
+
+- **Quién genera la clave:** el cliente de la operación.
+  - La interfaz: un UUID por intención de «Registrar pago», que se reutiliza en cada reintento de
+    esa misma intención.
+  - API o n8n: el identificador del mensaje o evento.
+  - Conciliación futura: la referencia bancaria.
+- **Formato:** hasta 100 caracteres (`[A-Za-z0-9._:-]`). Obligatoria.
+- **Alcance:** `(mecanismo, clave)`, igual que los borradores: dos canales no chocan entre sí.
+- **Huella de la solicitud:** `sha256` de `order_id | invoice_id | monto normalizado (base, 2
+  decimales) | código del medio de cobro`.
+
+| Caso | Resultado |
+|---|---|
+| Misma clave + misma huella (doble clic, reintento HTTP, API o n8n, respuesta perdida tras el commit) | **No** crea otra transacción. Devuelve la operación ya registrada, con `duplicado = true` |
+| Misma clave + huella distinta (por ejemplo, 150.000 en efectivo y después 250.000 por transferencia con la misma clave) | **Conflicto** (`idempotencia_en_conflicto`). No escribe nada |
+| Clave distinta sobre la misma factura (pago 1 de 150.000 y pago 2 de 250.000) | Se registra normalmente, sujeto al saldo real |
+
+**Reconstrucción del resultado en un reintento:** registro → `order_transactions` (monto, medio,
+factura, pedido) → pagado y saldo **actuales**, recalculados al leer. El resultado lleva el monto
+registrado originalmente y el estado vigente.
+
+### 35.4 Tabla mínima propuesta: `bylopez_va_registros_pago` (sin migración todavía)
+
+| Campo | Por qué existe | Por qué no está en otro sitio |
+|---|---|---|
+| `id` | Clave técnica | — |
+| `mecanismo` (string 30) | Alcance de la clave (`ventas_asesor`, `api`, `n8n`, `conciliacion`…) | Bagisto no guarda el origen |
+| `idempotency_key` (string 100) | La clave de la operación lógica | `order_transactions.data` es JSON y no admite UNIQUE |
+| `huella_solicitud` (char 64) | Detectar misma clave con otro contenido | — |
+| `order_transaction_id` (UNIQUE, FK a `order_transactions`, RESTRICT) | Resultado de la operación; de ahí salen factura, pedido, monto y medio **sin duplicarlos** | — |
+| `actor_admin_id` (sin FK, como la atribución) | **Quién registró el cobro** (auditoría de caja) | Verificado: `order_transactions` no guarda actor y Bagisto no tiene tabla de auditoría de administradores |
+| timestamps | Trazabilidad | — |
+
+- **Restricciones:** UNIQUE(`mecanismo`, `idempotency_key`) y UNIQUE(`order_transaction_id`).
+  Nada de UNIQUE(`invoice_id`), que impediría los abonos.
+- **Qué no guarda:** saldo, monto, medio, pedido, factura, snapshots, estado ni ledger. No es un
+  motor contable: es solo el control de la operación ByLopez sobre la transacción nativa.
+
+### 35.5 Bloqueos, recálculo y atomicidad (una sola transacción de base de datos)
+
+```text
+DB::transaction(intentos = 3):
+  1. INSERT registro (mecanismo, clave, huella, actor, order_transaction_id = NULL)
+       ← UNIQUE: si otra petición con la misma clave está en curso, esta ESPERA; cuando la otra
+         hace commit, recibe clave duplicada → sale de la transacción y va al paso R.
+  2. SELECT orders ... FOR UPDATE              (orden estable: pedido → factura)
+  3. SELECT invoices ... FOR UPDATE            (la factura del pedido; debe pertenecer a él)
+  4. Validar bajo bloqueo:
+       - pedido no canceled, closed ni fraud;
+       - sin reembolsos (grand_total_refunded = 0; si no → pedido_con_reembolso_revisar);
+       - factura no paid;
+       - pagado = SUM(order_transactions.amount de la factura), recalculado AHORA;
+       - 0 < monto <= base_grand_total − pagado;
+       - medio ∈ lista configurada.
+  5. OrderTransactionRepository::create(transaction_id aleatorio, status paid,
+       type = payment_method = código del medio, amount, data {paidAmount}, invoice_id, order_id)
+  6. UPDATE registro.order_transaction_id
+  7. Si pagado + monto >= total: InvoiceRepository::updateState(invoice, 'paid')
+                                 → OrderRepository::updateOrderStatus($order)   (sin estado)
+COMMIT
+R. Clave duplicada: leer el registro existente; misma huella → resultado original
+   (duplicado); huella distinta → idempotencia_en_conflicto.
+```
+
+- **Carrera entre dos asesores con 400.000 cada uno y claves distintas:** ambos insertan su
+  registro y compiten por el bloqueo del pedido. El segundo espera y, al obtenerlo, recalcula:
+  la factura ya está `paid` (o el saldo es 0) y se rechaza. **Solo uno registra el dinero.** El
+  saldo que muestra la interfaz nunca manda.
+- **Fallos intermedios:** todo va en una transacción, así que no puede quedar «una transacción
+  sin factura actualizada» ni «una factura sin pedido actualizado». Una excepción o un deadlock
+  revierten todo, también el registro de idempotencia, y el reintento (automático o del cliente)
+  es seguro.
+- **Deadlocks:** `DB::transaction` con 3 intentos; orden fijo registro → pedido → factura.
+- **Timeout después del commit:** el reintento con la misma clave devuelve el resultado
+  (§35.3).
+- **Eventos:** `updateOrderStatus` dispara sus eventos **dentro** de la transacción, igual que el
+  flujo nativo. El broadcast (`log`) es el único efecto externo y va en el último paso, así que un
+  rollback posterior es improbable. No hay correos. No se añaden eventos propios en esta etapa.
+- **Riesgo residual:** la pantalla nativa de transacciones del panel sigue sin bloqueos. Se
+  recomienda que los asesores registren pagos solo por el servicio ByLopez (política de ACL
+  `sales.transactions`, a decidir en la implementación).
+
+### 35.6 Medios de cobro (contrato, sin lista definitiva)
+
+- **Configuración de VentasAsesor:** lista de `{codigo estable, clave de traducción de la
+  etiqueta}`. Ejemplos posibles: efectivo, transferencia, datáfono. La lista definitiva la
+  aprueba Camilo.
+- **Uso:** `order_transactions.payment_method` (y `type`) recibe **el código**. La interfaz y la
+  API de ByLopez **no** aceptan texto libre.
+- **Independencia:** el medio de cobro es independiente del método del pedido
+  (`order_payment.method`).
+
+### 35.7 Lo que queda fuera de este cierre
+
+- **Reembolsos y datos históricos inconsistentes (propuesta 2, diferida):** el servicio **rechaza**
+  pagar un pedido con reembolsos o una factura ya `paid`. Esos casos se ven como `revisar` en la
+  vista derivada y no se crea saldo persistido.
+- **Pago global del cliente (propuesta 3, diferida):** el MVP registra el pago contra **un pedido
+  o factura**. Sin reparto automático ni «el más antiguo primero». La tabla admite más adelante
+  varias transacciones por operación lógica si se decide un reparto.
+- **Relación con 03E y 03F:**
+  - `PagoBorradorService` (03E) **no** registra transacciones: solo métodos permitidos
+    ∩ disponibles, validación, `savePaymentMethod` y estado inicial esperado.
+  - 03F confirma y hace **commit**; «Registrar pago» es **otra transacción** con este servicio.
+  - `RegistrarPagoPedidoService` se implementará con Cartera o cuando la venta rápida lo necesite.
+
+---
+
+## 36. 03E implementada: `PagoBorradorService` (2026-09-27)
+
+**Estado:** **IMPLEMENTADA**, pendiente de revisión de Camilo Gaitán y sin commit. Cierra la
+arquitectura de §35 en su parte previa al pedido. `RegistrarPagoPedidoService` (D-53) y la
+Cartera siguen sin implementar.
+
+### 36.1 `PagoBorradorService`
+
+- **`vista(borradorId)`:** métodos ofrecidos (allowlist de VentasAsesor ∩ disponibles según
+  Bagisto ahora mismo) y el método seleccionado, leído de `cart_payment`. Si el seleccionado ya
+  no está entre los ofrecidos (por ejemplo, se desactivó), la vista lo sigue mostrando pero fuera
+  de la lista de disponibles: la interfaz puede detectarlo (probado).
+- **`seleccionar(borradorId, metodo, actor)`:** valida el código contra los métodos ofrecidos
+  **antes** de llamar a `Cart::savePaymentMethod()`, porque Bagisto no comprueba disponibilidad
+  al guardar. Devuelve dos códigos distintos: `metodo_pago_inexistente` (no lo conoce Bagisto) y
+  `metodo_pago_no_disponible` (existe pero no está permitido o no está disponible ahora).
+- **Fuente de métodos:** `Payment::getPaymentMethods()`, sin catálogo propio. La allowlist vive
+  en `ventasasesor.pagos.metodos_permitidos` (inicialmente `cashondelivery` y `moneytransfer`).
+  Un gateway nuevo de Bagisto (por ejemplo, con credenciales futuras) no aparece si no está en la
+  allowlist (probado).
+- **No registra dinero:** no crea `order_transactions`, no toca `invoices` ni `orders` (probado).
+- **No cambia precio ni stock:** no llama a `collectTotals` ni a las reglas de inventario
+  (probado).
+- **Concurrencia y propiedad:** mismo patrón que 03D (`bloquearParaEditar`, grupo comercial apto,
+  RT-03).
+- **Cambio de cliente:** ya limpiaba `cart_payment` desde 03B; se confirmó, sin duplicar lógica.
+
+### 36.2 Hallazgo de implementación: anidar `CarritoComercial::operar` pierde el Cart del facade
+
+`CarritoComercial::operar()` hace `Cart::setCart()` y, en su `finally`, `Cart::resetCart()`.
+Llamar a `operar()` **dentro** de otro `operar()` en curso (por ejemplo, para reutilizar el
+cálculo de métodos ofrecidos al validar antes de `savePaymentMethod`) deja el Cart del facade en
+`null` **antes** de que el código externo pueda usarlo, sin lanzar ninguna excepción
+(`savePaymentMethod` solo devuelve `false` si no hay carrito). El servicio separa un método que
+asume que el Cart ya está fijado (`ofrecidosConCartYaFijado`) de otro que lo fija por sí mismo
+(`metodosOfrecidos`, para usarse en solitario). **Regla para el resto del módulo:** nunca llamar
+a `CarritoComercial::operar()` dentro de un `operar()` ya en curso.
+
+### 36.3 `estadoInicialEsperado` (informativo)
+
+Se deriva de la configuración **vigente** de Bagisto para ese método
+(`generate_invoice`, `invoice_status`), sin cambiarla y sin suponer que D-48 ya está desplegada:
+
+| Configuración | Estado informado |
+|---|---|
+| `generate_invoice = 0` | `sin_factura_automatica` |
+| `generate_invoice = 1`, `invoice_status = paid` | `pago_confirmado` |
+| `generate_invoice = 1`, `invoice_status != paid` | `pago_pendiente` |
+
+Con la configuración auditada de producción (§32.5) —cashondelivery pendiente,
+moneytransfer aún confirmado—, el DTO informa `pago_confirmado` para moneytransfer: **no miente**,
+refleja lo que Bagisto haría hoy. D-48 sigue pendiente de desplegarse; cuando se autorice el
+cambio de configuración, el mismo servicio informará `pago_pendiente` sin tocar código.
+
+### 36.4 Requisito futuro aprobado por Camilo para Cartera (documentado, sin implementar)
+
+- **Dos formas de registrar dinero, ambas futuras:**
+  - **A. Pago de un pedido específico:** total o parcial, sobre su factura (ya diseñado en §35).
+  - **B. Abono general del cliente:** un monto que se reparte entre varios pedidos abiertos.
+- **Distribución del abono general:**
+  - **Por defecto: FIFO** (pedidos más antiguos primero). Ejemplo: pedidos A 300.000, B 250.000 y
+    C 650.000 con un abono de 750.000 → A y B quedan pagados y C recibe 200.000, con saldo
+    450.000.
+  - **Alternativa: distribución manual**, donde el asesor decide cuánto aplicar a cada pedido o
+    factura.
+  - **Regla dura:** lo distribuido debe ser exactamente el dinero recibido; nunca más. Un monto
+    por encima del saldo total aplicable **se rechaza**: no se crea saldo a favor, wallet, crédito
+    ni anticipo (conceptos no aprobados).
+- **Relación con D-53 — el abono general es UNA operación comercial, no varias sueltas:** por
+  dentro producirá varias transacciones nativas contra varias facturas (una por factura afectada,
+  reutilizando las primitivas de §35, sin un motor de reparto paralelo), pero de cara al negocio
+  es una sola operación con un único resultado. Su implementación futura deberá garantizar:
+  - **atomicidad del reparto completo:** todas las aplicaciones se confirman o ninguna; un abono
+    de 750.000 repartido en A, B y C no puede dejar A y B aplicados si C falla;
+  - **idempotencia de la operación global** (una clave para todo el abono, no solo por factura);
+  - **bloqueos en un orden estable** sobre todas las facturas afectadas, para evitar deadlocks
+    entre abonos simultáneos que toquen pedidos en común;
+  - **reversión completa** del reparto si alguna aplicación individual falla.
+  
+  Esto se analiza y garantiza en la implementación futura del abono general; no se resuelve
+  reutilizando `RegistrarPagoPedidoService` en un bucle sin esas garantías.
+- **No implementado ahora:** Cartera, pago de pedido, abono general, FIFO, distribución manual,
+  ninguna Transaction ni `RegistrarPagoPedidoService`.
+
+### 36.5 Pruebas y regresión
+
+`Fase03ePagoBorradorTest`: 18 casos (03E-01 a 03E-18b), que cubren la allowlist, la selección
+válida e inválida (inexistente, no permitido, desactivado), el cambio de método, la no creación
+de Transaction/Invoice/Order, la no alteración de precio y stock, el cambio de cliente, un método
+que deja de estar disponible, un gateway fuera de la allowlist, el estado no editable, la
+propiedad y el DTO informativo.
+
+**Nota de infraestructura de pruebas:** `CoreConfigRepository` cachea `getConfigData()`
+(`config/repository.php`) y solo se invalida mediante los eventos del repositorio Prettus
+(`RepositoryEntityCreated`/`Updated`), que un `UPDATE` SQL directo no dispara. El helper de
+prueba `f03e_configurarPago` escribe y después vacía la caché (`Cache::flush()`), replicando lo
+que hace el panel al guardar configuración. Es infraestructura de la prueba, no del servicio.

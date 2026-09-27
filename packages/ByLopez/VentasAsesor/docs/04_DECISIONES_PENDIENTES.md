@@ -1009,6 +1009,156 @@ implementada.
     - 03F: confirmación del pedido;
     - una fase de logística aparte, porque opera sobre el pedido, no sobre el borrador.
 
+## D-48 a D-51 · Pago (auditoría 03E) — **PENDIENTES**
+
+**Estado:** ⏳ **PENDIENTES** (2026-09-27). Evidencia en el Doc. 05 §32. Ninguna está
+implementada.
+
+- **D-48 · Estado inicial de la transferencia (CRÍTICA).**
+  - **Hecho:** hoy `lpz_saas` configura `moneytransfer` con `invoice_status = paid` y
+    `order_status = processing`, así que Bagisto crea la factura **pagada** al crear el pedido,
+    sin verificar el dinero (las 10 transferencias históricas lo confirman).
+  - **Opción nativa:** `invoice_status = pending` y `order_status = pending_payment`, y
+    confirmar con una transacción del panel.
+  - **Coste:** es un cambio de configuración global (también afecta a la tienda) y en producción,
+    así que requiere autorización.
+- **D-49 · Métodos permitidos en el canal asesor.**
+  - **Recomendación:** métodos ofrecidos = disponibles según Bagisto ∩ lista configurable de
+    VentasAsesor, inicialmente `cashondelivery` y `moneytransfer`.
+  - Sin un motor propio ni una lista cerrada en la lógica.
+- **D-50 · Cobro de contra entrega y medios de cobro.**
+  - **Pregunta 1:** ¿el cobro se registra con transacciones nativas? Evitan la inconsistencia del
+    cambio masivo de estado: hoy hay 3 pedidos `pending_payment` con factura `paid`.
+  - **Pregunta 2:** ¿efectivo y datáfono se registran como medio de la transacción, o como
+    métodos de Bagisto?
+- **D-51 · Comprobante de transferencia.** Diferido: Bagisto no tiene adjuntos de pago; se
+  diseñará cuando se aborde la verificación de pagos.
+
+> **Evidencia definitiva 03E (2026-09-27, Doc. 05 §34).** No se cierra ninguna: decide Camilo Gaitán.
+>
+> - **D-48: CERRABLE.** El código confirma que factura pendiente → `pending_payment` → transacción nativa → factura `paid` y pedido `processing`/`completed` es coherente. La configuración es por canal (con un solo canal, global), así que decisión y despliegue van separados.
+> - **D-49: CERRABLE.** Métodos ofrecidos = lista de VentasAsesor ∩ disponibles según Bagisto. Mecanismo: configuración de VentasAsesor.
+> - **D-50: CERRABLE en arquitectura.** El dinero se registra solo con `order_transactions` asociadas a la factura, y `payment_method` guarda el medio real con códigos de una lista configurable. La implementación depende de la *decisión nueva propuesta 1* (idempotencia): la vía nativa no protege concurrencia ni reintentos.
+> - **D-51: CERRABLE como principio.** Comprobante ≠ pago confirmado; no hay adjuntos nativos, así que el mecanismo de archivo queda diferido.
+>
+> **Decisiones nuevas propuestas (sin numerar):** (1) dónde persistir la clave de idempotencia de pagos; (2) política de saldo ante reembolsos, cancelaciones y facturas `paid` sin transacción; (3) distribución de un pago global del cliente.
+>
+> **Cierre arquitectónico (2026-09-27, Doc. 05 §35).** Camilo Gaitán **aprueba** D-48, D-49, D-50 y D-51.
+>
+> - **D-48:** el despliegue en producción (configuración de `moneytransfer`) sigue necesitando una autorización aparte.
+> - **La propuesta (1)** pasa a ser **D-53, decidida**.
+> - **Las propuestas (2) y (3)** siguen diferidas: el servicio rechaza pedidos con reembolso y facturas ya `paid` (se ven como `revisar`) y no reparte pagos globales.
+
+## D-52 · Principio de venta rápida de bodega — **DECIDIDA (principio transversal)**
+
+**Estado:** ✅ **DECIDIDA** (2026-09-27, Camilo Gaitán) como requisito funcional que deben
+respetar 03E, 03F, la interfaz Nueva Venta y la futura cartera. **No autoriza implementar**
+nada todavía.
+
+**Motivación.** En bodega llegan varios clientes seguidos. Registrar un pedido hoy es lento, así
+que se atiende primero y se registra después, y se acumulan pedidos sin registrar. Resultado:
+pérdida de trazabilidad, inventario desactualizado, cartera incompleta y dudas sobre cuánto debe
+cada cliente. **La velocidad de registro es un requisito funcional**, no una preferencia visual.
+
+**Principio.** Registrar una venta presencial de bodega debe ser **rápido, intuitivo, continuo y
+con pocas interacciones**, sin recorrer las pantallas administrativas de Bagisto. **Más rápido,
+no menos control.**
+
+**Arquitectura.** Interfaz simple → servicios comerciales ByLopez → Bagisto (Customer, grupo,
+Cart, precios, inventario, envío, pago, Order, factura y transacciones). La interfaz **no**
+contiene reglas de precio, stock, variantes, grupos, envío o pago, ni crea el Order.
+
+**Caso de referencia.** Un cliente existente pide 6 camisetas Caballero Negro M y 6 L, recoge en
+bodega y paga por transferencia. El flujo debe ser: Nueva Venta → buscar cliente → seleccionar →
+cantidades → recogida → transferencia → confirmar (→ registrar pago si ya pagó). No debe ser un
+recorrido por clientes, carrito, direcciones, envío, pago, pedido y factura.
+
+**Requisitos que quedan registrados (Doc. 05 §33):**
+
+- una pantalla principal;
+- búsqueda rápida de cliente (RT-04);
+- alta de cliente sin salir de la venta (email opcional, sin cuenta de tienda artificial);
+- matriz compacta de variantes;
+- stock visible (el carrito nunca supera el stock vendible);
+- precio de RT-03;
+- borradores reanudables (03B);
+- entrega con los métodos de Bagisto (03D);
+- pago elegido entre los permitidos (03E);
+- **confirmar y registrar el pago como dos hechos distintos**;
+- pago pendiente que aparece solo en la cartera;
+- saldo pendiente informativo (no bloquea la venta);
+- confirmación breve con «Nueva venta», «Registrar pago» y «Ver pedido»;
+- operación con teclado, diseño adaptable (PC, tablet y celular) y baja latencia;
+- concurrencia y trazabilidad intactas;
+- los mismos servicios para asesor, voz, WhatsApp, n8n e IA.
+
+**Límites.**
+
+- Sin precios fijos en código ni `custom_price`.
+- La UI no inventa ids, SKU, stock ni precio.
+- Sin un segundo sistema de borradores.
+- Sin marcar un pedido como pagado con una casilla: el dinero se registra como un hecho
+  económico.
+- Sin estado técnico «moroso»: la mora requerirá vencimiento y una política explícita.
+- **Un solo servicio de dominio para «Registrar pago»**, desde el pedido, la cartera o la ficha
+  del cliente.
+
+**Precisión (2026-09-27, Camilo Gaitán, Doc. 05 §33.8).** Se separan dos tiempos:
+
+- **Tiempo comercial:** lo que tarda el cliente en decidir. Sin SLA; no es lentitud del sistema.
+- **Tiempo operativo:** interacciones que añade la aplicación para registrar lo ya decidido.
+  **Se optimiza y se mide.**
+
+Objetivo: registrar una decisión ya tomada debe ser extremadamente rápido. Esto se concreta en
+una matriz de tallas por producto y color, sin repetir la búsqueda por cada variante; métricas
+por escenario (tiempo operativo, clics, búsquedas repetidas, cambios de página, modales,
+requests, latencia, errores); y los escenarios E-01 a E-10. **Sin SLA en segundos** hasta medir
+la interfaz real. Velocidad = hacer automáticamente lo que el sistema ya conoce, nunca omitir
+controles.
+
+**Precisión: navegación POS de productos (2026-09-27, Doc. 05 §33.9).**
+
+- **Modelo híbrido:** accesos rápidos → color → matriz de variantes reales, más buscador,
+  recientes, frecuentes y escáner futuro. Todos convergen en `CatalogoVentaService` y en las
+  primitivas de 03C.
+- **Evidencia:** la línea comercial («CABALLERO/DAMA/NIÑO») sale de las **categorías** de
+  Bagisto, no de la familia de atributos, del nombre ni de un atributo de género (no existe). El
+  color es la opción real del atributo `color`, con swatch; hoy cada configurable es línea × color.
+  Las tallas son los ejes reales de cada configurable.
+- **Hallazgo:** la búsqueda actual no encuentra «caballero» ni «dama» (los nombres dicen «Hombre»
+  o «Mujer») ni el SKU de una variante.
+- **Pendientes:** qué categorías son accesos rápidos (configuración, sin nombres en el código) y si
+  se crea un atributo de código de barras.
+- **Límites:** sin segundo catálogo, sin stock ni precio duplicados y sin implementar hasta cerrar
+  03E y 03F.
+
+## D-53 · Registro seguro de pagos: idempotencia y concurrencia — **DECIDIDA (arquitectura)**
+
+**Estado:** ✅ **DECIDIDA** (2026-09-27, Camilo Gaitán: persistencia propia con UNIQUE real, no
+solo `order_transactions.data`). Diseño en el Doc. 05 §35. **Sin migración ni código todavía.**
+
+**Decisión:**
+
+- **Tabla mínima `bylopez_va_registros_pago`:** `mecanismo`, `idempotency_key`,
+  `huella_solicitud`, `order_transaction_id` (UNIQUE, FK RESTRICT), `actor_admin_id` y
+  timestamps, con UNIQUE(`mecanismo`, `idempotency_key`).
+- **Qué no guarda:** saldo, monto, medio, pedido, factura ni ledger.
+- **Reintentos:** la misma clave con la misma huella devuelve la operación existente; la misma
+  clave con otra huella da conflicto; una clave distinta es otro pago legítimo, lo que permite los
+  **abonos parciales sobre UN mismo pedido o factura** (pago 1 de 150.000 y pago 2 de 250.000).
+  Esto es distinto del **abono general** del cliente sobre varios pedidos (Doc. 05 §36.4): ese
+  reparto es una sola operación comercial atómica, con sus propias garantías de idempotencia y
+  bloqueo por definir en su implementación futura; no se resuelve con esta clave por pedido.
+- **Una sola transacción de base de datos, en este orden:**
+  1. reservar la clave;
+  2. bloquear pedido → factura;
+  3. recalcular lo pagado bajo bloqueo;
+  4. validar;
+  5. crear la transacción nativa;
+  6. si se completa el total: `InvoiceRepository::updateState('paid')` y
+     `OrderRepository::updateOrderStatus($order)` **sin estado**, que calcula por cantidades (no
+     se copia la regla «algún envío = completed» del controlador).
+
 ## Resumen
 
 | # | Decisión | Fase bloqueada | Recomendación técnica | Estado |
@@ -1061,6 +1211,12 @@ implementada.
 | D-45 | Ubicación de los carriers y división de subfases | 03D | Paquete `ByLopez/Logistica`; 03D, 03E, 03F y logística | ✅ **APROBADA** (paquete creado en 03D) |
 | D-46 | Facturación mínima | 03D | Datos reales; código postal opcional en el borrador | ✅ **implementada** (Doc. 05 §30.3); abierto: relajar también RT-04 |
 | D-47 | Tarifas de entrega | 03D | Domicilio configurable; nacional 0 «por pagar» | ◐ **parcial**: falta el valor del domicilio y la restricción a Bogotá |
+| D-48 | Estado inicial de la transferencia | 03E | Hoy se crea pagada; opción nativa: pendiente + transacción (Doc. 05 §32.4) | ✅ **DECIDIDA 2026-09-27** (arquitectura: pendiente hasta que el dinero sea real); **despliegue en producción pendiente de autorización** |
+| D-49 | Métodos permitidos en el canal asesor | 03E | Disponibles ∩ lista configurable (Doc. 05 §32.8, §34.12) | ✅ **DECIDIDA 2026-09-27** |
+| D-50 | Cobro de contra entrega y medios de cobro | 03E / cobros | Transacción nativa + medio con códigos configurables (Doc. 05 §34.9) | ✅ **DECIDIDA 2026-09-27** (con D-53) |
+| D-51 | Comprobante de transferencia | Cobros | Comprobante ≠ pago; sin soporte nativo | ✅ **DECIDIDA 2026-09-27** como principio; mecanismo de archivo diferido |
+| D-52 | Principio de venta rápida de bodega | 03E, 03F, UI, cartera | Interfaz simple sobre servicios sobre Bagisto; confirmar ≠ registrar pago; tiempo comercial ≠ tiempo operativo (E-01 a E-10); navegación POS sobre categorías y atributos reales (P-01 a P-07) (Doc. 05 §33) | ✅ **DECIDIDA 2026-09-27** (requisito transversal; sin implementar) |
+| D-53 | Registro seguro de pagos: idempotencia y concurrencia | 03E / cobros | Tabla mínima con UNIQUE(mecanismo, clave), bloqueo pedido → factura, primitivas nativas (Doc. 05 §35–§36.4) | ✅ **DECIDIDA 2026-09-27** (arquitectura; sin migración; abono general FIFO/manual documentado como requisito futuro, Doc. 05 §36.4) |
 
 ### Requisitos técnicos obligatorios (no son decisiones de negocio)
 

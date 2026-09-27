@@ -32,4 +32,14 @@ return [
          */
         'festivos' => [],
     ],
+
+    'pagos' => [
+        /*
+         * D-49: metodos de pago permitidos para el canal asesor. Lo ofrecido al borrador
+         * es esta lista INTERSECTADA con lo que Bagisto marca disponible ahora mismo
+         * (Payment::getPaymentMethods()); nunca solo esta lista. Un gateway que Bagisto
+         * active despues (p. ej. con credenciales) NO aparece si no esta aqui.
+         */
+        'metodos_permitidos' => ['cashondelivery', 'moneytransfer'],
+    ],
 ];
