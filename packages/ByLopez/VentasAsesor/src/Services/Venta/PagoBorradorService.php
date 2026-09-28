@@ -76,6 +76,25 @@ class PagoBorradorService
     }
 
     /**
+     * 03F: el metodo guardado en el Cart sigue ofrecido AHORA (allowlist ∩ Payment::
+     * getPaymentMethods()). Asume el Cart del facade ya fijado (dentro de un
+     * CarritoComercial::operar en curso), como ofrecidosConCartYaFijado().
+     */
+    public function metodoVigenteConCartYaFijado(): MetodoPagoDisponible
+    {
+        $codigo = (string) Cart::getCart()?->payment?->method;
+
+        if ($codigo === '') {
+            throw new PagoInvalido(PagoInvalido::METODO_NO_DISPONIBLE);
+        }
+
+        return collect($this->ofrecidosConCartYaFijado())->firstWhere('codigo', $codigo)
+            ?? throw new PagoInvalido(
+                $this->existeEnBagisto($codigo) ? PagoInvalido::METODO_NO_DISPONIBLE : PagoInvalido::METODO_INEXISTENTE
+            );
+    }
+
+    /**
      * Wrapper de un solo uso: fija el Cart del facade (setCart/resetCart) para calcular
      * los metodos ofrecidos. NO anidar dentro de otro CarritoComercial::operar: su
      * finally resetearia el Cart del facade antes de que el llamador externo pueda usarlo

@@ -3294,3 +3294,954 @@ propiedad y el DTO informativo.
 (`RepositoryEntityCreated`/`Updated`), que un `UPDATE` SQL directo no dispara. El helper de
 prueba `f03e_configurarPago` escribe y después vacía la caché (`Cache::flush()`), replicando lo
 que hace el panel al guardar configuración. Es infraestructura de la prueba, no del servicio.
+
+---
+
+## 37. Auditoría 03F: confirmación del pedido (2026-09-27)
+
+**Solo auditoría y diseño:** no hay código, migraciones, staging ni commit. HEAD `83df25bbbf`.
+Evidencia: Bagisto 2.4.9 instalado y `lpz_saas` (solo SELECT, sin datos personales). Hay
+decisiones nuevas **propuestas, sin numerar** (§37.12): las decide Camilo Gaitán.
+
+### 37.1 Flujo nativo real de creación del pedido
+
+`Admin\OrderController::store`:
+
+1. `Cart::setCart`;
+2. `Cart::hasError()` (stock insuficiente o pedido mínimo);
+3. `Cart::collectTotals()`;
+4. `validateOrder()` (dirección de envío y facturación, tarifa elegida y pago; **no** comprueba
+   si el cliente está suspendido; la tienda sí);
+5. solo acepta `cashondelivery` o `moneytransfer`;
+6. `OrderResource($cart)` (incluye **`cart_id`**);
+7. `OrderRepository::create($data)`;
+8. **`Cart::removeCart($cart)` en el controlador**, no en el repositorio.
+
+La tienda, en cambio, desactiva el carrito (`deActivateCart`).
+
+`OrderRepository::create` = `createOrderIfNotThenRetry($data)`:
+
+```text
+DB::beginTransaction()
+try:
+  checkout.order.save.before
+  Order::create(status = pending, increment_id = OrderSequencer)
+  payment, direcciones de envío y facturación
+  por cada ítem: OrderItem (+ hijos) → manageInventory (reserva) → enlaces descargables
+  checkout.order.save.after            ← todos los listeners, DENTRO de la transacción
+catch (Exception):
+  DB::rollBack()
+  CouponUsageLimitExceededException → relanza sin reintentar
+  Log::error(..., ['data' => $data])   ← pedido completo con datos personales
+  intento < max (sales.order_settings.order_creation.max_retry_attempts, por defecto 3)
+    → se llama a sí mismo (pedido nuevo, increment_id nuevo)
+  si no → relanza
+finally:
+  DB::commit()                         ← se ejecuta SIEMPRE, también tras un rollback
+```
+
+- **Idempotencia nativa:** no existe. Un mismo carrito puede producir varios pedidos:
+  `orders.cart_id` no tiene índice, ni UNIQUE, ni FK (hoy hay 0 duplicados en `lpz_saas`).
+- **Pedido a medias:** no queda ninguno mientras el repositorio **no** esté dentro de otra
+  transacción, porque cada intento se revierte entero.
+- **Hallazgo crítico: no envolverlo en una `DB::transaction` propia.** Dentro de una
+  transacción externa, el camino de reintento hace un `DB::commit()` extra en el `finally` del
+  primer intento. Eso lleva el nivel de transacción de 1 a 0 y **confirma la transacción externa
+  antes de tiempo**, soltando sus bloqueos y rompiendo su atomicidad sin avisar. En el camino
+  exitoso sin reintento no ocurre. Conclusión: **03F no debe envolver `OrderRepository::create`
+  en una transacción propia**.
+
+### 37.2 Reserva de inventario, stock y factura
+
+- **Reserva:** `OrderItemRepository::manageInventory` suma la cantidad a
+  `product_ordered_inventories` con un **leer-sumar-escribir sin bloqueo**. Dos pedidos
+  simultáneos pueden **perder parte de la reserva** (ambos leen 0 y ambos escriben 10).
+- **Stock:** **el repositorio no valida stock.** Solo lo hacen el controlador o la tienda antes
+  de crear el pedido (`Cart::hasError()` / `isItemsHaveSufficientQuantity`), sin bloqueo.
+- **Carrera real de sobreventa:** con stock 10 y los borradores A y B pidiendo 10 cada uno, los
+  dos validan 10 ≤ 10, los dos crean pedido y ambos quedan reservados sobre 10 unidades. Bagisto
+  no lo impide.
+- **Índice de inventario:** el listener `Product\Order::afterCancelOrCreate` despacha
+  `UpdateCreateInventoryIndexJob`. Con `QUEUE_CONNECTION=sync` (el valor de `lpz_saas`) se
+  ejecuta **dentro** de la transacción del pedido y el índice queda al día al hacer commit. Con
+  una cola asíncrona quedaría desfasado.
+- **Reserva frente a stock físico:** el pedido **reserva**; el stock físico solo baja con el
+  Shipment (§28.4). 03F no descuenta stock físico.
+- **Factura automática:** `GenerateInvoice` corre dentro de la misma transacción del pedido
+  (listener de `checkout.order.save.after`). `InvoiceRepository::create` abre un savepoint
+  anidado. Si falla, se revierte todo el pedido y se reintenta. El estado de la factura sale de
+  la configuración del método (§32.5).
+
+### 37.3 Listeners reales de `checkout.order.save.after` (`artisan event:list`), en orden
+
+1. **`AtribuirPedidoCreado`** (VentasAsesor).
+2. `Admin\Order@afterCreated`: correo al admin (`new_order_mail_to_admin = 1`).
+3. `BookingProduct`.
+4. `CartRule\Order@manageCartRule`: usos de reglas y cupones con `lockForUpdate`.
+5. `FPC`.
+6. `Notification@createOrder`: notificación del panel.
+7. **`GenerateInvoice`**: factura, que a su vez dispara `sales.invoice.save.after` y el correo de
+   factura al cliente.
+8. `Product@afterCancelOrCreate`: reindexado de inventario.
+9. `Shop\Order@afterCreated`: correo al cliente (RT-04 lo protege).
+10. `CatalogCache@flush`.
+
+**Efectos externos dentro de la transacción:** con `QUEUE_CONNECTION=sync` y `MAIL_MAILER=smtp`,
+`Mail::queue` **envía en el acto**. Si un listener posterior (por ejemplo `GenerateInvoice`)
+falla, el correo al admin ya salió para un pedido revertido, y el reintento lo **vuelve a
+enviar**. Además, la conversación SMTP alarga la transacción y sus bloqueos (D-52). Es deuda de
+operación (una cola real), no se corrige en 03F.
+
+### 37.4 Contradicción con el prompt (§32): el listener de atribución NO revierte el pedido
+
+- **Lo que dice el código:** `AtribuirPedidoCreado` **nunca relanza** sus errores (decisión de
+  02B1A, documentada en su clase). Si falla, deja el pedido con `fallo_tecnico` y una incidencia;
+  si la base de datos falla, solo queda el log.
+- **Consecuencia:** una atribución fallida **no** revierte el pedido. Es lo contrario de lo que
+  daba por hecho el prompt.
+- **Qué hace 03F:** respeta esa decisión vigente y garantiza que el contexto llegue siempre
+  correcto (§37.8). Cambiarla sería una decisión nueva.
+
+### 37.5 Idempotencia y enlace borrador ↔ pedido (diseño)
+
+- **Identidad de la confirmación: el propio borrador.** Un borrador produce como máximo un pedido
+  (`borradores.order_id` UNIQUE, FK RESTRICT, ya existente).
+  - Reintentar la confirmación de un borrador `confirmado` **devuelve el mismo pedido**
+    (`ya_existia = true`), aunque el payload haya cambiado: los snapshots del pedido son finales.
+  - `(mecanismo, external_reference)` identifica la **creación** del borrador. Un canal externo lo
+    usa para encontrar el borrador y confirmar por `borrador_id`. No hace falta una segunda clave.
+- **Cerrar la ventana «pedido creado sin enlazar» dentro de la transacción de Bagisto:** un
+  listener nuevo de VentasAsesor en `checkout.order.save.after`, registrado **antes** de los
+  correos (el proveedor de VentasAsesor se carga antes y su listener ya es el primero), que:
+  - lee un contexto explícito «confirmación en curso» (`cart_id` → `borrador_id`), con scoping
+    igual al de `ContextoComercialDePeticion`;
+  - ejecuta `UPDATE borradores SET order_id = :pedido, estado = 'confirmado' WHERE id = :borrador
+    AND estado = 'confirmando' AND order_id IS NULL`;
+  - si actualiza **0 filas, lanza** una excepción, y el pedido se revierte.
+  
+  Si el pedido hace commit, el enlace hace commit con él; si se revierte, el enlace también. **La
+  ventana desaparece por construcción.**
+
+| Ruta | Garantía |
+|---|---|
+| Doble clic o dos peticiones sobre el mismo borrador | El paso A bloquea el borrador (`FOR UPDATE`) y pasa de `activo` a `confirmando`. La segunda petición lo encuentra `confirmando` y devuelve `confirmacion_en_proceso`, o el pedido si ya está `confirmado` |
+| Toma de un `confirmando` viejo (el proceso murió) | Permitido tras un umbral (por ejemplo, `updated_at` más antiguo que el tiempo máximo de petición). Si el proceso original seguía vivo, su UPDATE condicional y el del nuevo compiten por la misma fila: el segundo en hacer commit ve `confirmado` → 0 filas → excepción → **rollback**. **Nunca dos pedidos** |
+| El proceso muere antes del commit del pedido | MySQL revierte el pedido. Queda `confirmando` sin `order_id`, recuperable por la toma anterior |
+| El proceso muere después del commit | El borrador ya está `confirmado` con `order_id` (mismo commit). El reintento devuelve el pedido |
+| Respuesta HTTP perdida | Igual que el caso anterior: **el mismo pedido** |
+
+- **Conciliación defensiva** (por ejemplo, pedidos de otras vías sobre el mismo carrito): un
+  borrador `confirmando` sin `order_id` se contrasta con `orders.cart_id = borradores.cart_id`
+  (identidad nativa) **antes** de volver a `activo` o de tomarlo.
+- **Estados:** `activo` → `confirmando` (paso A) → `confirmado` (dentro de la transacción del
+  pedido). Si una validación falla **antes** de crear el pedido, un UPDATE condicional lo devuelve
+  a `activo` (`WHERE estado = 'confirmando' AND order_id IS NULL`). Con `confirmando`, los
+  servicios del módulo **no** permiten editar (`esEditable()` solo acepta `activo`).
+- **No hace falta migración:** `order_id` UNIQUE, `estado` y `updated_at` ya existen. **Umbral de
+  toma:** decisión propuesta 4.
+
+### 37.6 Transacción propia, bloqueos y orden de revalidación
+
+**Sin transacción externa alrededor del repositorio (§37.1).**
+
+**Paso A** (transacción corta; bloqueo borrador → carrito, `bloquearParaEditar`):
+
+1. borrador existente y `activo`, o `confirmado` → devolver el pedido, o `confirmando` → en
+   proceso o toma;
+2. propietario y permiso;
+3. cliente existente, **activo y no suspendido** (P-09 bloquea aquí) y grupo comercial apto (no
+   invitado);
+4. carrito existente, de ese cliente, inactivo y **con líneas** (si no, `carrito_vacio`);
+5. invariantes del módulo: cada línea con su solicitud y cantidad ≤ solicitado (I-13), variante
+   hija real y activa (I-5, catálogo), sin `custom_price` (D-18). Si falla, **carrito
+   inconsistente**, por ejemplo alterado por las rutas del panel de Bagisto;
+6. pago seleccionado ∈ allowlist ∩ disponibles (03E);
+7. pasar a `confirmando`.
+
+COMMIT.
+
+**Paso B** (sin transacción externa; contexto RT-03 y `Cart::setCart`):
+
+8. **antes** de `collectTotals`, comprobar que todas las variantes y productos estén activos,
+   porque `validateItems()` **quita en silencio** las líneas inactivas (y borra el carrito si
+   queda vacío). Una línea inactiva da `variante_no_vendible`, sin tocar nada;
+9. `Cart::collectTotals()`: reprecia con el grupo **actual** (RT-03), aplica reglas de carrito,
+   descuentos e impuestos. Después se verifica que el conjunto de líneas no cambió;
+10. stock: `Cart::isItemsHaveSufficientQuantity()`; si no alcanza, `stock_insuficiente` con las
+    variantes afectadas. **Nunca** se reduce la cantidad (D-39);
+11. entrega: facturación y envío presentes, `Shipping::collectRates()` y el método elegido **sigue
+    entre las tarifas** (si no, `entrega_invalida`); luego `collectTotals` de nuevo, que aplica el
+    envío gratis de CartRule;
+12. pago de nuevo tras los totales (`isAvailable` puede depender del carrito);
+13. total esperado (decisión propuesta 2): si `grand_total` ≠ el total que vio el asesor, el
+    resultado es `totales_cambiaron` con los totales nuevos;
+14. `Cart::hasError()` final (la misma comprobación que el panel);
+15. `OrderResource`, luego `ContextoComercialDePeticion::durante(cart_id, contexto)` con el
+    contexto «confirmación en curso» y después `OrderRepository::create`.
+
+**Paso C** (después del commit):
+
+16. `Cart::removeCart`, como el panel. La FK `bvabv_cart_fk` (SET NULL) pone `borradores.cart_id`
+    en NULL; `orders.cart_id` conserva el id histórico. Si falla, el pedido ya está enlazado y el
+    carrito queda huérfano (inofensivo);
+17. armar el DTO (§37.10).
+
+**Si falla B antes del pedido:** el borrador vuelve a `activo` con UPDATE condicional y sigue
+editable.
+
+**Si un listener lanza durante el pedido:** rollback de pedido, reserva, factura y enlace, y
+reintento nativo; si se agotan los intentos, se devuelve a `activo` (condicional). Los correos ya
+enviados no se pueden revertir (§37.3).
+
+### 37.7 Stock concurrente: brecha real de Bagisto
+
+- **Riesgo real (§37.2):** la validación del paso 10 no bloquea nada. Dos confirmaciones que
+  compiten por las últimas unidades pueden sobrevender, y `manageInventory` puede perder parte de
+  la reserva.
+- **Opción propuesta sin tocar Webkul** (decisión propuesta 1):
+  - bloqueos con nombre de MySQL (`GET_LOCK`) por variante, en orden ascendente, tomados antes del
+    paso 10 y liberados después del commit del pedido;
+  - al ser de sesión y no transaccionales, funcionan **sin** transacción externa;
+  - serializan las confirmaciones de VentasAsesor que compiten por la misma variante, que así ven
+    el índice ya actualizado (reindexado sync dentro del pedido anterior).
+- **Límites:**
+  - no protege frente a pedidos de la tienda o del panel nativo (no toman el bloqueo);
+  - depende de `QUEUE_CONNECTION=sync` para el índice (con una cola asíncrona habría que leer
+    `product_inventories − product_ordered_inventories` en lugar del índice).
+- **Sin garantía adicional:** hay que aceptar el riesgo nativo de Bagisto.
+
+### 37.8 Atribución en 03F
+
+- **Por qué hace falta un contexto explícito:** fuera de una ruta HTTP, el clasificador daría
+  `fallo_tecnico` (`listener.origen_no_determinado`).
+- **Qué hace 03F:** registra el **contexto explícito** con `ContextoComercialDePeticion::
+  durante(cart_id, contexto)`, precedencia 1 del clasificador. El contexto lo construye
+  `ResolverAtribucionService::paraCreacionAdministrativa` con:
+  - creador: el administrador que confirma;
+  - mecanismo y canal del borrador;
+  - referencia externa del borrador;
+  - la `SeleccionPropiedadComercial` recibida (asignarme, asignar otro asesor, empresa o sin
+    asignar), cuyos permisos resuelve el propio resolver (decisiones de 02A a 02B1B).
+- **Sin duplicados:** el listener existente escribe la atribución una sola vez; 03F no escribe
+  atribución.
+
+### 37.9 Precio, entrega, pago y D-48
+
+- **Precio:** siempre se recalcula en el paso 9 con el grupo actual (RT-03), sin `custom_price`.
+  Un cambio de grupo entre el borrador y la confirmación cambia el precio: se detecta con el
+  total esperado (decisión propuesta 2).
+- **Tarifa de envío:** se revalida con `Shipping::collectRates()` y la tarifa vigente queda
+  guardada. Una tarifa distinta cambia el total y se detecta igual que el precio. El envío gratis
+  sigue siendo CartRule: el método real se conserva y `shipping_amount` es el final de Bagisto.
+- **Pago:** allowlist ∩ disponibles revalidado. 03F **no registra dinero**.
+- **D-48:** mientras la configuración de producción no cambie, un pedido por transferencia nace
+  con **factura `paid` y pedido `processing`** (semántica vieja): confirmarlo registraría como
+  cobrado un dinero no verificado. Opciones (decisión propuesta 3): desplegar D-48 antes de usar
+  03F en producción con transferencia, o dejar temporalmente la allowlist solo con
+  `cashondelivery`.
+- **D-38:** **no bloquea 03F.** No hay descuento manual; se respetan las reglas de Bagisto
+  vigentes.
+
+### 37.10 Solicitudes, borrador confirmado y DTO
+
+- **Solicitud 100, carrito 30 → pedido de 30.** Nunca se convierten los faltantes en pedido ni se
+  inventa stock.
+- **Solicitudes:** siguen ligadas al borrador confirmado (nunca se borra). El faltante comercial
+  (solicitado − pedido por variante, a partir de `order_items`) queda derivable para el futuro.
+  No se crea un segundo pedido.
+- **Borrador confirmado:** conserva `estado = confirmado`, `order_id`, propietario, creador,
+  mecanismo, canal, `external_reference` y timestamps. `cart_id` pasa a NULL al borrar el carrito
+  (FK SET NULL); la correlación queda en `orders.cart_id`.
+- **`ConfirmarVentaService` es suficiente:** es la operación sobre el borrador. Un
+  `CrearPedidoComercialService` que orqueste todo el flujo (cliente → borrador → … → confirmar)
+  sería una capa de **aplicación** para la API y n8n más adelante. Hoy duplicaría: POS, API, n8n,
+  WhatsApp y voz invocan la misma secuencia de servicios sin Request, sesión ni rutas.
+- **DTO de confirmación:**
+  - `borrador_id`, `order_id` y `increment_id`;
+  - cliente (id y nombre);
+  - `grand_total` y moneda;
+  - método de pago (código y título) y método de entrega (código y título);
+  - factura (id y estado) si existe;
+  - **estado de pago derivado y saldo** (§34.11, sin persistir; con la configuración actual, la
+    transferencia sale como «pagado sin evidencia de transacción» → `revisar`);
+  - `ya_existia`;
+  - acciones: `registrar_pago` (si hay saldo), `ver_pedido` y `nueva_venta`.
+- **Errores de dominio** (nueva `ConfirmacionVentaInvalidaException`, reutilizando las de 03C,
+  03D y 03E cuando aplique): `borrador_no_confirmable`, `confirmacion_en_proceso`,
+  `cliente_no_confirmable`, `carrito_vacio`, `carrito_inconsistente`, `variante_no_vendible`,
+  `stock_insuficiente` (con las variantes), `entrega_invalida`, `pago_invalido`,
+  `totales_cambiaron` (con los totales nuevos). «Ya confirmado» es un **éxito idempotente**, no un
+  error.
+
+### 37.11 Rendimiento, datos personales y deudas
+
+- **Coste:** `collectTotals` (dos veces), `collectRates`, precio por ítem (índice de precios) y,
+  dentro de la transacción del pedido, SMTP sync y reindexado sync. La mayor latencia y duración
+  de bloqueos viene del SMTP síncrono.
+- **Instrumentación:** hoy no existe; se propone medir revalidación, totales, repositorio y
+  respuesta total al implementar (D-52).
+- **Datos personales:** cada intento fallido de `OrderRepository` escribe el pedido completo en el
+  log (hasta 3 veces). Es deuda del core que no se modifica; 03F no replica ese log.
+- **Cart alterado fuera del módulo:** se detecta con los invariantes del paso 5 y la comparación
+  de líneas del paso 9. Las rutas del panel siguen sin bloqueo (deuda conocida).
+
+### 37.12 Decisiones nuevas propuestas (sin numerar; las decide Camilo)
+
+1. **Garantía anti-sobreventa en la confirmación:** bloqueos con nombre por variante (§37.7), o
+   aceptar el riesgo nativo de Bagisto.
+2. **Cambio de precio o tarifa entre la vista y la confirmación:** confirmación con `total_esperado`
+   y conflicto `totales_cambiaron` (recomendado; imprescindible para IA y WhatsApp), frente a
+   confirmar siempre con el total recalculado.
+3. **Transferencia antes de desplegar D-48:** desplegar D-48 primero, o allowlist solo con
+   `cashondelivery` mientras tanto.
+4. **Umbral para tomar un `confirmando` viejo** y si la toma es automática en el siguiente intento
+   o requiere una acción explícita.
+5. **Carrito tras confirmar:** borrarlo como el panel (recomendado) o desactivarlo como la tienda.
+6. **Operación:** pasar correos y reindexado a una cola asíncrona real, lo que exige que el
+   reindexado se ejecute después del commit.
+
+### 37.13 Matriz de pruebas futura (03F-01 a 03F-36)
+
+| Id | Caso |
+|---|---|
+| 03F-01 | Confirmación normal |
+| 03F-02 | Doble clic |
+| 03F-03 | Reintento de una confirmación ya hecha → el mismo pedido |
+| 03F-04 | Timeout después del commit → el mismo pedido |
+| 03F-05 | Dos peticiones simultáneas → un pedido |
+| 03F-06 | El stock cambia antes de confirmar → `stock_insuficiente`, sin reducir |
+| 03F-07 | Dos borradores compiten por el último stock → uno solo, si se aprueba la decisión 1 |
+| 03F-08 | Cliente suspendido |
+| 03F-09 | El grupo del cliente cambia |
+| 03F-10 | El precio cambia → `totales_cambiaron` |
+| 03F-11 | La tarifa de envío cambia |
+| 03F-12 | El método de pago deja de estar disponible |
+| 03F-13 | Carrito vacío |
+| 03F-14 | Carrito alterado fuera del módulo |
+| 03F-15 | Variante desactivada → no se quita en silencio |
+| 03F-16 | Atribución: asesor que se autoasigna |
+| 03F-17 | Atribución: empresa, otro asesor o sin asignar según permisos |
+| 03F-18 | El listener de atribución falla → el pedido **se conserva** con `fallo_tecnico` (§37.4) |
+| 03F-19 | Factura automática |
+| 03F-20 | Transferencia con la configuración actual → factura `paid` (documentado) |
+| 03F-21 | Contra entrega |
+| 03F-22 | Recogida en bodega |
+| 03F-23 | Domicilio local |
+| 03F-24 | Envío nacional |
+| 03F-25 | Solicitud 100, carrito 30 → pedido de 30 |
+| 03F-26 | `order_id` enlazado dentro de la misma transacción |
+| 03F-27 | Carrito después del pedido (borrado; `borradores.cart_id` en NULL y `orders.cart_id` conservado) |
+| 03F-28 | Fallo antes del pedido → vuelve a `activo` |
+| 03F-29 | Fallo durante el pedido → rollback completo y vuelve a `activo` |
+| 03F-30 | `confirmando` recuperable |
+| 03F-31 | Sin transacción de pago |
+| 03F-32 | Sin `custom_price` |
+| 03F-33 | Sin descuento de stock físico antes del Shipment |
+| 03F-34 | 03F nunca envuelve el repositorio en una transacción externa (regresión del commit prematuro) |
+| 03F-35 | Toma de un `confirmando` viejo mientras el original sigue vivo → un solo pedido (UPDATE condicional) |
+| 03F-36 | Enlace condicional con 0 filas → el pedido se revierte |
+
+---
+
+## 38. Cierre técnico 03F: concurrencia de stock y recuperación de `confirmando` (2026-09-27)
+
+**Solo diseño:** no hay código, migraciones, staging ni commit. HEAD `83df25bbbf`.
+
+**Decisiones que Camilo Gaitán tomó en este paso** (registradas en el Doc. 04, sin numerar):
+
+- se mantiene 02B1A: una atribución fallida no revierte el pedido;
+- **`total_esperado` aprobado**: si no coincide, `totales_cambiaron` con el total nuevo;
+- 03F se desarrolla, pero la transferencia **no** se usa en producción hasta desplegar D-48;
+- el carrito se **borra** tras confirmar;
+- la cola asíncrona queda fuera de 03F.
+
+**Quedan dos propuestas técnicas pendientes de aprobación:** A (stock) y B (recuperación).
+
+### 38.1 Recurso real de stock (verificado)
+
+| Pieza | Tabla o código | Filas estables |
+|---|---|---|
+| Stock físico | `product_inventories` (UNIQUE `product_id`, `inventory_source_id`, `vendor_id`) | Una por variante, fuente y vendedor |
+| Reservas | `product_ordered_inventories` (UNIQUE `product_id`, `channel_id`) | Una por variante y canal, **solo si ya hubo alguna reserva** (hoy 93 de 300 variantes) |
+| Vendible (índice) | `product_inventory_indices` (UNIQUE `product_id`, `channel_id`), calculado por `Indexers\Inventory::getQuantity` | Σ `inventories.qty` de las fuentes **activas del canal** − `ordered.qty` del canal |
+| Reserva del pedido | `OrderItemRepository::manageInventory` (único llamador: `OrderRepository`, línea 77) | Leer-sumar-escribir sin bloqueo sobre `ordered_inventories` |
+| Salida física | `ShipmentItemRepository::updateProductInventory` | Leer-restar-escribir sin bloqueo sobre `ordered_inventories` e `inventories` |
+| Fila siempre presente | `products` (variante) | Sí, una por variante |
+
+`lpz_saas`: MariaDB 10.4.28, `REPEATABLE-READ`, `innodb_lock_wait_timeout = 50`, sin conexiones
+persistentes.
+
+**Carrera demostrada:** con stock 10, A y B validan 10 ≤ 10 fuera de toda transacción, los dos
+crean pedido, y `manageInventory` de cada uno lee `ordered = 0` y escribe 10. Resultado: dos
+pedidos de 10 sobre 10 unidades y una reserva final de **10 en lugar de 20** (actualización
+perdida). Bagisto no valida stock dentro de la transacción del pedido.
+
+### 38.2 Alternativas, con la arquitectura real
+
+| Opción | Cobertura | Interacción con `OrderRepository` y reintentos | Varias variantes | Riesgo o coste |
+|---|---|---|---|---|
+| **A. `GET_LOCK` por variante (VentasAsesor)** | **Solo ByLopez contra ByLopez**. La tienda y el panel no lo toman | El bloqueo es de sesión: `COMMIT` y `ROLLBACK` no lo liberan, así que sobrevive a los reintentos nativos. No necesita transacción externa | Varios bloqueos por sesión (MariaDB ≥ 10.0.2), en orden ascendente | Se pierde en silencio si Laravel reconecta; se libera solo si el proceso muere. **No protege el inventario global** |
+| B. Bloqueo de fila `FOR UPDATE` en una transacción externa de VentasAsesor | Solo ByLopez | **No viable de forma segura**: `createOrderIfNotThenRetry` hace `DB::commit()` en su `finally`, incluso tras un rollback. En el camino de error o reintento confirma la transacción externa y suelta los bloqueos a mitad de la operación. Llamarlo con `maxAttempts = 1` evita el reintento pero **no** ese commit en el error | Orden fijo posible | Frágil; depende de un detalle interno |
+| C. Bloqueo de fila sobre `ordered_inventories` | Solo ByLopez | Igual que B. Además, la fila **no existe** para 207 de 300 variantes | — | Condición de carrera en la inserción (el UNIQUE la corta con un error y reintento) |
+| D. Serialización propia (tabla de semáforos) | Solo ByLopez | Necesita transacción o `GET_LOCK` igualmente | — | Migración y complejidad sin ventaja sobre A |
+| E. Aceptar el riesgo nativo | Ninguna | — | — | Sobreventa y reservas perdidas |
+| **F. «Cerco de inventario» dentro de la transacción de Bagisto:** un listener de VentasAsesor en **`checkout.order.save.before`** (hoy sin listeners; se dispara dentro de la transacción del pedido y **antes** de cualquier escritura) | **Global**: todo pedido pasa por `OrderRepository` (tienda, panel y ByLopez) | El bloqueo vive en la **propia** transacción de Bagisto, que se libera al hacer commit o rollback. Un reintento vuelve a ejecutar el cerco. No hace falta transacción externa ni tocar Webkul (mismo patrón de extensión que RT-03 y RT-04) | Bloquea **todas** las variantes del pedido de una vez, ordenadas por id ascendente, así que no hay deadlocks entre pedidos | **Cambia el comportamiento global:** un checkout de la tienda que antes sobrevendía ahora falla al crear el pedido. Cada fallo pasa por los reintentos nativos y su log con datos personales (deuda existente) |
+
+**Detalle de F** (propuesta; no implementada):
+
+1. **Qué bloquea:** de `$data['items']` salen las variantes con `manage_stock` (hijos en los
+   configurables). Se ejecuta `SELECT id FROM products WHERE id IN (…) ORDER BY id FOR UPDATE`,
+   que usa una fila que existe siempre.
+2. **Qué valida:** con **lecturas bloqueantes**, vendible = Σ `product_inventories.qty` de las
+   fuentes activas del canal − `product_ordered_inventories.qty` (la misma fórmula que
+   `Indexers\Inventory::getQuantity`), respetando `manage_stock` y `back_orders`. Si no alcanza,
+   lanza `stock_insuficiente` con las variantes.
+3. **Por qué basta la reserva nativa:** con las filas `products` bloqueadas por **todo** pedido
+   concurrente, la reserva nativa (`manageInventory`) queda serializada. Su lectura consistente se
+   establece **después** de obtener el bloqueo (es la primera del intento, ya dentro de la
+   transacción) y ve los commits anteriores. No hace falta sobrescribir `manageInventory`.
+4. **Espera:** `innodb_lock_wait_timeout` (50 s por defecto). El bloqueo dura lo que dura la
+   transacción del pedido, incluidos el SMTP y el reindexado síncronos (§37.3), así que dos ventas
+   de la misma variante esperan una por la otra. Al agotarse la espera, error 1205 → reintento
+   nativo → `stock_ocupado` o reintento para el usuario.
+
+**Riesgo residual incluso con F:**
+
+- `ShipmentItemRepository` (salida física) sigue con su leer-restar-escribir sin tomar el cerco.
+  Un Shipment simultáneo a un pedido de la misma variante puede perder la actualización de
+  `ordered_inventories`. Es raro (acción del panel), pero existe.
+- Las escrituras directas a `product_inventories` (recepciones de CorteConfeccion, ajustes
+  manuales) no pasan por el cerco.
+- **Garantía global completa:** además del cerco, exigiría que Shipment y los ajustes de
+  inventario tomen el mismo bloqueo. Eso toca módulos ajenos o Webkul y queda como deuda.
+
+### 38.3 Recomendación de stock (PROPUESTA TÉCNICA PARA CAMILO)
+
+> **Aprobada el 2026-09-27 como D-54** e implementada (§39.3). Límite verificado: Bagisto 2.4.9
+> no reserva las variantes de configurables (§39.4). `RELEASE_ALL_LOCKS()` no existe en
+> MariaDB 10.4 (afecta solo a la alternativa `GET_LOCK`, descartada).
+
+- **Recomendada: F, «cerco de inventario»** en `checkout.order.save.before`.
+  - **Garantía:** ningún pedido creado por `OrderRepository` (**tienda, panel y ByLopez**) se
+    confirma con stock insuficiente frente a otro pedido concurrente, y las reservas dejan de
+    perderse entre pedidos.
+  - **No garantiza:** la carrera con Shipment y con las escrituras directas de inventario.
+  - **Coste:** cambia el comportamiento global de la tienda, así que requiere aprobación.
+- **Alternativa si Camilo no quiere tocar el comportamiento global: A, `GET_LOCK`**:
+  - **identidad:** `bylopez:stock:<product_id>`, con el id entero de la variante, por debajo de 64
+    caracteres;
+  - **orden:** por `product_id` ascendente;
+  - **espera:** configurable, por ejemplo 10 s; si no se obtiene, `stock_ocupado`;
+  - **liberación:** `RELEASE_ALL_LOCKS()` en un `finally` tras el commit del pedido; si el
+    proceso muere, MariaDB lo libera;
+  - **verificación:** antes de crear el pedido, `IS_USED_LOCK` = `CONNECTION_ID()`, para detectar
+    una reconexión.
+  - **Garantía:** **solo entre ventas de ByLopez**; la tienda y el panel siguen pudiendo
+    sobrevender. **No debe presentarse como «stock protegido».**
+- **No recomendadas:** B, C, D y E.
+
+### 38.4 Prueba de concurrencia real (diseño)
+
+- **Por qué no sirven las pruebas actuales:** `DatabaseTransactions` envuelve cada prueba en una
+  transacción invisible para otras conexiones, y un solo proceso PHP no es concurrente.
+- **Diseño:**
+  - un grupo de pruebas aparte (`@group concurrencia`) contra `lpz_saas_testing`, con datos
+    **confirmados** (sin la transacción envolvente) y limpieza al final;
+  - **dos procesos PHP reales** (Symfony Process: dos `php artisan` de prueba o dos scripts), cada
+    uno con su conexión, sincronizados con una barrera (un `GET_LOCK` del proceso padre que se
+    libera para arrancar a la vez);
+  - para forzar el entrelazado: un gancho **solo de prueba** hace esperar a A dentro de su
+    transacción después del cerco, mientras B arranca. Se afirma que B queda bloqueado y termina
+    con `stock_insuficiente`.
+- **Casos:**
+  - stock 10, A = 10 y B = 10 → exactamente un pedido; el otro, `stock_insuficiente`; reservas =
+    10;
+  - A = [v1, v2] y B = [v2, v1] con stock suficiente → dos pedidos, **cero deadlocks** (el orden
+    ascendente lo evita);
+  - espera agotada (A retiene más que el tiempo de espera de B) → error controlado, sin pedido de
+    B.
+
+### 38.5 Recuperación de `confirmando`: evidencia disponible (verificada)
+
+| Dato | Utilidad |
+|---|---|
+| `borradores.order_id` (UNIQUE, FK RESTRICT) | Enlace definitivo |
+| `borradores.estado` | `activo`, `confirmando`, `confirmado`, `descartado`; `esEditable()` solo con `activo` |
+| `borradores.cart_id` (FK SET NULL) | Se pierde al borrar el carrito |
+| `orders.cart_id` (sin índice, UNIQUE ni FK) | Correlación con el carrito; **no garantiza unicidad** |
+| `updated_at` | Genérico: **cualquier** guardado Eloquent lo cambia. No sirve como lease |
+| `external_reference` | Identidad de creación, no de un intento de confirmación |
+| Señal de proceso vivo | **No existe ninguna fiable** (no hay heartbeat; un `GET_LOCK` indicaría que la conexión vive, pero no impide que un proceso reconectado siga adelante) |
+
+**Conclusión:** los campos actuales **no bastan** para que un intento viejo que despierta no
+pueda enlazar un pedido construido con datos obsoletos. Ejemplo:
+
+1. A queda colgado;
+2. B toma la confirmación y termina en `totales_cambiaron`, así que el borrador vuelve a `activo`;
+3. el asesor edita y confirma de nuevo (C), y el borrador vuelve a `confirmando`;
+4. A despierta: `estado = confirmando AND order_id IS NULL` **se cumple**, y A enlazaría su pedido
+   con el carrito y el total viejos.
+
+**Hace falta identidad del intento (fencing).**
+
+### 38.6 Diseño de recuperación (PROPUESTA TÉCNICA PARA CAMILO)
+
+> **Aprobada el 2026-09-27 como D-55** e implementada (§39.2). La columna se llama
+> `confirmation_token`, como se aprobó en D-55 (no `confirmacion_token`).
+
+**Esquema** (una migración pequeña, 000008, en `bylopez_va_borradores_venta`; **no** creada):
+
+- `confirmacion_token` (char 36, nullable): identidad del intento (UUID);
+- `confirmacion_iniciada_en` (timestamp, nullable): inicio del lease, separado de `updated_at`.
+
+La propiedad comercial (`propietario_admin_id`, `asignado_hasta`) no se toca: el lease es del
+**intento técnico**, no del asesor.
+
+**Flujo:**
+
+1. **Paso A** (transacción corta; `FOR UPDATE` del borrador):
+   - `confirmado` → devolver el pedido (`ya_confirmado`);
+   - `confirmando` con lease vigente → `confirmacion_en_proceso`;
+   - `confirmando` con lease vencido → `reconciliarConfirmacion` (§38.7) y, solo si es
+     `recuperable`, **nuevo token** y nueva hora de inicio;
+   - `activo` → validaciones baratas, luego `confirmando` + token T + hora de inicio.
+   
+   Commit. El intento lleva T.
+2. **Cerco del intento, `checkout.order.save.before`**, dentro de la transacción de Bagisto y
+   antes de cualquier escritura. Con el contexto «confirmación en curso» (`cart_id` →
+   `borrador_id` + T):
+   - `SELECT … FROM borradores WHERE id = :b AND estado = 'confirmando' AND confirmacion_token =
+     :T AND order_id IS NULL FOR UPDATE`;
+   - si da 0 filas, lanza `confirmacion_obsoleta`. **No se ha escrito nada del pedido**, y los
+     reintentos nativos fallan igual;
+   - la fila del borrador queda **bloqueada hasta el commit o rollback del pedido**, así que una
+     toma concurrente espera.
+   
+   Además, un pedido sin contexto de ByLopez cuyo `cart_id` pertenezca a un borrador `activo` o
+   `confirmando` **se rechaza**. Eso cierra la confirmación del carrito de un borrador desde las
+   rutas del panel.
+3. **Enlace, `checkout.order.save.after`** (primer listener):
+   - `UPDATE borradores SET order_id = :o, estado = 'confirmado', confirmacion_token = NULL WHERE
+     id = :b AND confirmacion_token = :T AND estado = 'confirmando' AND order_id IS NULL`;
+   - debe afectar 1 fila; si no, lanza, y el pedido se revierte (con el cerco activo no debería
+     ocurrir).
+4. **Fallo antes del pedido** (validación, `totales_cambiaron`, stock) o **tras agotar los
+   reintentos**: `UPDATE … SET estado = 'activo', confirmacion_token = NULL,
+   confirmacion_iniciada_en = NULL WHERE id = :b AND confirmacion_token = :T AND estado =
+   'confirmando' AND order_id IS NULL`. Si da 0 filas, otro intento tomó la confirmación y no se
+   hace nada. **Nunca queda atascado por `totales_cambiaron`.**
+5. **Paso C:** borrar el carrito (decidido); `cart_id` pasa a NULL.
+
+**Lease:**
+
+- `confirmacion_iniciada_en + lease` (configurable, mayor que el tiempo máximo de petición más
+  SMTP) solo decide **cuándo se puede intentar** una toma.
+- **La seguridad no depende del reloj:** el token, el `FOR UPDATE` del cerco y los UPDATE
+  condicionados por token garantizan que **un intento sin el token vigente no puede crear ni
+  enlazar un pedido**.
+- Si A sigue vivo **dentro** de su transacción, retiene la fila y la toma de B espera hasta que A
+  termine. Si A hizo commit, B ve `confirmado`. Si A revirtió, B toma.
+
+**Escenario A → cuelgue → B toma → A despierta:**
+
+1. A tenía el token T1;
+2. vence el lease y B toma: la fila pasa a T2 (si A estaba dentro de su transacción, B espera);
+3. A despierta y llama a `OrderRepository`;
+4. el cerco lee T2 ≠ T1 → `confirmacion_obsoleta` **antes** de insertar pedido, ítems, reservas o
+   factura, y antes de cualquier correo;
+5. rollback total (y los reintentos nativos repiten el mismo rechazo);
+6. el UPDATE de reversión de A con T1 afecta 0 filas;
+7. **B confirma. Un solo pedido.**
+
+**Orden de listeners:** Laravel 12 no tiene prioridades; el orden es el de registro.
+VentasAsesor registra su `EventServiceProvider` en `register()`, y por eso su listener ya es el
+primero de `checkout.order.save.after` (`artisan event:list`, §37.3). `save.before` hoy no tiene
+listeners. El cerco en `save.before` no depende del orden de `after`, y el enlace se registra
+primero en `after`. **Una prueba debe afirmar ese orden** (si alguien reordena los proveedores, se
+detecta).
+
+### 38.7 `reconciliarConfirmacion(borradorId)`: clasificación conceptual
+
+| Caso | Evidencia | Clasificación |
+|---|---|---|
+| `confirmado` + `order_id` | Enlace definitivo | `ya_confirmado`: se devuelve el pedido (también tras una respuesta HTTP perdida) |
+| `confirmando` + lease vigente | Token presente | `confirmacion_en_proceso` |
+| `confirmando` + lease vencido + `order_id` NULL + `cart_id` presente + **0** pedidos con `orders.cart_id = cart_id` | El proceso murió antes o durante el pedido (con rollback) | `recuperable`: se toma con nuevo token, o se devuelve a `activo` |
+| `confirmando` + `order_id` presente | Imposible por construcción (el enlace fija los dos a la vez) | `inconsistente` |
+| `order_id` NULL + **≥ 1** pedido con `orders.cart_id = cart_id` | Pedido creado fuera del flujo (el cerco lo impediría) o de antes | `inconsistente`: **nunca** se enlaza sola |
+| **2 o más** pedidos con el mismo `cart_id` | `orders.cart_id` no es UNIQUE | `inconsistente` **grave**: no se elige el primero ni el último |
+| `confirmando` o `activo` con `cart_id` NULL | Carrito borrado fuera del flujo | `inconsistente` |
+
+- No se crea `confirmado_recuperado`: con el enlace dentro de la transacción del pedido, un pedido
+  del flujo nunca queda sin enlazar. `inconsistente` exige una acción humana, que se diseñará
+  aparte.
+- **Casos por momento de fallo:**
+  - muerte antes de llamar a `OrderRepository` → `recuperable` al vencer el lease;
+  - muerte durante `OrderRepository` → MariaDB revierte y se liberan los bloqueos → `recuperable`;
+  - muerte después del commit → `ya_confirmado`.
+- **Tras el éxito**, el carrito se borra y `cart_id` pasa a NULL, pero `estado = confirmado` y
+  `order_id` bastan: no hacen falta snapshots.
+
+### 38.8 Pruebas añadidas a la matriz 03F
+
+| Id | Caso |
+|---|---|
+| 03F-37 | Concurrencia real con dos procesos: stock 10, A = 10 y B = 10 → un pedido, el otro `stock_insuficiente`, reservas = 10 |
+| 03F-38 | A = [v1, v2] y B = [v2, v1] → sin deadlocks |
+| 03F-39 | Espera de bloqueo agotada → error controlado, sin pedido |
+| 03F-40 | A pierde el lease, B toma, A despierta y llama a `OrderRepository` → `confirmacion_obsoleta` en `save.before`, rollback total, sin factura ni correos, y B confirma |
+| 03F-41 | La toma de B espera mientras A está dentro de su transacción → A confirma y B recibe `ya_confirmado` |
+| 03F-42 | Pedido del panel sobre el carrito de un borrador → rechazado por el cerco |
+| 03F-43 | Dos pedidos con el mismo `cart_id` → `inconsistente`, sin elegir ninguno |
+| 03F-44 | `totales_cambiaron` → el borrador vuelve a `activo` con token nulo |
+| 03F-45 | Orden de los listeners afirmado (cerco en `before`, enlace primero en `after`) |
+| 03F-46 | Reintento tras una respuesta perdida → el mismo pedido |
+
+---
+
+## 39. 03F implementada: confirmación idempotente y concurrente (2026-09-27)
+
+**Implementación, sin commit.** HEAD `83df25bbbf`. D-54 y D-55 aprobadas por Camilo Gaitán
+(Doc. 04). Migración 000008 aplicada **solo** en `lpz_saas_testing`. Sin cambios en Webkul,
+Logistica ni CorteConfeccion.
+
+### 39.1 Piezas
+
+| Pieza | Responsabilidad |
+|---|---|
+| `Services/Venta/ConfirmarVentaService` | `confirmar(borradorId, actor, totalEsperado, selección?)` y `reconciliar(borradorId)`. Sin Request, Route, Session, Blade ni Vue |
+| `Listeners/CercoCreacionPedido` | Primer y único listener de `checkout.order.save.before`: token vigente (D-55), inventario (D-54) y carrito de borrador fuera de confirmación |
+| `Support/Venta/CercoInventario` | `FOR UPDATE` de `products` en orden ascendente y revalidación de stock con la fórmula de Bagisto |
+| `Listeners/EnlazarPedidoConBorrador` | Primer listener de `checkout.order.save.after`: enlace condicionado por token |
+| `Support/Venta/ConfirmacionEnCurso` | Registro `scoped` `cart_id` → borrador + token (mismo patrón que `ContextoComercialDePeticion`) |
+| `DataObjects/ConfirmacionVenta`, `ReconciliacionConfirmacion`; `Enums/EstadoReconciliacionConfirmacion` | Resultado de dominio y clasificación |
+| `Exceptions/ConfirmacionVentaInvalidaException`, `PedidoRechazadoPorCercoException` | Códigos estables (§39.5) |
+| Migración `2026_09_27_000008_agregar_intento_de_confirmacion_al_borrador_venta` | `confirmation_token` CHAR(36) NULL y `confirmacion_iniciada_en` TIMESTAMP NULL, sin índices (toda consulta filtra por `id`) |
+| `PagoBorradorService::metodoVigenteConCartYaFijado()` | Reutiliza la semántica 03E (allowlist ∩ `Payment::getPaymentMethods()`) |
+| Config `ventasasesor.confirmacion.lease_segundos` | Lease técnico, por entorno (`VENTASASESOR_CONFIRMACION_LEASE_SEGUNDOS`, 300 por defecto); no es regla de negocio |
+
+### 39.2 Flujo de `confirmar` (D-55)
+
+1. **Paso A** (transacción corta, `FOR UPDATE` del borrador): permiso y propietario; después,
+   `reconciliar` y, según el resultado:
+   - `ya_confirmado` → el mismo pedido con `ya_existia = true`;
+   - `confirmacion_en_proceso` → error;
+   - `inconsistente` → error con la evidencia, sin repararla;
+   - `descartado` → `borrador_no_confirmable`;
+   - `confirmable` o `recuperable` → `confirmando`, un `confirmation_token` nuevo (UUID) y
+     `confirmacion_iniciada_en = now()`.
+   
+   Commit.
+2. **Paso B** (**sin transacción exterior**), en este orden:
+   1. token vigente;
+   2. carrito existente;
+   3. cliente: existe, activo, no suspendido, no invitado y con grupo comercial apto;
+   4. carrito inactivo y con líneas, sin `custom_price`, variante real e hija de su padre,
+      producto y variante activos (**antes** de `collectTotals`, que quitaría la línea en
+      silencio) y cantidad ≤ solicitud (I-13);
+   5. `collectTotals` con RT-03 (grupo actual), y comprobación de que las líneas no cambiaron;
+   6. stock temprano;
+   7. entrega: `saveShippingMethod` recalcula las tarifas y exige el método (la recogida solo
+      existe con la bodega real), y después `refreshCart` + `collectTotals`;
+   8. pago vigente;
+   9. `total_esperado`;
+   10. `Cart::getErrors()` (la misma comprobación final del panel);
+   11. `OrderResource`, contexto de atribución explícito
+       (`ResolverAtribucionService::paraCreacionAdministrativa` con el mecanismo, el canal y la
+       referencia del borrador), `ConfirmacionEnCurso` y, por último, `OrderRepository::create`.
+3. **Paso C:** `CartRepository::delete` (como el panel, sin tocar la sesión). La FK pone
+   `cart_id` en NULL. Si falla, se registra en el log y el pedido ya está enlazado.
+
+**Liberación:** cualquier fallo del paso B, o de `OrderRepository` tras agotar sus reintentos,
+ejecuta `UPDATE … SET estado = 'activo', token = NULL, iniciada = NULL WHERE id AND token = T AND
+estado = 'confirmando' AND order_id IS NULL`. Un intento viejo afecta 0 filas: nunca reactiva ni
+pisa otro intento.
+
+**Reconciliación (§38.7), reglas implementadas:**
+
+- A: confirmado + `order_id` → `ya_confirmado`.
+- B: confirmando + `order_id` → `inconsistente`.
+- C: 1 pedido con el `cart_id` → `inconsistente`, sin enlazarlo.
+- D: 2 o más → `inconsistente` grave, sin elegir ninguno.
+- E: lease vigente → en proceso.
+- F: lease vencido → `recuperable`.
+- G: `cart_id` NULL → `inconsistente`.
+- Además: un `activo` con un pedido de su carrito también es `inconsistente`. Un `confirmando`
+  sin hora de inicio (dato anterior a D-55) cuenta como lease vencido.
+
+### 39.3 Cerco de creación de pedidos (D-54) y enlace
+
+**`save.before` (dentro de la transacción de Bagisto, antes de insertar nada), en orden:**
+
+1. **Solo confirmaciones ByLopez:** `SELECT … FROM borradores WHERE id AND cart_id AND estado =
+   'confirmando' AND confirmation_token = T AND order_id IS NULL FOR UPDATE`. Con 0 filas lanza
+   `confirmacion_obsoleta`, sin crear pedido, ítems, reservas, factura ni correos; los
+   reintentos nativos repiten el rechazo. La fila queda bloqueada hasta el commit, así que una
+   recuperación concurrente espera.
+2. **Todo pedido:** `SELECT id FROM products WHERE id IN (…) ORDER BY id FOR UPDATE` (padres e
+   hijos del pedido). Después, el vendible = Σ `product_inventories` de las fuentes activas del
+   canal − `product_ordered_inventories` del canal, **solo donde Bagisto 2.4.9 exige stock**:
+   tipos `simple` y `virtual` con `manage_stock` (`back_orders` solo en simple). Los descargables
+   y los de reserva no se endurecen. La primera versión los validaba y rompía el checkout de
+   descargables de Bagisto, lo que la regresión detectó y se corrigió.
+   - **Cantidad de la variante de un configurable = cantidad del padre** (la que valida
+     `Configurable::isItemHaveQuantity`), no el `qty_ordered` del hijo, que vale 0 (§39.4).
+3. **Sin confirmación ByLopez:** si el carrito pertenece a un borrador `activo` o
+   `confirmando`, se rechaza con `carrito_de_borrador_fuera_de_confirmacion` (ruta nativa del
+   panel). Los carritos normales no tienen borrador y pasan.
+   - **Entorno sin la tabla de borradores** (000006+ sin aplicar, como `lpz_saas` hoy): no puede
+     existir un carrito de borrador, así que el paso 3 se omite (existencia de la tabla en caché
+     por proceso). Sin eso, este código rompería **todos** los pedidos de la tienda y el panel en
+     ese entorno. El paso 2 (inventario) no usa tablas propias y sigue activo.
+
+**Por qué la reserva nativa ve los datos correctos:** en REPEATABLE READ, la vista consistente de
+la transacción nace con su primera lectura **no bloqueante**. El cerco solo hace lecturas
+bloqueantes hasta el `FOR UPDATE` de `products`, así que la vista (la del cerco y la de
+`manageInventory`) nace después de obtener el bloqueo y ve el commit del pedido anterior. Por eso
+el cerco **debe ser el primer listener de `save.before`**, y una prueba lo afirma.
+
+**`save.after` (primer listener, antes de la atribución, los correos, la factura y el
+reindexado):** `UPDATE … SET order_id, estado = 'confirmado', token = NULL, iniciada = NULL WHERE
+id AND token = T AND estado = 'confirmando' AND order_id IS NULL`. Debe afectar exactamente 1
+fila; si no, lanza y el pedido se revierte.
+
+**Orden real verificado** (`artisan event:list`):
+
+- `save.before` = [`CercoCreacionPedido`];
+- `save.after` = [`EnlazarPedidoConBorrador`, `AtribuirPedidoCreado`, Admin Order mail, …].
+
+**Garantía, dicha exactamente (redacción corregida por Camilo, 2026-09-27):** serialización y
+revalidación de inventario durante la creación de pedidos, **con la semántica nativa de
+Bagisto**. Es efectiva donde Bagisto genera reservas (simples y variantes vendidas como línea
+simple). **No** introduce reservas para configurables ni promete «sin sobreventa» en sus
+variantes (limitación conocida, §39.4). No es consistencia global del inventario.
+
+**Riesgos residuales:** Shipment concurrente, ajustes directos de inventario y operaciones que no
+pasan por `OrderRepository`.
+
+### 39.4 Hallazgo crítico: Bagisto 2.4.9 no reserva las variantes de configurables
+
+**Verificado en el código y en `lpz_saas` (solo SELECT):**
+
+- `Configurable::prepareForCart` crea la fila hija **sin** `quantity`, y la columna vale 0 por
+  defecto;
+- `OrderItemResource` calcula el `qty_ordered` del hijo como `quantity × padre` = 0;
+- `manageInventory` reserva 0.
+
+**En producción:**
+
+- hijos en `cart_items`: todos con cantidad 0 salvo uno;
+- hijos en `order_items`: todos con `qty_ordered` 0;
+- `product_ordered_inventories`: 88 de 93 filas en 0.
+
+**Consecuencia:** para las variantes de configurables (todo el catálogo línea × color), un pedido
+no descuenta nada del vendible hasta el Shipment. Dos pedidos de 30 sobre 50 unidades se
+confirman los dos, **incluso en secuencia**, por la tienda, el panel o VentasAsesor.
+
+- El cerco D-54 serializa, pero no puede ver una reserva que no existe. La prueba «LIMITE» lo
+  caracteriza.
+- Con productos **simples**, la reserva funciona y la garantía concurrente queda demostrada con
+  procesos reales (§39.6).
+- **Corregirlo exige tocar Webkul o sustituir la reserva nativa**, lo que contradice el «no
+  reserva por sí mismo» de D-54.
+- **Decisión de Camilo (2026-09-27): LIMITACIÓN CONOCIDA, no se corrige.** Bagisto sigue siendo la
+  autoridad. El hueco entre pedido y Shipment se hace visible solo con la señal informativa de
+  §40. Traza definitiva en §40.1.
+
+### 39.5 Errores, DTO y estado de pago
+
+**`ConfirmacionVentaInvalidaException`:**
+
+- `borrador_no_confirmable` (`detalles.motivo`);
+- `confirmacion_en_proceso`, `confirmacion_obsoleta`;
+- `confirmacion_inconsistente` (con la reconciliación);
+- `cliente_no_confirmable`;
+- `carrito_vacio`, `carrito_inconsistente`;
+- `variante_no_vendible`;
+- `stock_insuficiente` (`detalles.fase` = `revalidacion` o `cerco`, más las variantes);
+- `entrega_invalida`, `pago_invalido`;
+- `totales_cambiaron` (`total_esperado`, `total_nuevo` y totales).
+
+Permiso, propietario e inexistente siguen usando `BorradorVentaInvalidoException`. El cerco lanza
+`PedidoRechazadoPorCercoException` (`stock_insuficiente`, `confirmacion_obsoleta`,
+`carrito_de_borrador_fuera_de_confirmacion`), que el servicio traduce.
+
+**`ConfirmacionVenta`:**
+
+- borrador, `order_id` e `increment_id`;
+- cliente;
+- total y moneda;
+- método de pago y entrega;
+- factura (id y estado);
+- `estadoPago`, derivado y sin persistir (§34.6 y §34.11): `pendiente`, `parcial`, `pagado` o
+  `revisar`, este último si hay una factura `paid` sin transacción, como la transferencia con la
+  configuración actual;
+- `saldo`;
+- `yaExistia`.
+
+Sin acciones de interfaz ni Eloquent.
+
+### 39.6 Pruebas
+
+- **Funcionales** (`tests/Feature/Fase03fConfirmacionVentaTest.php`): la matriz 03F-01 a 03F-36
+  y 03F-42 a 03F-46, más regresión de panel y tienda y la prueba LIMITE.
+- **Concurrencia real** (`tests/Concurrencia`, grupo `concurrencia`, fuera de las testsuites de
+  `phpunit.xml`): dos procesos PHP con su propia conexión y fixtures confirmados y borrados. Se
+  ejecuta con `vendor/bin/pest packages/ByLopez/VentasAsesor/tests/Concurrencia`. Casos:
+  - 03F-37: carrera, entrelazado forzado y global ByLopez contra nativo;
+  - 03F-38: orden inverso de variantes, sin deadlock;
+  - 03F-39: espera agotada, 1205 controlado;
+  - 03F-40: fencing;
+  - 03F-41: la recuperación espera y recibe `ya_existia`;
+  - 03F-34: el commit prematuro de una transacción exterior, demostrado.
+
+**Resultados (2026-09-27, código final, `lpz_saas_testing`):**
+
+| Suite | Resultado |
+|---|---|
+| 03F funcionales | 57/57 |
+| Concurrencia real | 8/8 en tres pasadas consecutivas |
+| VentasAsesor (Unit + Feature) | 634/634 |
+| CorteConfeccion | 384/384 |
+| Bagisto: `Admin/Sales`, `Shop/Checkout` y `Shop/Customers/OrdersTest` | 20 fallos y 136 aprobadas, **misma lista que la línea base previa a 03F** (correo al administrador sin dirección en testing, formato de moneda). Ninguno causado por el cerco |
+| Pint (archivos propios) | Pasa |
+
+**Defensas de la prueba** (no del producto):
+
+- `f03f_sinCommitPrematuro` abre tantos savepoints como reintentos tiene el repositorio. Sin él,
+  un pedido que falla dentro de `DatabaseTransactions` confirmaría la transacción de la prueba.
+- La suite de concurrencia se sincroniza con archivos de señal y no con `GET_LOCK`: en MariaDB
+  10.4 para Windows (`thread_handling = pool-of-threads`), un hilo del servidor bloqueado en
+  `GET_LOCK` retrasaba las conexiones nuevas y volvía intermitente la prueba.
+
+### 39.7 Otros hallazgos de la implementación
+
+- **Envío gratis y revalidación:**
+  - `saveShippingMethod` recrea las tarifas, pero el Cart del facade conserva en caché la tarifa
+    elegida anterior (cargada por un `collectTotals` previo);
+  - CartRule aplicaba el envío gratis sobre esa fila ya borrada y el total subía. Se corrige con
+    `Cart::refreshCart()` antes del `collectTotals` final;
+  - el flujo del panel no lo sufre porque carga la relación una sola vez.
+- **MariaDB 10.4 no tiene `RELEASE_ALL_LOCKS()`:** corrige lo dicho en §38.3 sobre la
+  alternativa `GET_LOCK` (descartada).
+- **Reintentos con datos personales:** cada rechazo del cerco pasa por los 3 reintentos nativos
+  y su `Log::error` con el pedido completo. Es deuda del core, conocida (§37.11).
+- **`orders.cart_id` sin índice:** la reconciliación cuenta pedidos por `cart_id` con un recorrido
+  completo. Es aceptable con el volumen actual, y no se toca una tabla del core.
+
+### 39.8 Pendiente antes de producción
+
+- aplicar las migraciones 000006, 000007 y 000008 en producción (autorización aparte). Sin
+  ellas, el cerco de inventario **sí** actúa en la tienda y el panel desde el despliegue del
+  código (cambio global aprobado en D-54), pero la confirmación ByLopez no funciona;
+- desplegar D-48 antes de usar la transferencia en Nueva Venta;
+- ~~decidir la reserva de configurables~~: decidido, limitación conocida (§39.4 y §40);
+- validar el valor del lease;
+- la cola asíncrona (fuera de 03F);
+- la interfaz Nueva Venta;
+- `CrearPedidoComercialService` (no implementado, por instrucción).
+
+---
+
+## 40. Inventario configurable (limitación conocida) y señal de ventas simultáneas (2026-09-27)
+
+**Implementación sin commit** (03F sigue pendiente de revisión final). Sin cambios en Webkul,
+Logistica, CorteConfeccion, tablas ni migraciones.
+
+### 40.1 Traza definitiva del configurable
+
+**Traza en `lpz_saas_testing`**, dentro de una transacción revertida, con stock 50 y 30 unidades
+por el camino nativo del panel (`OrderResource` + `OrderRepository`):
+
+| Paso | Configurable | Simple |
+|---|---|---|
+| `cart_items` | padre: el configurable, `quantity` 30; hijo: la variante, `quantity` **0** | la línea, `quantity` 30 |
+| `OrderResource` | padre: `qty_ordered` 30; hijo: `qty_ordered` **0** | `qty_ordered` 30 |
+| `order_items` | padre 30; hijo **0** | 30 |
+| `manageInventory` recibe | la variante con **0** | el producto con 30 |
+| Reserva | 0 | 30 |
+| Vendible (índice) | **50** | 20 |
+| Segundo pedido de 30 | **se crea** (60 vendidas sobre 50) | lo rechaza Bagisto (vendible 20) |
+
+- **Divergencia:** tres pasos del core que se encadenan:
+  - `Configurable::prepareForCart` no da cantidad al hijo, y la columna vale 0 por defecto;
+  - en `OrderItemResource`, el `?? 1` no cubre el 0;
+  - en `manageInventory`, `isset` acepta el 0.
+- **Es nativo:** esos archivos no tienen cambios locales y ByLopez no enlaza nada en ese camino.
+  El catálogo está bien configurado: `manage_stock` = 1, `back_orders` = 0 y la fuente del canal
+  activa.
+- **Variante real** (`lpz_saas`, solo SELECT): «Camiseta Piel Durazno Azul Rey Hombre» · M,
+  variante 137, stock 38, reserva 0.
+- **Decisión:** limitación conocida (Doc. 04). No se corrige.
+
+### 40.2 `VentasSimultaneasService` (solo lectura)
+
+- **Métodos:** `paraVariante(varianteId, actor, borradorId?)` y
+  `paraVariantes(varianteIds[], actor, borradorId?)`. El lote es para la matriz S/M/L/XL.
+- **Permiso:** exige `ventas_asesor.pedidos.create`. Ver nombres no cambia la propiedad ni la
+  autorización de los borradores ajenos.
+
+**Métricas** (`VentasSimultaneasVariante`):
+
+| Campo | Fuente | Regla |
+|---|---|---|
+| `stockBagisto` | `product_inventory_indices` del canal (el mismo que muestra el catálogo) | Intacto; nada se le resta |
+| `enEstaVenta` | Cart del borrador indicado | Nunca se cuenta en «otras» |
+| `enOtrasVentasSinConfirmar` | `bylopez_va_borradores_venta` (`activo`, `confirmando`) + `cart` + `cart_items` | Configurable: variante del hijo y cantidad del **padre**. Simple: la propia línea. Sin exclusión por antigüedad |
+| `confirmadosSinDespachar` | `order_items` + `orders` | `qty_ordered − qty_shipped − qty_refunded − qty_canceled` (el `qty_to_ship` nativo), en pedidos no `closed` ni `fraud` (como `Order::canShip`). Configurable: la cantidad y los despachos del **padre** (el Shipment y la cancelación actualizan el padre) |
+| `confirmadosSinDespacharNoDescontados` | Lo mismo, solo lo vendido **a través de un configurable** | Cantidad informativa de pedidos confirmados pendientes de despacho que la semántica nativa del configurable todavía no refleja en el stock vendible de Bagisto. **No** es stock, disponibilidad, reserva ni inventario comprometido. Lo vendido como simple ya está reservado en `stockBagisto` y **no** se vuelve a considerar |
+| `otrasVentas[]` (`OtraVentaSinConfirmar`) | Una entrada por borrador | Solo `asesorId`, `asesorNombre`, `cantidad`, `estado` y `ultimaActividad` |
+| `advertencia` | Comparación | `enEstaVenta + enOtras + noDescontados > stockBagisto` (y hay otras ventas o pendientes). Solo contexto |
+| `consultadoEn` | — | Hora de la consulta |
+
+**No existe** ningún campo `disponible`, `reservado` ni `comprometido`, y ningún número resultado
+de restar.
+
+**Advertencia conceptual para la interfaz:** «Hay otras ventas sobre esta variante. Si todas se
+concretan, el stock actual puede no alcanzar». No bloquea, no reduce ni reserva.
+
+**Última actividad:** el cambio más reciente entre `cart.updated_at` (lo guarda `collectTotals` en
+cada cambio) y `MAX(cart_items.updated_at)`. No `borradores.updated_at`, que no cambia al editar
+líneas. No es presencia en línea.
+
+**Solicitud comercial:** no se mezcla. La métrica simultánea es solo la cantidad materializada en
+el Cart; lo solicitado (D-39) podrá mostrarse aparte en el futuro, nunca sumado.
+
+### 40.3 Consultas y rendimiento
+
+- **Consultas:** un número fijo por lote, independiente del número de variantes (medido: el
+  mismo para 1 que para 4):
+  - stock;
+  - líneas de carritos (`UNION ALL` configurable/simple);
+  - actividad por carrito (`GROUP BY`);
+  - nombres de asesores;
+  - confirmados sin despachar (`UNION ALL` + `GROUP BY`).
+- **Índices usados:** `cart_items.product_id`, `parent_id` y `cart_id`; `borradores.cart_id`
+  (UNIQUE); `product_inventory_indices(product_id, channel_id)`.
+- **Deuda:** `order_items` **no tiene índice por `product_id`**, así que la consulta de pendientes
+  recorre `order_items` una vez por lote. Es despreciable con el volumen actual (unos 150 ítems en
+  producción). Un índice en esa tabla del core exigiría una decisión aparte.
+- **Tiempo real:** sin WebSockets (producción usa `BROADCAST_CONNECTION=log`). La interfaz futura
+  cargará al seleccionar, refrescará tras editar y hará polling por lotes cada 20–30 s mientras
+  la pantalla esté visible. El servicio ya está preparado; el polling no se implementa sin
+  interfaz.
+
+### 40.4 Alcance y límites
+
+- Uso interno de Nueva Venta y asesores. No se expone a la tienda, a clientes, a WhatsApp, a n8n
+  ni a la IA como stock oficial.
+- No escribe ninguna tabla (probado), no participa en `ConfirmarVentaService` ni en el cerco y no
+  bloquea.
+- En la interfaz, «confirmados sin despachar» debe presentarse distinguiendo:
+  - en configurables, cubre la limitación nativa (el stock Bagisto aún lo cuenta);
+  - en simples, el stock Bagisto ya lo descuenta. No se resta dos veces.
+- **Verificación multivariante (cierre):** un pedido con M = 30 y L = 20 del mismo configurable
+  genera un padre configurable por variante, con su hijo enlazado. Los pendientes pasan de 30/20
+  a 20/20 tras despachar 10 de M, y a 0/20 tras completar M, sin contaminación entre tallas.
+  Cancelar (en Bagisto la cancelación es por pedido) un pedido de M no afecta a uno de L. Dos
+  pedidos de M (10 + 15) suman 25, sin duplicar filas.
+- **Pruebas** (`Fase03fVentasSimultaneasTest`, 16 casos): stock intacto (38, sin 28), dos
+  asesores, esta venta frente a otras, borrador propio como otra venta, tallas separadas, lote sin
+  N+1, descartado/confirmado/confirmando/vacío, simple, pendiente con Shipment parcial y completo,
+  cancelación, advertencia sin −7, última actividad, sin exclusión por antigüedad, permiso y solo
+  lectura.

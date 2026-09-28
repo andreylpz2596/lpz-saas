@@ -42,4 +42,15 @@ return [
          */
         'metodos_permitidos' => ['cashondelivery', 'moneytransfer'],
     ],
+
+    'confirmacion' => [
+        /*
+         * D-55: segundos del lease de un intento de confirmacion (03F). Parametro TECNICO,
+         * no regla de negocio: debe superar lo que tarda una confirmacion real (revalidacion
+         * + pedido con SMTP y reindexado sincronos). Solo decide cuando otro intento puede
+         * RECUPERAR un `confirmando` abandonado; la seguridad no depende de el (el
+         * confirmation_token es el fencing token). Ajustable por entorno.
+         */
+        'lease_segundos' => (int) env('VENTASASESOR_CONFIRMACION_LEASE_SEGUNDOS', 300),
+    ],
 ];

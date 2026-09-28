@@ -1159,6 +1159,151 @@ solo `order_transactions.data`). Diseño en el Doc. 05 §35. **Sin migración ni
      `OrderRepository::updateOrderStatus($order)` **sin estado**, que calcula por cantidades (no
      se copia la regla «algún envío = completed» del controlador).
 
+## Propuestas pendientes de 03F (sin numerar) — **PENDIENTES DE DECISIÓN**
+
+**Estado:** ⏳ propuestas (2026-09-27, auditoría 03F, Doc. 05 §37.12). No se numeran: las decide Camilo Gaitán.
+
+1. **Garantía anti-sobreventa en la confirmación:** bloqueos con nombre por variante (sin tocar Webkul), o aceptar el riesgo nativo de Bagisto (no valida stock bajo bloqueo; la reserva es un leer-sumar-escribir sin bloqueo).
+2. **Cambio de precio o tarifa entre la vista y la confirmación:** `total_esperado` con conflicto `totales_cambiaron` (recomendado), o confirmar siempre con el total recalculado.
+3. **Transferencia antes de desplegar D-48:** desplegar D-48 primero, o allowlist solo con `cashondelivery` mientras tanto.
+4. **Umbral para tomar un `confirmando` viejo**, y si la toma es automática o explícita.
+5. **Carrito tras confirmar:** borrarlo como el panel (recomendado) o desactivarlo.
+6. **Operación:** cola asíncrona real para correos y reindexado.
+
+**Contradicción detectada:** el listener de atribución **no revierte** el pedido cuando falla (decisión de 02B1A, vigente); lo marca `fallo_tecnico`. 03F la respeta salvo que Camilo decida cambiarla.
+
+**Decisiones de Camilo Gaitán (2026-09-27, cierre técnico 03F; registradas sin numerar):**
+
+- **Atribución:** se mantiene 02B1A (un fallo no revierte el pedido: `fallo_tecnico` + incidencia).
+- **Propuesta 2, APROBADA:** `total_esperado`. Si el total recalculado por Bagisto (precio, grupo, descuentos, impuestos, tarifa o cualquier componente) no coincide, no se confirma: `totales_cambiaron` con el total nuevo.
+- **Propuesta 3, decidida:** 03F se desarrolla y prueba; la transferencia **no** se usa en producción en Nueva Venta hasta desplegar D-48.
+- **Propuesta 5, APROBADA:** el carrito se borra tras confirmar (borrador `confirmado`, `order_id`, `cart_id` en NULL por SET NULL).
+- **Propuesta 6:** fuera de 03F (deuda independiente de operación).
+
+**Propuestas técnicas A y B del cierre 03F (Doc. 05 §38):** aprobadas por Camilo Gaitán el
+2026-09-27 como **D-54** (A, stock) y **D-55** (B, recuperación). Implementadas en 03F (Doc. 05 §39).
+
+## D-54 · Protección concurrente de inventario — **APROBADA (implementada en 03F)**
+
+**Estado:** ✅ **APROBADA** (2026-09-27, Camilo Gaitán). Implementada en 03F (Doc. 05 §39.3).
+
+**Decisión:** «cerco de inventario» en `checkout.order.save.before`, para los pedidos creados
+mediante `OrderRepository` (tienda, panel y VentasAsesor):
+
+- identifica los productos con gestión de stock del pedido, los ordena por `product_id`
+  ascendente y bloquea sus filas `products` con `FOR UPDATE`;
+- revalida la disponibilidad con la semántica real de Bagisto (Σ stock de las fuentes activas del
+  canal − reservado del canal; `back_orders` donde Bagisto lo admite) y, si no alcanza, **falla
+  cerrado**;
+- **no** reserva inventario por sí mismo ni descuenta stock físico: Bagisto sigue creando la
+  reserva nativa.
+
+**Descripción corregida (Camilo Gaitán, 2026-09-27):** serialización y revalidación de
+inventario durante la creación de pedidos. **Mantiene la semántica nativa de Bagisto** y su
+protección es efectiva **donde Bagisto genera reservas**: productos simples y variantes vendidas
+como línea simple. **No** introduce reservas adicionales para configurables y **no** promete
+«sin sobreventa» para las variantes vendidas mediante un configurable. Se mantiene tal cual
+(no se retira ni se quitan todavía los bloqueos de los configurables).
+
+**Riesgos residuales conocidos (fuera de 03F):** Shipment concurrente, ajustes directos de
+inventario y operaciones externas que no pasen por `OrderRepository`.
+
+**Limitación conocida (aceptada, ver abajo):** en las variantes de configurables la reserva
+nativa es 0, así que el cerco no evita una venta doble ni concurrente ni en secuencia.
+
+## D-55 · Confirmación idempotente — **APROBADA (implementada en 03F)**
+
+**Estado:** ✅ **APROBADA** (2026-09-27, Camilo Gaitán). Implementada en 03F (Doc. 05 §39.2).
+
+**Decisión:**
+
+- el borrador recibe `confirmation_token` (identifica **un** intento de confirmación) y
+  `confirmacion_iniciada_en` (inicio y lease del intento), con la migración 000008;
+- `updated_at` **no** se usa como lease; la duración del lease es **configurable** (parámetro
+  técnico, no regla de negocio);
+- el tiempo solo decide cuándo otro intento puede intentar recuperar; la seguridad la da el token
+  como **fencing token**: un intento con un token que ya no es el vigente no puede crear ni
+  enlazar un pedido;
+- `external_reference` conserva su semántica (identidad de creación u origen del borrador). La
+  identidad idempotente del pedido sigue siendo `borrador_id`.
+
+## Reserva nativa de variantes de configurables — **DECIDIDA: LIMITACIÓN CONOCIDA (no se corrige)**
+
+**Estado:** ✅ **DECIDIDA** (2026-09-27, Camilo Gaitán; sin numerar). Auditoría quirúrgica en el
+Doc. 05 §39.4 y §40.1.
+
+**Decisión:** se acepta el comportamiento nativo de Bagisto 2.4.9 y **no se corrige**:
+
+- el hijo llega al pedido con `qty_ordered` 0 y su reserva nativa queda en 0;
+- el stock vendible no baja por el pedido; el físico baja con el Shipment.
+
+**Prohibido:** modificar Webkul, parchear `OrderItemResource` o `manageInventory`, escribir en
+`product_ordered_inventories`, crear una reserva o un stock comprometido propios, o restar
+cantidades al stock Bagisto. **Bagisto sigue siendo la autoridad de inventario.** El hueco
+entre pedido y Shipment se cubre solo con la señal informativa «confirmados sin despachar»
+(ver abajo).
+
+**Registro original del hallazgo** (se conserva). Las opciones 1 y 2 quedan **descartadas** por
+esta decisión.
+
+**Hecho verificado (código y `lpz_saas`, solo SELECT):**
+
+- `Configurable::prepareForCart` no da cantidad a la fila hija, así que la columna vale 0 por
+  defecto;
+- `OrderItemResource` calcula entonces `qty_ordered` del hijo = 0 × cantidad del padre = 0;
+- `OrderItemRepository::manageInventory` reserva esa cantidad, **0**.
+
+En producción, todos los hijos salvo uno tienen cantidad 0 en `cart_items` y `order_items`, y 88
+de las 93 filas de `product_ordered_inventories` están en 0.
+
+**Consecuencia:** para las variantes de configurables (todo el catálogo línea × color), un pedido
+no descuenta nada del vendible hasta el Shipment. Dos pedidos de 30 sobre 50 unidades se
+confirman los dos, incluso **en secuencia**, por la tienda, el panel o VentasAsesor. El cerco
+D-54 serializa, pero no puede ver una reserva que no existe. **Es preexistente, no lo causa 03F.**
+
+**Opciones (ninguna implementada):**
+
+1. corregirlo en Bagisto (Webkul), prohibido para este módulo;
+2. sustituir la reserva nativa desde VentasAsesor, por ejemplo con un `OrderItemRepository`
+   enlazado en el contenedor que use la cantidad del padre. Cambia la reserva global y contradice
+   el «no reserva por sí mismo» de D-54: exige decisión;
+3. aceptar el riesgo hasta una fase de inventario.
+
+**Exige además** revisar cancelación y Shipment, que hoy restan de una reserva que vale 0.
+
+**Corrección de la auditoría:** las «88 filas en 0» no bastan como prueba, porque el Shipment
+también devuelve la reserva a 0. La prueba es `order_items` (todo hijo de configurable tiene
+`qty_ordered` 0) y la traza controlada del Doc. 05 §40.1.
+
+## Señal comercial de ventas simultáneas — **DECIDIDA (implementada, sin commit)**
+
+**Estado:** ✅ **DECIDIDA** (2026-09-27, Camilo Gaitán; sin numerar). Implementada:
+`VentasSimultaneasService` (Doc. 05 §40).
+
+**Decisión:**
+
+- es una herramienta **informativa** para los asesores: no es una reserva, no modifica stock, no
+  bloquea, no participa en la confirmación y no crea tablas (todo se calcula a partir de datos
+  existentes);
+- métricas por variante:
+  - `stockBagisto` (intacto);
+  - «en esta venta»;
+  - «en otras ventas sin confirmar»: borradores `activo` y `confirmando`;
+  - «confirmados sin despachar»: `qty_to_ship` nativo, que cubre el hueco de los configurables;
+  - el detalle por asesor;
+- **nunca** existe un «disponible» propio: 50 − 30 no se publica como 20. La advertencia solo
+  compara;
+- **nombres visibles:** los asesores del módulo ven el nombre del asesor de otra venta y la
+  cantidad, nada más (ni cliente, teléfono, dirección, precio ni total). Ver el nombre **no**
+  da permiso para abrir, editar, reclamar ni confirmar el borrador ajeno;
+- **antigüedad:** **no** se excluyen borradores por un umbral. Se informa la última actividad
+  (el carrito o sus líneas; no `borradores.updated_at`) y la interfaz futura podrá atenuar los
+  antiguos;
+- **alcance:** solo Nueva Venta y asesores. No se expone a la tienda, a clientes, a WhatsApp, a
+  n8n ni a la IA sin una política explícita;
+- **tiempo real:** sin WebSockets. Carga al seleccionar, refresco tras editar y polling por lotes
+  cada 20–30 s mientras la pantalla esté visible (cuando exista la interfaz).
+
 ## Resumen
 
 | # | Decisión | Fase bloqueada | Recomendación técnica | Estado |
@@ -1217,6 +1362,8 @@ solo `order_transactions.data`). Diseño en el Doc. 05 §35. **Sin migración ni
 | D-51 | Comprobante de transferencia | Cobros | Comprobante ≠ pago; sin soporte nativo | ✅ **DECIDIDA 2026-09-27** como principio; mecanismo de archivo diferido |
 | D-52 | Principio de venta rápida de bodega | 03E, 03F, UI, cartera | Interfaz simple sobre servicios sobre Bagisto; confirmar ≠ registrar pago; tiempo comercial ≠ tiempo operativo (E-01 a E-10); navegación POS sobre categorías y atributos reales (P-01 a P-07) (Doc. 05 §33) | ✅ **DECIDIDA 2026-09-27** (requisito transversal; sin implementar) |
 | D-53 | Registro seguro de pagos: idempotencia y concurrencia | 03E / cobros | Tabla mínima con UNIQUE(mecanismo, clave), bloqueo pedido → factura, primitivas nativas (Doc. 05 §35–§36.4) | ✅ **DECIDIDA 2026-09-27** (arquitectura; sin migración; abono general FIFO/manual documentado como requisito futuro, Doc. 05 §36.4) |
+| D-54 | Protección concurrente de inventario | 03F | Cerco en `checkout.order.save.before`: `FOR UPDATE` de `products` en orden ascendente y revalidación con la semántica de Bagisto; no reserva (Doc. 05 §38.3, §39.3) | ✅ **APROBADA e IMPLEMENTADA 2026-09-27**; redactada de nuevo: serialización y revalidación con la semántica nativa, efectiva donde Bagisto reserva; en configurables, **limitación conocida aceptada** (sin corregir) |
+| D-55 | Confirmación idempotente | 03F | `confirmation_token` + `confirmacion_iniciada_en` (000008), lease configurable, fencing en el cerco y enlace condicionado (Doc. 05 §38.6, §39.2) | ✅ **APROBADA e IMPLEMENTADA 2026-09-27** (000008 solo en `lpz_saas_testing`) |
 
 ### Requisitos técnicos obligatorios (no son decisiones de negocio)
 

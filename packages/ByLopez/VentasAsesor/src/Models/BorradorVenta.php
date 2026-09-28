@@ -40,7 +40,14 @@ class BorradorVenta extends Model implements BorradorVentaContract
         'mecanismo_creacion' => MecanismoCreacion::class,
         'asignado_hasta' => 'datetime',
         'order_id' => 'integer',
+        'confirmacion_iniciada_en' => 'datetime',
     ];
+
+    /**
+     * 03F (D-55): `confirmation_token` y `confirmacion_iniciada_en` NO son asignables en
+     * masa. Solo los escribe ConfirmarVentaService con UPDATE condicionados por el token.
+     */
+    protected $hidden = ['confirmation_token'];
 
     public function carrito(): BelongsTo
     {

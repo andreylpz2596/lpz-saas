@@ -17,6 +17,7 @@ use ByLopez\VentasAsesor\Support\ContextoComercialDePeticion;
 use ByLopez\VentasAsesor\Support\ContextoPrecioComercial;
 use ByLopez\VentasAsesor\Support\CustomerRepositoryConContextoComercial;
 use ByLopez\VentasAsesor\Support\Telefono\NormalizadorTelefonoBasico;
+use ByLopez\VentasAsesor\Support\Venta\ConfirmacionEnCurso;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Webkul\Core\Http\Middleware\PreventRequestsDuringMaintenance;
@@ -45,6 +46,9 @@ class VentasAsesorServiceProvider extends ServiceProvider
         $this->app->scoped(ContextoComercialDePeticion::class);
 
         $this->app->scoped(ClasificadorOrigenPedido::class);
+
+        // 03F. Intento de confirmacion en curso (cart_id → borrador + token), mismo criterio.
+        $this->app->scoped(ConfirmacionEnCurso::class);
 
         /*
          * RT-03B. Contexto de precio comercial por peticion (scoped, nunca singleton) y

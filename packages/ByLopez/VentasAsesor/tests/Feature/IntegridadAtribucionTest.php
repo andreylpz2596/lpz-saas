@@ -384,9 +384,9 @@ test('22. ninguna migracion del modulo altera tablas del core', function () {
     $migraciones = glob(dirname(__DIR__, 2).'/src/Database/Migrations/*.php');
 
     // Tres de la Fase 02A/02A1, la cola de incidencias de la Fase 02B1A, el indice de
-    // telefonos de RT-04B1a, los borradores de venta de la Fase 03B y las solicitudes
-    // comerciales de la Fase 03C (D-39).
-    expect($migraciones)->toHaveCount(7);
+    // telefonos de RT-04B1a, los borradores de venta de la Fase 03B, las solicitudes
+    // comerciales de la Fase 03C (D-39) y el intento de confirmacion de la Fase 03F (D-55).
+    expect($migraciones)->toHaveCount(8);
 
     foreach ($migraciones as $archivo) {
         $contenido = file_get_contents($archivo);
