@@ -81,16 +81,29 @@ function f03fvs_despachar(Order $pedido, int $cantidad): void
 // ------------------------------------------------------------------ ventas sin confirmar
 
 test('1-2-11 configurable: stock Bagisto 38 y otra venta de 10 → stock 38 intacto, en otras 10; variante del hijo y cantidad del padre; sin "disponible"', function () {
-    $ajeno = f03fvs_borrador($this->otro, $this->cliente, [[$this->configurable, $this->m, 10]]);
+    // Reloj con "28" en fecha y hora: la asercion no puede depender del dia real.
+    $ahora = Carbon\Carbon::parse('2028-02-28 08:28:28');
+    Carbon\Carbon::setTestNow($ahora);
 
-    $s = $this->senal->paraVariante($this->m->id, $this->yo);
+    try {
+        f03fvs_1211($this, $ahora);
+    } finally {
+        Carbon\Carbon::setTestNow();
+    }
+});
+
+function f03fvs_1211($test, $ahora): void
+{
+    $ajeno = f03fvs_borrador($test->otro, $test->cliente, [[$test->configurable, $test->m, 10]]);
+
+    $s = $test->senal->paraVariante($test->m->id, $test->yo);
     $hijo = DB::table('cart_items')->where('cart_id', $ajeno->cart_id)->whereNotNull('parent_id')->sole();
 
     expect($s->stockBagisto)->toBe(38)
         ->and($s->enOtrasVentasSinConfirmar)->toBe(10)
         ->and($s->enEstaVenta)->toBe(0)
         ->and((int) $hijo->quantity)->toBe(0) // Bagisto guarda 0 en el hijo; la senal usa el padre
-        ->and((int) $hijo->product_id)->toBe($this->m->id)
+        ->and((int) $hijo->product_id)->toBe($test->m->id)
         ->and($s->advertencia)->toBeFalse();
 
     $campos = [...array_keys($s->toArray()), ...array_map(fn ($p) => $p->getName(), (new ReflectionClass(VentasSimultaneasVariante::class))->getProperties())];
@@ -99,8 +112,27 @@ test('1-2-11 configurable: stock Bagisto 38 y otra venta de 10 → stock 38 inta
         expect(strtolower($campo))->not->toContain('disponib')->and(strtolower($campo))->not->toContain('reserv');
     }
 
-    expect(json_encode($s->toArray()))->not->toContain('28');
-});
+    // Ninguna cifra (fuera de identificadores) es 38 - 10: no se expone un "disponible" derivado.
+    $cifras = [];
+    $datos = $s->toArray();
+    array_walk_recursive($datos, function ($v, $k) use (&$cifras) {
+        if (is_int($v) && ! str_ends_with((string) $k, '_id')) {
+            $cifras[$k][] = $v;
+        }
+    });
+    ksort($cifras);
+
+    expect($cifras)->toBe([
+        'cantidad' => [10],
+        'confirmados_sin_despachar' => [0],
+        'confirmados_sin_despachar_no_descontados' => [0],
+        'en_esta_venta' => [0],
+        'en_otras_ventas_sin_confirmar' => [10],
+        'stock_bagisto' => [38],
+    ])
+        ->and($datos['consultado_en'])->toBe($ahora->toIso8601String())
+        ->and($s->otrasVentas[0]->ultimaActividad?->toIso8601String())->toBe($ahora->toIso8601String());
+}
 
 test('3-18 dos asesores con la misma variante: nombre y cantidad; nunca cliente, telefono, precio ni total', function () {
     f03fvs_borrador($this->yo, $this->cliente, [[$this->configurable, $this->m, 12]]);

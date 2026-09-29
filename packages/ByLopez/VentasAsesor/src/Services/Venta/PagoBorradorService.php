@@ -35,12 +35,16 @@ class PagoBorradorService
         protected CarritoComercial $carritos,
     ) {}
 
-    public function vista(int $borradorId): VistaPagoBorrador
+    /**
+     * @param  list<MetodoPagoDisponible>|null  $ofrecidosYaResueltos  si el llamador ya resolvio los
+     *                                                                 metodos en esta operacion (Payment::getPaymentMethods() es caro), se reutilizan.
+     */
+    public function vista(int $borradorId, ?array $ofrecidosYaResueltos = null): VistaPagoBorrador
     {
         $vista = $this->borradores->obtener($borradorId);
         $carrito = $vista->cartId === null ? null : CartProxy::modelClass()::query()->with('payment')->find($vista->cartId);
 
-        $ofrecidos = $this->metodosOfrecidos($carrito);
+        $ofrecidos = $ofrecidosYaResueltos ?? $this->metodosOfrecidos($carrito);
         $seleccionado = null;
 
         if ($carrito?->payment) {
@@ -54,14 +58,29 @@ class PagoBorradorService
     /** Guarda el metodo en el Cart. Rechaza si no esta ofrecido: ni inventado ni fuera de la allowlist. */
     public function seleccionar(int $borradorId, string $metodo, Admin $actor): VistaPagoBorrador
     {
-        $metodo = trim($metodo);
+        $ofrecidos = $this->seleccionarSinVista($borradorId, $metodo, $actor);
 
-        [$borrador, $carrito] = $this->borradores->bloquearParaEditar($borradorId, $actor);
+        return $this->vista($borradorId, $ofrecidos);
+    }
+
+    /**
+     * Guarda el metodo y devuelve los ofrecidos, resueltos UNA sola vez en la operacion (sin
+     * cache entre operaciones ni clientes).
+     *
+     * @return list<MetodoPagoDisponible>
+     */
+    public function seleccionarSinVista(int $borradorId, string $metodo, Admin $actor): array
+    {
+        $metodo = trim($metodo);
+        $ofrecidos = [];
+
+        [, $carrito] = $this->borradores->bloquearParaEditar($borradorId, $actor);
         $customerId = (int) $carrito->customer_id;
         $this->carritos->exigirGrupoApto($customerId);
 
-        $this->carritos->operar($carrito, $customerId, function () use ($metodo) {
-            $disponibles = collect($this->ofrecidosConCartYaFijado())->pluck('codigo');
+        $this->carritos->operar($carrito, $customerId, function () use ($metodo, &$ofrecidos) {
+            $ofrecidos = $this->ofrecidosConCartYaFijado();
+            $disponibles = collect($ofrecidos)->pluck('codigo');
 
             if (! $disponibles->contains($metodo)) {
                 throw new PagoInvalido(
@@ -72,7 +91,7 @@ class PagoBorradorService
             Cart::savePaymentMethod(['method' => $metodo]);
         });
 
-        return $this->vista((int) $borrador->id);
+        return $ofrecidos;
     }
 
     /**

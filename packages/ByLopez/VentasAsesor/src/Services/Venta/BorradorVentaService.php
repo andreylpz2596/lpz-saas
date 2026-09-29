@@ -94,6 +94,14 @@ class BorradorVentaService
         }
     }
 
+    /** Borrador ya creado con esa referencia externa (idempotencia), o null. Solo lectura. */
+    public function existentePorReferencia(MecanismoCreacion $mecanismo, ?string $referenciaExterna): ?BorradorVenta
+    {
+        $referencia = $this->normalizarReferencia($referenciaExterna);
+
+        return $referencia === null ? null : $this->porReferencia($mecanismo, $referencia);
+    }
+
     public function obtener(int $borradorId): Vista
     {
         $borrador = BorradorVenta::query()->with('carrito.customer.group')->find($borradorId);

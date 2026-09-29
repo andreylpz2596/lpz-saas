@@ -4245,3 +4245,183 @@ el Cart; lo solicitado (D-39) podrá mostrarse aparte en el futuro, nunca sumado
   N+1, descartado/confirmado/confirmando/vacío, simple, pendiente con Shipment parcial y completo,
   cancelación, advertencia sin −7, última actividad, sin exclusión por antigüedad, permiso y solo
   lectura.
+
+---
+
+## 41. 03G-B: dominio de aplicación de «Nueva venta rápida» (2026-09-28)
+
+**Estado: IMPLEMENTADA, sin commit, sin interfaz.** Solo capa de aplicación en
+`packages/ByLopez/VentasAsesor/`. Sin migraciones, sin tablas, sin rutas, sin Blade/Vue.
+
+### 41.1 `NuevaVentaService` (orquestador)
+
+No duplica reglas: delega en `BorradorVentaService`, `CrearClienteComercialService`,
+`CatalogoVentaService`, `SolicitudBorradorService`, `LineasBorradorService`,
+`EntregaBorradorService`, `PagoBorradorService` y `ConfirmarVentaService`. No depende de
+Request/Route/Session/Blade/Vue. Operaciones: `iniciar`, `iniciarConClienteNuevo`,
+`aplicarTallas`, `entregaRapida`, `seleccionarPago`, `confirmar`, `estado`,
+`direccionPredeterminadaId`.
+
+- **Canales:** `tienda_fisica` y `whatsapp` (`ventasasesor.nueva_venta.canales`); explícito por
+  venta, sin «último usado». Otro canal → `canal_no_permitido` sin crear nada.
+- **Cliente:** se valida primero; sin cliente válido no se crea Cart. Cliente nuevo mínimo
+  (RT-04: grupo explícito, teléfono como identidad, email opcional) y borrador en una sola
+  transacción. Misma referencia externa → misma venta. Inactivo/suspendido puede tener borrador;
+  el estado lo explica (`cliente_no_confirmable`) y 03F bloquea la confirmación (P-09 intacta).
+- **Lote de tallas (`aplicarTallas`):** todo o nada, sin parciales automáticos. Transacción
+  exterior (las internas son savepoints); una talla fallida revierte todo y lanza
+  `lote_rechazado` con `varianteId` y causa. Orden por variante (solicitud ≠ carrito, D-39/I-13):
+  T=0 quitar línea y luego solicitud; sin solicitud, crearla y luego agregar; T>R subir solicitud
+  y luego carrito; T≤R fijar carrito y luego bajar solicitud. Las tallas omitidas no se tocan.
+- **Entrega rápida:** facturación + envío + método en un viaje. Facturación = dirección REAL
+  indicada o predeterminada del cliente (D-30); sin ninguna → `direccion_facturacion_requerida`
+  (`requiereDireccionFacturacion` en el estado). Nunca se usa la bodega como facturación.
+- **Reaplicación de entrega tras editar líneas:** se lee el método previo antes del lote; se
+  reaplica solo el mismo y solo si sigue disponible; si la tarifa cambió se acepta y el total la
+  refleja; si ya no es válido NO se elige otro y se marca `requiereRevisionEntrega`.
+- **Pago:** los métodos ofrecidos (`Payment::getPaymentMethods()`, ~650 ms) se resuelven una vez
+  por operación y solo si la operación toca el pago; sin caché entre solicitudes ni clientes.
+- **`EstadoNuevaVenta`:** se compone UNA vez al final de cada operación, sin matriz de catálogo.
+  Trae `motivosNoConfirmable` (informativo; la confirmación revalida todo).
+
+### 41.2 Catálogo
+
+`CatalogoVentaService` añade `accesosRapidos()` (CAMISETA CABALLERO, CAMISETAS DAMA, TOP Dama,
+CAMISETA NIÑO; resueltos por slug y luego nombre de categoría desde la config, nunca por id;
+ambiguo o inexistente falla cerrado), `coloresDeAcceso`, `buscarVariantePorSku` y `matriz`
+(`MatrizVariantes`: tallas por `sort_order`, SKU, stock del índice de Bagisto, precio RT-03 y señal
+de ventas simultáneas por lote; sin «disponible» calculado). Relaciones precargadas, sin N+1.
+
+### 41.3 Cambios en servicios existentes (aditivos)
+
+Métodos `*SinVista` en Solicitud/Líneas/Entrega/Pago (evitan armar una vista por primitiva);
+`PagoBorradorService::vista` acepta ofrecidos ya resueltos; `ClienteEncontrado` añade `activo`,
+`suspendido`, `grupoApto`; `BorradorVentaService::existentePorReferencia`. Comportamiento previo
+intacto.
+
+### 41.4 Medición (`lpz_saas_testing`, 4 variantes)
+
+| Operación | Consultas | Tiempo |
+|---|---|---|
+| Matriz (4 variantes) | 29 (antes `variantes()`: 34) | ~0,45 s |
+| Lote M6+L6, primitivas con vista (ingenuo, sin estado final) | 336 | ~1,8 s |
+| `aplicarTallas` M6+L6 (incluye el estado) | 337 | ~1,6 s |
+| Entrega rápida (recogida) | 284 | ~1,3 s |
+| Selección de pago (con métodos) | 188 | ~1,1 s |
+| Estado sin métodos de pago | 116 | ~0,4 s |
+
+El orquestador equivale al ingenuo más el estado, que se compone una vez. **Corregido en 03G-B1
+(§41.7):** `collectTotals()` NO es el costo dominante (14 % de las consultas en M6/L6).
+
+### 41.5 Pruebas
+
+`Fase03gbNuevaVentaTest`: 33 casos (lote, mutaciones 0→6/6→10/10→6/6→0/M6-L6→M3-L10/quitar/agregar,
+rollback por stock/variante ajena/cantidad, rollback completo con entrega elegida (03G-B1), RT-03,
+cliente, entrega, reaplicación, pago una vez, accesos, matriz, SKU, estado una vez).
+
+### 41.6 Límites y deudas
+
+- Sin controladores, rutas ni interfaz (03G-C). Sin polling.
+- Limitación nativa de configurables (Doc. 05 §40) sin cambios.
+- `Fase03fVentasSimultaneasTest` caso 1-2-11: corregido en 03G-B1 (§41.7.1).
+
+### 41.7 03G-B1: cierre técnico (2026-09-28)
+
+#### 41.7.1 Prueba 1-2-11 dependiente de la fecha
+
+- **Qué pretende:** la señal no expone un «disponible» derivado. Con stock 38 y otra venta de 10,
+  ninguna cifra debe ser 38 − 10 = 28.
+- **Causa del fallo:** comprobaba `json_encode(...)` sin «28», pero el JSON incluye
+  `consultado_en` y `ultima_actividad` en ISO-8601. Fallaba cualquier día 28 y cualquier hora o
+  minuto 28, y fallaría también si un `*_id` contuviera «28».
+- **Corrección:**
+  - Recorre los valores enteros que no son identificadores y exige exactamente
+    `{stock 38, en otras 10, cantidad 10, en esta 0, confirmados 0, no descontados 0}`, sin ningún 28.
+  - Reloj fijado en `2028-02-28 08:28:28` con `Carbon::setTestNow`, restaurado en `finally`.
+  - Comprueba además que las fechas del JSON son las del reloj fijado.
+- **Evidencia:** pasa con un reloj lleno de «28». Una mutación temporal del DTO
+  (`'saldo' => stock − otras`) hace fallar la prueba.
+
+#### 41.7.2 Traza de `aplicarTallas` (M6/L6, alta)
+
+**Orden de ejecución:**
+
+1. `objetivosValidados`: I-5 y cantidades, antes de tocar nada.
+2. `DB::transaction` externa.
+3. Por cada variante:
+   1. solicitud (`crearSinVista`);
+   2. `LineasBorradorService::agregarSinVista`: `DB::transaction` (savepoint), `bloquearParaEditar`
+      (FOR UPDATE del borrador y del carrito), `CatalogoVentaService::variante` (I-5, grupo, stock),
+      I-13, RT-03 `durante`, `Cart::resetShippingMethod`, `Cart::addProduct`
+      (`prepareForCart` → **stock** → escritura de `cart_items` → **`collectTotals`**).
+4. `reaplicarEntrega`.
+5. Estado.
+
+**Llamadas a `collectTotals()`:**
+
+- **Cantidad:** una por primitiva de carrito, es decir, 2 en M6/L6 y 3 en M8/L4 con entrega (2
+  `updateItems` + 1 al reaplicar el método).
+- **Origen:** las lanza **Bagisto dentro de** `addProduct` (Cart.php:314) y `updateItems`
+  (Cart.php:396). Ninguna es nuestra salvo `eliminarSinVista`, cuando quedan líneas, y la
+  reaplicación del método.
+- **Qué hace:**
+  - `validateItems` quita inactivos y vuelve a calcular el precio por grupo y cantidad
+    (`getFinalPrice($qty)`);
+  - aplica las reglas de CartRule (listener de `collect.totals.before`);
+  - calcula el impuesto de ítems y de envío;
+  - calcula los totales y guarda el `cart`.
+- **Stock:** no lo valida. El stock se valida antes de escribir, en `prepareForCart`
+  (AbstractType:806 y Configurable:396) y en `isItemHaveQuantity` (`updateItems`:373 y nuestra
+  comprobación previa).
+- **Dependencias:** la primitiva siguiente del mismo lote lee `cart_items.quantity`, solicitudes
+  e inventario, que no dependen de `collectTotals`.
+- **Transacciones y eventos:** Bagisto (Checkout, CartRule, Tax, Shipping, tipos de Product) no
+  abre transacciones: todo escribe dentro de nuestros savepoints en la misma conexión. El único
+  listener es CartRule, que solo escribe en la BD.
+
+#### 41.7.3 ¿Se pueden diferir los `collectTotals` intermedios? No, sin sustituir el core (conclusión B)
+
+- **Semántica:** diferirlos no reduciría la seguridad de stock y el último `collectTotals`
+  recalcula todo desde las líneas.
+- **Por qué no es posible:** no hay forma de omitirlos con la API de Bagisto, porque van
+  incrustados en `addProduct` y `updateItems`, sin parámetro ni evento para saltarlos. Solo
+  habría dos caminos:
+  - sustituir el singleton `cart` por una subclase, lo que cambia el Cart de toda la aplicación,
+    incluida la tienda;
+  - escribir `cart_items` sin `addProduct` ni `updateItems`: sería un segundo motor de carrito,
+    prohibido por §25, y perdería `prepareForCart` (precio, stock y opciones).
+
+  Los dos cambian la arquitectura aprobada.
+- **Beneficio máximo, medido:** el costo por llamada crece con las líneas del carrito (21, 25, 35
+  y 43 consultas). Diferirlas ahorraría 21 consultas con 2 tallas (6 %) y 81 con 4 (12 %).
+- **Decisión:** no se implementa. Queda como deuda aceptada.
+
+#### 41.7.4 Dónde está el costo real (consultas, M6/L6 = 333)
+
+| Capa | Consultas | % |
+|---|---|---|
+| `EstadoNuevaVenta` final | 116 | 35 |
+| `CatalogoVentaService::variante` dentro de cada `agregarSinVista` (21 por llamada) | 84 | 25 |
+| `addProduct` de Bagisto sin `collectTotals` | 48 | 14 |
+| `collectTotals` de Bagisto | 46 | 14 |
+| Bloqueos, RT-03, solicitudes y lecturas | 39 | 12 |
+
+**Escalado de `aplicarTallas` en alta** (producción tiene como máximo 4 variantes por configurable:
+73 con 4 y 4 con 2; no hay caso natural de 8):
+
+| Tallas | Consultas | `collectTotals` | Consultas dentro de `collectTotals` | Tiempo aproximado |
+|---|---|---|---|---|
+| 1 | 192 | 1 | 21 | ~0,8 s |
+| 2 | 333 | 2 | 46 | ~1,6 s |
+| 4 | 655 | 4 | 124 | ~3,4 s |
+
+- **Crecimiento:** unas 150 consultas por talla. El N+1 real es **nuestro**:
+  - el estado suma unas 35 por línea: `SolicitudBorradorService::listar` llama a
+    `CatalogoVentaService::variante` por solicitud y `aLinea` consulta el stock por línea;
+  - la revalidación de catálogo suma unas 42 por talla.
+- **Posible optimización (sin Bagisto):** un catálogo por lote en el listado de solicitudes y en
+  el lote. Toca primitivas de 03C/03D usadas por otros consumidores, así que **requiere su propia
+  fase** y no se hizo aquí.
+
+**Matriz:** 23, 25 y 28 consultas con 1, 2 y 4 variantes. Sin N+1 relevante. El tiempo crece unos
+110 ms por variante, por cálculo en PHP.

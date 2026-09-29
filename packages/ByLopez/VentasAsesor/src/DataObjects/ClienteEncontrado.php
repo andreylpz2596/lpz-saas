@@ -20,11 +20,19 @@ final class ClienteEncontrado
         public readonly ?int $grupoId,
         public readonly ?string $grupoNombre,
         public readonly string $via,
+        public readonly bool $activo = true,
+        public readonly bool $suspendido = false,
+        public readonly bool $grupoApto = false,
     ) {}
 
-    /** Espera el Customer con la relacion `group` ya cargada (sin N+1). */
-    public static function desde(Customer $cliente, string $via): self
+    /**
+     * Espera el Customer con la relacion `group` ya cargada (sin N+1). `grupoApto` = tiene grupo
+     * y no es el invitado (`$invitadoId`); es solo informativo: la regla la aplica el validador.
+     */
+    public static function desde(Customer $cliente, string $via, ?int $invitadoId = null): self
     {
+        $grupoId = $cliente->customer_group_id === null ? null : (int) $cliente->customer_group_id;
+
         return new self(
             (int) $cliente->id,
             (string) $cliente->first_name,
@@ -34,6 +42,9 @@ final class ClienteEncontrado
             $cliente->customer_group_id === null ? null : (int) $cliente->customer_group_id,
             $cliente->group?->name,
             $via,
+            (bool) $cliente->status,
+            (bool) $cliente->is_suspended,
+            $grupoId !== null && $grupoId > 0 && $invitadoId !== null && $grupoId !== $invitadoId,
         );
     }
 

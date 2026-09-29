@@ -43,6 +43,32 @@ return [
         'metodos_permitidos' => ['cashondelivery', 'moneytransfer'],
     ],
 
+    'nueva_venta' => [
+        /*
+         * 03G-B: canales con los que se puede iniciar una venta rapida (valores de CanalVenta).
+         * Cada venta recibe su canal de forma explicita: no se recuerda el ultimo usado.
+         */
+        'canales' => ['tienda_fisica', 'whatsapp'],
+
+        /*
+         * Codigos de los atributos de variante. La talla ordena por el sort_order de sus
+         * opciones en Bagisto.
+         */
+        'atributos' => ['color' => 'color', 'talla' => 'size'],
+
+        /*
+         * Accesos rapidos: lineas de producto del negocio. Se resuelven por SLUG (o, si no
+         * hay, por nombre) de la categoria, nunca por id: los ids no son contrato. Un acceso
+         * inexistente o ambiguo queda sin resolver y la UI lo muestra deshabilitado.
+         */
+        'accesos_rapidos' => [
+            ['clave' => 'camiseta_caballero', 'etiqueta' => 'Camiseta caballero', 'slugs' => ['camiseta-caballero'], 'nombres' => ['CAMISETA CABALLERO']],
+            ['clave' => 'camiseta_dama', 'etiqueta' => 'Camiseta dama', 'slugs' => ['camisetas-dama'], 'nombres' => ['CAMISETAS DAMA']],
+            ['clave' => 'top_dama', 'etiqueta' => 'Top dama', 'slugs' => ['top-dama'], 'nombres' => ['TOP Dama']],
+            ['clave' => 'camiseta_nino', 'etiqueta' => 'Camiseta niño', 'slugs' => ['camiseta-nino'], 'nombres' => ['CAMISETA NIÑO']],
+        ],
+    ],
+
     'confirmacion' => [
         /*
          * D-55: segundos del lease de un intento de confirmacion (03F). Parametro TECNICO,

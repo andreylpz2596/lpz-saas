@@ -58,6 +58,14 @@ class SolicitudBorradorService
     /** Registra cuanto quiere el cliente de una variante. No agrega nada al carrito. */
     public function crear(int $borradorId, int $productoId, int $varianteId, mixed $cantidad, Admin $actor): VistaSolicitudesBorrador
     {
+        $this->crearSinVista($borradorId, $productoId, $varianteId, $cantidad, $actor);
+
+        return $this->listar($borradorId);
+    }
+
+    /** Misma operacion que crear() sin reconstruir la vista (uso por lotes, 03G-B). */
+    public function crearSinVista(int $borradorId, int $productoId, int $varianteId, mixed $cantidad, Admin $actor): void
+    {
         $cantidad = CantidadVenta::normalizar($cantidad);
 
         try {
@@ -82,8 +90,6 @@ class SolicitudBorradorService
         } catch (UniqueConstraintViolationException) {
             throw new SolicitudInvalida(SolicitudInvalida::YA_EXISTE);
         }
-
-        return $this->listar($borradorId);
     }
 
     /**
@@ -91,6 +97,13 @@ class SolicitudBorradorService
      * puede quedar por debajo de lo que ya esta en el carrito (primero se retira de alli).
      */
     public function cambiarCantidad(int $borradorId, int $solicitudId, mixed $cantidad, Admin $actor): VistaSolicitudesBorrador
+    {
+        $this->cambiarCantidadSinVista($borradorId, $solicitudId, $cantidad, $actor);
+
+        return $this->listar($borradorId);
+    }
+
+    public function cambiarCantidadSinVista(int $borradorId, int $solicitudId, mixed $cantidad, Admin $actor): void
     {
         $cantidad = CantidadVenta::normalizar($cantidad);
 
@@ -112,12 +125,17 @@ class SolicitudBorradorService
 
             $solicitud->update(['cantidad_solicitada' => $cantidad]);
         });
-
-        return $this->listar($borradorId);
     }
 
     /** Quita la solicitud. Si el carrito tiene unidades de esa variante, primero se retiran. */
     public function eliminar(int $borradorId, int $solicitudId, Admin $actor): VistaSolicitudesBorrador
+    {
+        $this->eliminarSinVista($borradorId, $solicitudId, $actor);
+
+        return $this->listar($borradorId);
+    }
+
+    public function eliminarSinVista(int $borradorId, int $solicitudId, Admin $actor): void
     {
         DB::transaction(function () use ($borradorId, $solicitudId, $actor) {
             [$borrador, $carrito] = $this->borradores->bloquearParaEditar($borradorId, $actor);
@@ -129,8 +147,12 @@ class SolicitudBorradorService
 
             $solicitud->delete();
         });
+    }
 
-        return $this->listar($borradorId);
+    /** Solicitud de una variante en el borrador, o null. Lectura simple para el orquestador. */
+    public function solicitudDeVariante(int $borradorId, int $varianteId): ?SolicitudBorrador
+    {
+        return SolicitudBorrador::query()->where('borrador_id', $borradorId)->where('variante_id', $varianteId)->first();
     }
 
     protected function solicitudDelBorrador(int $borradorId, int $solicitudId): SolicitudBorrador

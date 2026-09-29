@@ -119,13 +119,20 @@ class BuscarClienteComercialService
         return $consulta->orderBy('first_name')->orderBy('last_name')
             ->limit(max(1, min($limite, self::LIMITE_MAXIMO)))
             ->get()
-            ->map(fn (Customer $c) => ClienteEncontrado::desde($c, 'nombre'))
+            ->map(fn (Customer $c) => ClienteEncontrado::desde($c, 'nombre', $this->invitadoId()))
             ->all();
     }
 
     protected function encontrado(int $customerId, string $via): ClienteEncontrado
     {
-        return ClienteEncontrado::desde(CustomerProxy::modelClass()::query()->with('group')->findOrFail($customerId), $via);
+        return ClienteEncontrado::desde(CustomerProxy::modelClass()::query()->with('group')->findOrFail($customerId), $via, $this->invitadoId());
+    }
+
+    private function invitadoId(): ?int
+    {
+        $invitado = core()->getGuestCustomerGroup();
+
+        return $invitado ? (int) $invitado->id : null;
     }
 
     private function tieneTexto(?string $valor): bool

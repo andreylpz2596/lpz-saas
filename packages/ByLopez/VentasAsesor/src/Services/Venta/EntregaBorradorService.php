@@ -101,6 +101,14 @@ class EntregaBorradorService
      */
     public function establecerFacturacion(int $borradorId, OrigenDireccion $origen, Admin $actor): VistaEntregaBorrador
     {
+        $this->establecerFacturacionSinVista($borradorId, $origen, $actor);
+
+        return $this->vista($borradorId);
+    }
+
+    /** Misma operacion sin reconstruir la vista (uso por lotes, 03G-B). */
+    public function establecerFacturacionSinVista(int $borradorId, OrigenDireccion $origen, Admin $actor): void
+    {
         if (! in_array($origen->tipo, [OrigenDireccion::GUARDADA, OrigenDireccion::PUNTUAL], true)) {
             throw new EntregaInvalida(EntregaInvalida::ORIGEN_NO_VALIDO);
         }
@@ -112,12 +120,17 @@ class EntregaBorradorService
             Cart::saveAddresses(['billing' => $datos]);
             $this->recalcular();
         });
-
-        return $this->vista($borradorId);
     }
 
     /** Envio: igual a la facturacion, guardada, puntual o punto de recogida (bodega). */
     public function establecerEnvio(int $borradorId, OrigenDireccion $origen, Admin $actor): VistaEntregaBorrador
+    {
+        $this->establecerEnvioSinVista($borradorId, $origen, $actor);
+
+        return $this->vista($borradorId);
+    }
+
+    public function establecerEnvioSinVista(int $borradorId, OrigenDireccion $origen, Admin $actor): void
     {
         $this->enBorrador($borradorId, $actor, function (CartContract $carrito) use ($origen) {
             $facturacion = $carrito->billing_address ?? throw new EntregaInvalida(EntregaInvalida::FACTURACION_REQUERIDA);
@@ -140,23 +153,33 @@ class EntregaBorradorService
 
             $this->recalcular();
         });
-
-        return $this->vista($borradorId);
     }
 
     /** Vuelve a pedir a Bagisto las tarifas (p. ej. tras cambiar lineas). */
     public function calcularMetodos(int $borradorId, Admin $actor): VistaEntregaBorrador
     {
-        $this->enBorrador($borradorId, $actor, function (CartContract $carrito) {
-            $this->exigirDestino($carrito);
-            Shipping::collectRates();
-        });
+        $this->calcularMetodosSinVista($borradorId, $actor);
 
         return $this->vista($borradorId);
     }
 
+    public function calcularMetodosSinVista(int $borradorId, Admin $actor): void
+    {
+        $this->enBorrador($borradorId, $actor, function (CartContract $carrito) {
+            $this->exigirDestino($carrito);
+            Shipping::collectRates();
+        });
+    }
+
     /** Elige un metodo entre las tarifas vigentes de Bagisto para este carrito y destino. */
     public function seleccionarMetodo(int $borradorId, string $metodo, Admin $actor): VistaEntregaBorrador
+    {
+        $this->seleccionarMetodoSinVista($borradorId, $metodo, $actor);
+
+        return $this->vista($borradorId);
+    }
+
+    public function seleccionarMetodoSinVista(int $borradorId, string $metodo, Admin $actor): void
     {
         $this->enBorrador($borradorId, $actor, function (CartContract $carrito) use ($metodo) {
             $this->exigirDestino($carrito);
@@ -168,8 +191,6 @@ class EntregaBorradorService
 
             Cart::collectTotals();
         });
-
-        return $this->vista($borradorId);
     }
 
     /**

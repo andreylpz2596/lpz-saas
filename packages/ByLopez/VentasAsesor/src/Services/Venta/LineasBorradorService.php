@@ -81,6 +81,14 @@ class LineasBorradorService
      */
     public function agregar(int $borradorId, int $productoId, int $varianteId, mixed $cantidad, Admin $actor): VistaLineasBorrador
     {
+        $this->agregarSinVista($borradorId, $productoId, $varianteId, $cantidad, $actor);
+
+        return $this->listar($borradorId);
+    }
+
+    /** Misma operacion que agregar() sin reconstruir la vista (uso por lotes, 03G-B). */
+    public function agregarSinVista(int $borradorId, int $productoId, int $varianteId, mixed $cantidad, Admin $actor): void
+    {
         $cantidad = CantidadVenta::normalizar($cantidad);
 
         DB::transaction(function () use ($borradorId, $productoId, $varianteId, $cantidad, $actor) {
@@ -122,12 +130,17 @@ class LineasBorradorService
                 }
             });
         });
-
-        return $this->listar($borradorId);
     }
 
     /** Fija la cantidad de una linea. Bagisto revalida stock y reprecia (precio por cantidad). */
     public function cambiarCantidad(int $borradorId, int $cartItemId, mixed $cantidad, Admin $actor): VistaLineasBorrador
+    {
+        $this->cambiarCantidadSinVista($borradorId, $cartItemId, $cantidad, $actor);
+
+        return $this->listar($borradorId);
+    }
+
+    public function cambiarCantidadSinVista(int $borradorId, int $cartItemId, mixed $cantidad, Admin $actor): void
     {
         $cantidad = CantidadVenta::normalizar($cantidad);
 
@@ -164,8 +177,6 @@ class LineasBorradorService
                 }
             });
         });
-
-        return $this->listar($borradorId);
     }
 
     /**
@@ -173,6 +184,13 @@ class LineasBorradorService
      * carrito queda vacio y vivo con totales a cero; si no, Bagisto recalcula el resto.
      */
     public function eliminar(int $borradorId, int $cartItemId, Admin $actor): VistaLineasBorrador
+    {
+        $this->eliminarSinVista($borradorId, $cartItemId, $actor);
+
+        return $this->listar($borradorId);
+    }
+
+    public function eliminarSinVista(int $borradorId, int $cartItemId, Admin $actor): void
     {
         DB::transaction(function () use ($borradorId, $cartItemId, $actor) {
             [, $carrito] = $this->borradores->bloquearParaEditar($borradorId, $actor);
@@ -204,8 +222,25 @@ class LineasBorradorService
                 Cart::collectTotals();
             });
         });
+    }
 
-        return $this->listar($borradorId);
+    /** Id de la linea de primer nivel que contiene esa variante en el carrito, o null. */
+    public function lineaDeVariante(?int $cartId, int $varianteId): ?int
+    {
+        if ($cartId === null) {
+            return null;
+        }
+
+        $id = CartItemProxy::modelClass()::query()
+            ->where('cart_id', $cartId)
+            ->whereNull('parent_id')
+            ->where(fn ($q) => $q
+                ->where(fn ($simple) => $simple->where('product_id', $varianteId)->where('type', '!=', 'configurable'))
+                ->orWhereHas('children', fn ($hijo) => $hijo->where('product_id', $varianteId)))
+            ->orderBy('id')
+            ->value('id');
+
+        return $id === null ? null : (int) $id;
     }
 
     /** El Cart de Bagisto apunta al carrito del borrador solo durante la operacion, en RT-03. */

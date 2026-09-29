@@ -1304,6 +1304,10 @@ también devuelve la reserva a 0. La prueba es `order_items` (todo hijo de confi
 - **tiempo real:** sin WebSockets. Carga al seleccionar, refresco tras editar y polling por lotes
   cada 20–30 s mientras la pantalla esté visible (cuando exista la interfaz).
 
+## 03G-B · Nueva venta rápida: decisiones de dominio — **APROBADAS (implementadas, sin commit)**
+
+Camilo aprobó (2026-09-28): facturación de recogida = dirección REAL del cliente, sin dirección se pide una mínima real y no se usa la bodega (D-30); accesos rápidos por config (slug/nombre, sin ids); canales `tienda_fisica` y `whatsapp`, explícitos por venta; lote todo o nada sin parciales; solicitud ≠ carrito (D-39/I-13); tras editar líneas se reaplica el mismo método de entrega solo si sigue disponible (nunca otro; si no, revisión); pago resuelto una vez por operación sin caché; cliente inactivo/suspendido con borrador y confirmación bloqueada por 03F (P-09 intacta). Detalle: Doc. 05 §41.
+
 ## Resumen
 
 | # | Decisión | Fase bloqueada | Recomendación técnica | Estado |
