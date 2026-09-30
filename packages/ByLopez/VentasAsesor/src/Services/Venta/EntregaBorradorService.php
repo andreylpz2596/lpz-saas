@@ -7,6 +7,7 @@ use ByLopez\VentasAsesor\DataObjects\DireccionBorrador;
 use ByLopez\VentasAsesor\DataObjects\MetodoEntregaDisponible;
 use ByLopez\VentasAsesor\DataObjects\OrigenDireccion;
 use ByLopez\VentasAsesor\DataObjects\VistaEntregaBorrador;
+use ByLopez\VentasAsesor\DataObjects\VistaLineasBorrador;
 use ByLopez\VentasAsesor\Exceptions\EntregaBorradorInvalidaException as EntregaInvalida;
 use ByLopez\VentasAsesor\Support\Clientes\ValidadorDireccionComercial;
 use ByLopez\VentasAsesor\Support\Venta\CarritoComercial;
@@ -53,9 +54,11 @@ class EntregaBorradorService
         protected PuntosRecogida $puntosRecogida,
     ) {}
 
-    public function vista(int $borradorId): VistaEntregaBorrador
+    /** $lineas: las del mismo borrador ya leidas en esta operacion (03G-B2); evita releerlas. */
+    public function vista(int $borradorId, ?VistaLineasBorrador $lineas = null): VistaEntregaBorrador
     {
-        $vista = $this->borradores->obtener($borradorId);
+        $lineas = $lineas !== null && $lineas->borrador->id === $borradorId ? $lineas : null;
+        $vista = $lineas?->borrador ?? $this->borradores->obtener($borradorId);
         $carrito = $vista->cartId === null ? null
             : CartProxy::modelClass()::query()->with(['billing_address', 'shipping_address', 'shipping_rates', 'items.product'])->find($vista->cartId);
 
@@ -74,7 +77,7 @@ class EntregaBorradorService
 
         $avisos = [];
 
-        if ($this->lineasSinStock($borradorId) !== []) {
+        if ($this->lineasSinStock($borradorId, $lineas) !== []) {
             $avisos[] = VistaEntregaBorrador::AVISO_STOCK_INSUFICIENTE;
         }
 
@@ -329,11 +332,11 @@ class EntregaBorradorService
     }
 
     /** @return list<array{cart_item_id: int, variante_id: int, sku: string, cantidad: int, stock_vendible: int}> */
-    private function lineasSinStock(int $borradorId): array
+    private function lineasSinStock(int $borradorId, ?VistaLineasBorrador $lineas = null): array
     {
         $afectadas = [];
 
-        foreach ($this->lineas->listar($borradorId)->lineas as $linea) {
+        foreach (($lineas ?? $this->lineas->listar($borradorId))->lineas as $linea) {
             if ($linea->abastecimiento->faltanteInmediato > 0) {
                 $afectadas[] = [
                     'cart_item_id' => $linea->cartItemId,

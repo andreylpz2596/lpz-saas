@@ -1,7 +1,9 @@
 <?php
 
+use ByLopez\VentasAsesor\DataObjects\CeldaMatriz;
 use ByLopez\VentasAsesor\DataObjects\DatosClienteComercial;
 use ByLopez\VentasAsesor\DataObjects\EstadoNuevaVenta;
+use ByLopez\VentasAsesor\DataObjects\MatrizVariantes;
 use ByLopez\VentasAsesor\DataObjects\OrigenDireccion;
 use ByLopez\VentasAsesor\Enums\MecanismoCreacion;
 use ByLopez\VentasAsesor\Exceptions\BorradorVentaInvalidoException as BorradorInvalido;
@@ -13,8 +15,12 @@ use ByLopez\VentasAsesor\Models\BorradorVenta;
 use ByLopez\VentasAsesor\Models\SolicitudBorrador;
 use ByLopez\VentasAsesor\Services\Clientes\TelefonosClienteService;
 use ByLopez\VentasAsesor\Services\Venta\CatalogoVentaService;
+use ByLopez\VentasAsesor\Services\Venta\EntregaBorradorService;
+use ByLopez\VentasAsesor\Services\Venta\LineasBorradorService;
 use ByLopez\VentasAsesor\Services\Venta\NuevaVentaService;
 use ByLopez\VentasAsesor\Services\Venta\PagoBorradorService;
+use ByLopez\VentasAsesor\Services\Venta\SolicitudBorradorService;
+use ByLopez\VentasAsesor\Support\Venta\LoteCatalogo;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Mail;
@@ -572,6 +578,55 @@ test('matriz: la senal de ventas simultaneas llega por lote y no cambia el stock
         ->and(f03gb_stockTotal($this))->toBe($stock);
 });
 
+test('03G-B2 equivalencia: matriz con LoteCatalogo es IDENTICA (sin contar "consultado_en") a construirla variante por variante sin lote', function () {
+    f03b_stock($this->m, 7);
+    f03b_descuentoDeGrupo($this->m, $this->grupo, 10, $this->configurable);
+    $cat = app(CatalogoVentaService::class);
+
+    $conLote = $cat->matriz($this->configurable->id, $this->cliente->id, $this->asesor)->toArray();
+
+    // Misma variante, en el mismo orden, construida SIN LoteCatalogo (variante() en vez de varianteEnLote()).
+    $porOrden = collect($conLote['celdas'])->keyBy(fn ($c) => $c['variante']['productId']);
+    $sinLote = (new MatrizVariantes(
+        $this->configurable->id, $this->configurable->type, $this->configurable->sku, $this->configurable->name,
+        collect($conLote['colores'])->all(),
+        $porOrden->map(fn ($c, $varianteId) => new CeldaMatriz(
+            $cat->variante($this->configurable->id, $varianteId, $this->cliente->id),
+            $c['orden_talla'],
+            null,
+        ))->values()->all(),
+        1,
+    ))->toArray();
+
+    $limpiar = function (array $m) {
+        foreach ($m['celdas'] as &$c) {
+            unset($c['senal']);
+        }
+
+        return $m;
+    };
+
+    expect($limpiar($conLote))->toEqual($limpiar($sinLote));
+});
+
+test('03G-B2 sin N+1: la matriz memoriza traducciones en lote (mismo numero de consultas, menos tiempo con 4+ variantes)', function () {
+    $cuatro = f03b_configurable(10000.0);
+    foreach ($cuatro->variants()->get() as $v) {
+        f03b_stock($v, 20);
+    }
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $t = microtime(true);
+    app(CatalogoVentaService::class)->matriz($cuatro->id, $this->cliente->id, $this->asesor);
+    $ms = (microtime(true) - $t) * 1000;
+    $consultas = count(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    expect($consultas)->toBeLessThanOrEqual(35)
+        ->and($ms)->toBeLessThan(700.0);
+});
+
 test('buscar variante por SKU', function () {
     $v = app(CatalogoVentaService::class)->buscarVariantePorSku($this->m->sku, $this->cliente->id);
 
@@ -600,4 +655,119 @@ test('sin N+1: la matriz usa relaciones precargadas (consultas acotadas y establ
 
     expect($pequeno)->toBeLessThanOrEqual(35)
         ->and(abs($nGrande - $pequeno))->toBeLessThanOrEqual(3);
+});
+
+/* ---------------------------------------------------------------- 03G-B2: lote de catalogo */
+
+/** Borrador variado: tallas con precio de grupo, solicitud por encima del carrito, simple y variante desactivada. */
+function f03gb2_borradorVariado($t): int
+{
+    f03b_descuentoDeGrupo($t->m, $t->grupo, 20, $t->configurable);
+    $simple = f03f_simple(7000.0);
+    $tercera = $t->variantes->pluck('id')->diff([$t->m->id, $t->l->id])->first();
+    $b = f03gb_iniciar($t)->borrador->id;
+
+    $t->nv->aplicarTallas($b, $t->configurable->id, [$t->m->id => 6, $t->l->id => 6, $tercera => 3], $t->asesor);
+    $t->nv->aplicarTallas($b, $simple->id, [$simple->id => 2], $t->asesor);
+    app(SolicitudBorradorService::class)
+        ->cambiarCantidad($b, (int) SolicitudBorrador::query()->where('borrador_id', $b)->where('variante_id', $t->l->id)->value('id'), 9, $t->asesor);
+    $t->nv->entregaRapida($b, $t->asesor, OrigenDireccion::puntoRecogida(), 'recogida_bodega', OrigenDireccion::puntual(f03f_direccion()));
+
+    DB::table('product_attribute_values')->where('product_id', $tercera)
+        ->where('attribute_id', DB::table('attributes')->where('code', 'status')->value('id'))->update(['boolean_value' => 0]);
+
+    return $b;
+}
+
+function f03gb2_vistas(int $b, bool $enLote): array
+{
+    $lote = $enLote ? new LoteCatalogo : null;
+    $lineas = app(LineasBorradorService::class)->listar($b, $lote);
+
+    return [
+        'lineas' => $lineas,
+        'solicitudes' => app(SolicitudBorradorService::class)->listar($b, $lote, $enLote ? $lineas->borrador : null),
+        'entrega' => app(EntregaBorradorService::class)->vista($b, $enLote ? $lineas : null),
+        'pago' => app(PagoBorradorService::class)->vista($b, [], $enLote ? $lineas->borrador : null),
+    ];
+}
+
+test('03G-B2 equivalencia: lineas, solicitudes, entrega y pago en lote son IDENTICOS a la lectura normal', function () {
+    $b = f03gb2_borradorVariado($this);
+
+    $normal = f03gb2_vistas($b, false);
+    $enLote = f03gb2_vistas($b, true);
+
+    expect($enLote)->toEqual($normal)
+        ->and($normal['solicitudes']->solicitudes)->toHaveCount(4)
+        ->and(collect($normal['solicitudes']->solicitudes)->where('vendible', false))->toHaveCount(1)
+        ->and(collect($normal['solicitudes']->solicitudes)->firstWhere('varianteId', $this->m->id)->precioUnitarioReferencia)->toBe(8000.0)
+        ->and($normal['entrega']->metodoSeleccionado?->codigo)->toBe('recogida_bodega');
+});
+
+test('03G-B2 equivalencia: cliente con grupo no apto → misma vista en lote (sin precio) que sin lote', function () {
+    $b = f03gb2_borradorVariado($this);
+    $this->cliente->update(['customer_group_id' => DB::table('customer_groups')->where('code', 'guest')->value('id')]);
+
+    expect(f03gb2_vistas($b, true))->toEqual(f03gb2_vistas($b, false))
+        ->and(collect(f03gb2_vistas($b, true)['solicitudes']->solicitudes)->pluck('precioUnitarioReferencia')->filter()->all())->toBe([]);
+});
+
+test('03G-B2 equivalencia: varianteEnLote da la misma variante y los mismos errores que variante()', function () {
+    f03b_descuentoDeGrupo($this->m, $this->grupo, 20, $this->configurable);
+    $cat = app(CatalogoVentaService::class);
+    $lote = new LoteCatalogo;
+    $p = $this->configurable->id;
+    $c = $this->cliente->id;
+
+    foreach ($this->variantes as $v) {
+        foreach ([1, 7] as $cantidad) {
+            expect($cat->varianteEnLote($lote, $p, $v->id, $c, $cantidad))->toEqual($cat->variante($p, $v->id, $c, $cantidad));
+        }
+    }
+
+    $ajena = f03b_configurable(9000.0)->variants()->first();
+    $invitado = f03b_cliente();
+    $invitado->update(['customer_group_id' => DB::table('customer_groups')->where('code', 'guest')->value('id')]);
+    $codigo = fn (callable $f) => rescue($f, fn ($e) => $e::class.':'.($e->codigo ?? ''), false);
+
+    foreach ([
+        [$p, $ajena->id, $c, 1], [$p, 99_999_999, $c, 1], [$this->m->id, $this->m->id, $c, 1],
+        [99_999_999, $this->m->id, $c, 1], [$p, $this->m->id, $c, 0], [$p, $this->m->id, $invitado->id, 1],
+    ] as [$producto, $variante, $cliente, $cantidad]) {
+        $esperado = $codigo(fn () => $cat->variante($producto, $variante, $cliente, $cantidad));
+
+        expect($esperado)->toBeString()
+            ->and($codigo(fn () => $cat->varianteEnLote($lote, $producto, $variante, $cliente, $cantidad)))->toBe($esperado);
+    }
+});
+
+test('03G-B2 sin N+1 propio: el estado y el lote crecen poco por talla y collectTotals sigue siendo uno por primitiva', function () {
+    $contar = function (callable $f) {
+        $totales = 0;
+        Event::listen('checkout.cart.collect.totals.before', function () use (&$totales) {
+            $totales++;
+        });
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $f();
+        $n = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return [$n, $totales];
+    };
+    $cuatro = $this->variantes->take(4)->pluck('id')->all();
+
+    $b1 = f03gb_iniciar($this)->borrador->id;
+    [$lote1, $ct1] = $contar(fn () => $this->nv->aplicarTallas($b1, $this->configurable->id, [$cuatro[0] => 6], $this->asesor));
+    [$estado1] = $contar(fn () => $this->nv->estado($b1));
+
+    $b4 = f03gb_iniciar($this)->borrador->id;
+    [$lote4, $ct4] = $contar(fn () => $this->nv->aplicarTallas($b4, $this->configurable->id, array_fill_keys($cuatro, 6), $this->asesor));
+    [$estado4] = $contar(fn () => $this->nv->estado($b4));
+
+    expect($ct1)->toBe(1)
+        ->and($ct4 - $ct1)->toBe(3)
+        ->and($estado4 - $estado1)->toBeLessThanOrEqual(3 * 12)
+        ->and($lote4 - $lote1)->toBeLessThanOrEqual(3 * 110);
 });

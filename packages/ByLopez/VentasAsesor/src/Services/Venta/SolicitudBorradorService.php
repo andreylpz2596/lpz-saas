@@ -4,12 +4,15 @@ namespace ByLopez\VentasAsesor\Services\Venta;
 
 use ByLopez\VentasAsesor\DataObjects\DesgloseAbastecimiento;
 use ByLopez\VentasAsesor\DataObjects\SolicitudBorradorVenta;
+use ByLopez\VentasAsesor\DataObjects\VarianteVenta;
+use ByLopez\VentasAsesor\DataObjects\VistaBorradorVenta;
 use ByLopez\VentasAsesor\DataObjects\VistaSolicitudesBorrador;
 use ByLopez\VentasAsesor\Exceptions\GrupoComercialInvalidoException;
 use ByLopez\VentasAsesor\Exceptions\SolicitudBorradorInvalidaException as SolicitudInvalida;
 use ByLopez\VentasAsesor\Exceptions\VarianteInvalidaException as VarianteInvalida;
 use ByLopez\VentasAsesor\Models\SolicitudBorrador;
 use ByLopez\VentasAsesor\Support\Venta\CantidadVenta;
+use ByLopez\VentasAsesor\Support\Venta\LoteCatalogo;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Webkul\Product\Contracts\Product;
@@ -38,9 +41,14 @@ class SolicitudBorradorService
         protected LineasBorradorService $lineas,
     ) {}
 
-    public function listar(int $borradorId): VistaSolicitudesBorrador
+    /**
+     * Con $lote (03G-B2) las lecturas de catalogo se hacen una vez por producto y no por
+     * solicitud; $vista reutiliza la vista del borrador ya leida en la misma operacion. El
+     * resultado es el mismo que sin ellos.
+     */
+    public function listar(int $borradorId, ?LoteCatalogo $lote = null, ?VistaBorradorVenta $vista = null): VistaSolicitudesBorrador
     {
-        $vista = $this->borradores->obtener($borradorId);
+        $vista = $vista !== null && $vista->id === $borradorId ? $vista : $this->borradores->obtener($borradorId);
         $customerId = $vista->cliente['customer_id'] ?? null;
 
         $solicitudes = SolicitudBorrador::query()
@@ -48,7 +56,7 @@ class SolicitudBorradorService
             ->where('borrador_id', $borradorId)
             ->orderBy('id')
             ->get()
-            ->map(fn (SolicitudBorrador $s) => $this->aSolicitud($s, $vista->cartId, $customerId))
+            ->map(fn (SolicitudBorrador $s) => $this->aSolicitud($s, $vista->cartId, $customerId, $lote))
             ->values()
             ->all();
 
@@ -64,14 +72,14 @@ class SolicitudBorradorService
     }
 
     /** Misma operacion que crear() sin reconstruir la vista (uso por lotes, 03G-B). */
-    public function crearSinVista(int $borradorId, int $productoId, int $varianteId, mixed $cantidad, Admin $actor): void
+    public function crearSinVista(int $borradorId, int $productoId, int $varianteId, mixed $cantidad, Admin $actor, ?LoteCatalogo $lote = null): void
     {
         $cantidad = CantidadVenta::normalizar($cantidad);
 
         try {
-            DB::transaction(function () use ($borradorId, $productoId, $varianteId, $cantidad, $actor) {
+            DB::transaction(function () use ($borradorId, $productoId, $varianteId, $cantidad, $actor, $lote) {
                 [$borrador, $carrito] = $this->borradores->bloquearParaEditar($borradorId, $actor);
-                $variante = $this->catalogo->variante($productoId, $varianteId, (int) $carrito->customer_id, $cantidad);
+                $variante = $this->variante($lote, $productoId, $varianteId, (int) $carrito->customer_id, $cantidad);
 
                 if (! $variante->activa) {
                     throw new VarianteInvalida(VarianteInvalida::PRODUCTO_NO_VENDIBLE);
@@ -103,17 +111,17 @@ class SolicitudBorradorService
         return $this->listar($borradorId);
     }
 
-    public function cambiarCantidadSinVista(int $borradorId, int $solicitudId, mixed $cantidad, Admin $actor): void
+    public function cambiarCantidadSinVista(int $borradorId, int $solicitudId, mixed $cantidad, Admin $actor, ?LoteCatalogo $lote = null): void
     {
         $cantidad = CantidadVenta::normalizar($cantidad);
 
-        DB::transaction(function () use ($borradorId, $solicitudId, $cantidad, $actor) {
+        DB::transaction(function () use ($borradorId, $solicitudId, $cantidad, $actor, $lote) {
             [$borrador, $carrito] = $this->borradores->bloquearParaEditar($borradorId, $actor);
             $solicitud = $this->solicitudDelBorrador((int) $borrador->id, $solicitudId);
             $variante = $solicitud->variante;
 
             // Variante aun vendible y cliente con grupo apto.
-            $v = $this->catalogo->variante($this->productoDe($variante), (int) $variante->id, (int) $carrito->customer_id, $cantidad);
+            $v = $this->variante($lote, $this->productoDe($variante), (int) $variante->id, (int) $carrito->customer_id, $cantidad);
 
             if (! $v->activa) {
                 throw new VarianteInvalida(VarianteInvalida::PRODUCTO_NO_VENDIBLE);
@@ -166,26 +174,40 @@ class SolicitudBorradorService
         return $solicitud;
     }
 
+    private function variante(?LoteCatalogo $lote, int $productoId, int $varianteId, int $customerId, int $cantidad): VarianteVenta
+    {
+        return $lote === null
+            ? $this->catalogo->variante($productoId, $varianteId, $customerId, $cantidad)
+            : $this->catalogo->varianteEnLote($lote, $productoId, $varianteId, $customerId, $cantidad);
+    }
+
     /** Producto de primer nivel: el padre del hijo, o el propio simple. */
     protected function productoDe(Product $variante): int
     {
         return (int) ($variante->parent_id ?? $variante->id);
     }
 
-    private function aSolicitud(SolicitudBorrador $solicitud, ?int $cartId, ?int $customerId): SolicitudBorradorVenta
+    private function aSolicitud(SolicitudBorrador $solicitud, ?int $cartId, ?int $customerId, ?LoteCatalogo $lote = null): SolicitudBorradorVenta
     {
         $variante = $solicitud->variante;
         $productoId = $this->productoDe($variante);
         $cantidad = $solicitud->cantidad_solicitada;
-        $gestionaStock = (bool) $variante->manage_stock;
 
         // Vendible HOY: producto de primer nivel activo, hijo verificado y activo.
         try {
-            $this->catalogo->hijoVerificado($this->catalogo->productoVendible($productoId), (int) $variante->id);
+            if ($lote === null) {
+                $this->catalogo->hijoVerificado($this->catalogo->productoVendible($productoId), (int) $variante->id);
+            } else {
+                // Mismo registro, ya cargado con sus relaciones en esta operacion.
+                $variante = $this->catalogo->hijoVerificadoEnLote($lote, $this->catalogo->productoVendibleEnLote($lote, $productoId), (int) $variante->id);
+            }
+
             $vendible = (bool) $variante->status;
         } catch (VarianteInvalida) {
             $vendible = false;
         }
+
+        $gestionaStock = (bool) $variante->manage_stock;
 
         // D-36: lo que Bagisto no vende no esta disponible, aunque su indice tenga unidades.
         $stock = $vendible ? (int) $variante->getTypeInstance()->totalQuantity() : 0;
@@ -195,7 +217,7 @@ class SolicitudBorradorService
 
         if ($vendible && $customerId !== null) {
             try {
-                $v = $this->catalogo->variante($productoId, (int) $variante->id, $customerId, $cantidad);
+                $v = $this->variante($lote, $productoId, (int) $variante->id, $customerId, $cantidad);
                 $opciones = $v->opciones;
                 $precio = $v->precioUnitario;
             } catch (GrupoComercialInvalidoException) {

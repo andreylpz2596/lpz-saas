@@ -14,6 +14,7 @@ use ByLopez\VentasAsesor\Exceptions\NuevaVentaInvalidaException;
 use ByLopez\VentasAsesor\Exceptions\VarianteInvalidaException as Invalida;
 use ByLopez\VentasAsesor\Support\Clientes\ValidadorGrupoComercial;
 use ByLopez\VentasAsesor\Support\ContextoPrecioComercial;
+use ByLopez\VentasAsesor\Support\Venta\LoteCatalogo;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -114,6 +115,40 @@ class CatalogoVentaService
 
         return $this->contexto->duranteCreacionDeCarrito($customerId,
             fn () => $this->aVariante($producto, $hijo, $this->superAtributos($producto), $cantidad));
+    }
+
+    /**
+     * variante() dentro de una operacion por lote (03G-B2): mismas comprobaciones, en el mismo
+     * orden y con las mismas excepciones; producto, hijos precargados, super atributos y
+     * cliente apto se leen una vez por lote. Precio y stock salen de Bagisto en cada llamada.
+     */
+    public function varianteEnLote(LoteCatalogo $lote, int $productoId, int $varianteId, int $customerId, int $cantidad = 1): VarianteVenta
+    {
+        $this->exigirCantidad($cantidad);
+        $producto = $this->productoVendibleEnLote($lote, $productoId);
+        $hijo = $this->hijoVerificadoEnLote($lote, $producto, $varianteId);
+        $lote->recordar("cliente_apto:{$customerId}", function () use ($customerId) {
+            $this->exigirClienteApto($customerId);
+
+            return true;
+        });
+        $atributos = $lote->recordar("super_atributos:{$producto->id}", fn () => $this->superAtributos($producto));
+
+        return $this->contexto->duranteCreacionDeCarrito($customerId,
+            fn () => $this->aVariante($producto, $hijo, $atributos, $cantidad, $lote));
+    }
+
+    public function productoVendibleEnLote(LoteCatalogo $lote, int $productoId): Product
+    {
+        return $lote->recordar("producto:{$productoId}", fn () => $this->productoVendible($productoId));
+    }
+
+    /** hijoVerificado() sobre los hijos precargados; si no esta entre ellos, la verificacion normal lanza. */
+    public function hijoVerificadoEnLote(LoteCatalogo $lote, Product $producto, int $varianteId): Product
+    {
+        $hijos = $lote->recordar("hijos:{$producto->id}", fn () => $this->hijosPrecargados($producto)->keyBy('id'));
+
+        return $hijos->get($varianteId) ?? $this->hijoVerificado($producto, $varianteId);
     }
 
     /**
@@ -255,6 +290,8 @@ class CatalogoVentaService
      * Matriz de un producto para vender por tallas: variantes en orden de talla (sort_order de
      * la opcion en Bagisto), stock y precio de Bagisto y la senal de ventas simultaneas en
      * LOTE. Stock y precio se precargan (las consultas no crecen con el numero de variantes).
+     * Las etiquetas traducidas de atributos y opciones se memorizan UNA vez por esta llamada
+     * (LoteCatalogo, 03G-B2): mismo mecanismo que aplicarTallas y estado(), sin persistirlas.
      */
     public function matriz(int $productoId, int $customerId, Admin $actor, int $cantidad = 1, ?int $borradorId = null): MatrizVariantes
     {
@@ -262,13 +299,14 @@ class CatalogoVentaService
         $producto = $this->productoVendible($productoId);
         $this->exigirClienteApto($customerId);
 
+        $lote = new LoteCatalogo;
         $atributos = $this->superAtributos($producto);
         $codigoTalla = (string) config('ventasasesor.nueva_venta.atributos.talla', 'size');
         $codigoColor = (string) config('ventasasesor.nueva_venta.atributos.color', 'color');
         $ordenTalla = $atributos->firstWhere('code', $codigoTalla)?->options->pluck('sort_order', 'id') ?? collect();
 
         $variantes = $this->contexto->duranteCreacionDeCarrito($customerId, fn () => $this->hijosPrecargados($producto)
-            ->map(fn (Product $hijo) => $this->aVariante($producto, $hijo, $atributos, $cantidad))
+            ->map(fn (Product $hijo) => $this->aVariante($producto, $hijo, $atributos, $cantidad, $lote))
             ->values());
 
         $senales = $this->simultaneas->paraVariantes($variantes->map->productId->all(), $actor, $borradorId);
@@ -403,7 +441,7 @@ class CatalogoVentaService
         return $resultado;
     }
 
-    private function aVariante(Product $producto, Product $hijo, Collection $atributos, int $cantidad): VarianteVenta
+    private function aVariante(Product $producto, Product $hijo, Collection $atributos, int $cantidad, ?LoteCatalogo $lote = null): VarianteVenta
     {
         $tipo = $hijo->getTypeInstance();
 
@@ -412,7 +450,7 @@ class CatalogoVentaService
             productId: (int) $hijo->id,
             sku: (string) $hijo->sku,
             nombre: (string) $hijo->name,
-            opciones: $this->opcionesDe($hijo, $atributos),
+            opciones: $this->opcionesDe($hijo, $atributos, $lote),
             activa: (bool) $hijo->status,
             gestionaStock: (bool) $hijo->manage_stock,
             stockVendible: (int) $tipo->totalQuantity(),
@@ -421,18 +459,24 @@ class CatalogoVentaService
         );
     }
 
-    private function opcionesDe(Product $hijo, Collection $atributos): array
+    /**
+     * Con $lote, las etiquetas traducidas se leen una vez por atributo y opcion en la
+     * operacion: cada acceso a una traduccion de Bagisto cuesta ~35 ms de PHP (03G-B2) y solo
+     * depende del locale, que no cambia durante la operacion.
+     */
+    private function opcionesDe(Product $hijo, Collection $atributos, ?LoteCatalogo $lote = null): array
     {
         $opciones = [];
+        $texto = fn (string $clave, \Closure $leer) => $lote === null ? $leer() : $lote->recordar($clave, $leer);
 
         foreach ($atributos as $atributo) {
             $optionId = $hijo->{$atributo->code};
             $opcion = $atributo->options->firstWhere('id', (int) $optionId);
 
             $opciones[$atributo->code] = [
-                'atributo' => (string) ($atributo->name ?: $atributo->admin_name),
+                'atributo' => $texto("atributo:{$atributo->id}", fn () => (string) ($atributo->name ?: $atributo->admin_name)),
                 'option_id' => $optionId === null ? null : (int) $optionId,
-                'etiqueta' => $opcion ? (string) ($opcion->label ?: $opcion->admin_name) : null,
+                'etiqueta' => $opcion ? $texto("opcion:{$opcion->id}", fn () => (string) ($opcion->label ?: $opcion->admin_name)) : null,
             ];
         }
 

@@ -3,6 +3,7 @@
 namespace ByLopez\VentasAsesor\Services\Venta;
 
 use ByLopez\VentasAsesor\DataObjects\MetodoPagoDisponible;
+use ByLopez\VentasAsesor\DataObjects\VistaBorradorVenta;
 use ByLopez\VentasAsesor\DataObjects\VistaPagoBorrador;
 use ByLopez\VentasAsesor\Exceptions\PagoBorradorInvalidoException as PagoInvalido;
 use ByLopez\VentasAsesor\Support\Venta\CarritoComercial;
@@ -39,9 +40,10 @@ class PagoBorradorService
      * @param  list<MetodoPagoDisponible>|null  $ofrecidosYaResueltos  si el llamador ya resolvio los
      *                                                                 metodos en esta operacion (Payment::getPaymentMethods() es caro), se reutilizan.
      */
-    public function vista(int $borradorId, ?array $ofrecidosYaResueltos = null): VistaPagoBorrador
+    /** $vista: la del mismo borrador ya leida en esta operacion (03G-B2); evita releerla. */
+    public function vista(int $borradorId, ?array $ofrecidosYaResueltos = null, ?VistaBorradorVenta $vista = null): VistaPagoBorrador
     {
-        $vista = $this->borradores->obtener($borradorId);
+        $vista = $vista !== null && $vista->id === $borradorId ? $vista : $this->borradores->obtener($borradorId);
         $carrito = $vista->cartId === null ? null : CartProxy::modelClass()::query()->with('payment')->find($vista->cartId);
 
         $ofrecidos = $ofrecidosYaResueltos ?? $this->metodosOfrecidos($carrito);

@@ -20,6 +20,7 @@ use ByLopez\VentasAsesor\Models\BorradorVenta;
 use ByLopez\VentasAsesor\Services\Clientes\CrearClienteComercialService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Venta\CantidadVenta;
+use ByLopez\VentasAsesor\Support\Venta\LoteCatalogo;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 use Webkul\Checkout\Models\CartProxy;
@@ -120,9 +121,12 @@ class NuevaVentaService
         $revision = false;
 
         DB::transaction(function () use ($borradorId, $productoId, $objetivos, $actor, $metodoPrevio, &$revision) {
+            // Lecturas de catalogo una vez por lote y dentro de ESTA transaccion (03G-B2).
+            $lote = new LoteCatalogo;
+
             foreach ($objetivos as $varianteId => $cantidad) {
                 try {
-                    $this->llevarVarianteA($borradorId, $productoId, $varianteId, $cantidad, $actor);
+                    $this->llevarVarianteA($borradorId, $productoId, $varianteId, $cantidad, $actor, $lote);
                 } catch (Throwable $e) {
                     throw new Invalida(Invalida::LOTE_RECHAZADO, $varianteId, $this->causa($e), $e);
                 }
@@ -203,12 +207,14 @@ class NuevaVentaService
         bool $requiereRevisionEntrega = false,
         ?array $ofrecidosPago = null,
     ): EstadoNuevaVenta {
-        $lineas = $this->lineas->listar($borradorId);
-        $solicitudes = $this->solicitudes->listar($borradorId);
-        $entrega = $this->entrega->vista($borradorId);
-        $resueltos = $conMetodosDePago || $ofrecidosPago !== null;
-        $pago = $this->pagos->vista($borradorId, $resueltos ? $ofrecidosPago : []);
+        // Una lectura del borrador y de las lineas, y catalogo por lote (03G-B2).
+        $lote = new LoteCatalogo;
+        $lineas = $this->lineas->listar($borradorId, $lote);
         $borrador = $lineas->borrador;
+        $solicitudes = $this->solicitudes->listar($borradorId, $lote, $borrador);
+        $entrega = $this->entrega->vista($borradorId, $lineas);
+        $resueltos = $conMetodosDePago || $ofrecidosPago !== null;
+        $pago = $this->pagos->vista($borradorId, $resueltos ? $ofrecidosPago : [], $borrador);
 
         $requiereFacturacion = $entrega->facturacion === null
             && $borrador->cliente !== null
@@ -246,7 +252,7 @@ class NuevaVentaService
      * T=0 → linea fuera y luego solicitud; T>solicitado → solicitud primero, luego carrito;
      * T<=solicitado → carrito primero, luego baja la solicitud.
      */
-    protected function llevarVarianteA(int $borradorId, int $productoId, int $varianteId, int $objetivo, Admin $actor): void
+    protected function llevarVarianteA(int $borradorId, int $productoId, int $varianteId, int $objetivo, Admin $actor, ?LoteCatalogo $lote = null): void
     {
         $cartId = $this->cartIdDe($borradorId);
         $solicitud = $this->solicitudes->solicitudDeVariante($borradorId, $varianteId);
@@ -264,19 +270,19 @@ class NuevaVentaService
         }
 
         if ($solicitud === null) {
-            $this->solicitudes->crearSinVista($borradorId, $productoId, $varianteId, $objetivo, $actor);
+            $this->solicitudes->crearSinVista($borradorId, $productoId, $varianteId, $objetivo, $actor, $lote);
         } elseif ($objetivo > (int) $solicitud->cantidad_solicitada) {
-            $this->solicitudes->cambiarCantidadSinVista($borradorId, (int) $solicitud->id, $objetivo, $actor);
+            $this->solicitudes->cambiarCantidadSinVista($borradorId, (int) $solicitud->id, $objetivo, $actor, $lote);
         }
 
-        $this->fijarCarrito($borradorId, $productoId, $varianteId, $objetivo, $actor, $cartId);
+        $this->fijarCarrito($borradorId, $productoId, $varianteId, $objetivo, $actor, $cartId, $lote);
 
         if ($solicitud !== null && $objetivo < (int) $solicitud->cantidad_solicitada) {
-            $this->solicitudes->cambiarCantidadSinVista($borradorId, (int) $solicitud->id, $objetivo, $actor);
+            $this->solicitudes->cambiarCantidadSinVista($borradorId, (int) $solicitud->id, $objetivo, $actor, $lote);
         }
     }
 
-    protected function fijarCarrito(int $borradorId, int $productoId, int $varianteId, int $objetivo, Admin $actor, ?int $cartId): void
+    protected function fijarCarrito(int $borradorId, int $productoId, int $varianteId, int $objetivo, Admin $actor, ?int $cartId, ?LoteCatalogo $lote = null): void
     {
         $actual = $this->lineas->cantidadEnCarrito($cartId, $varianteId);
 
@@ -285,7 +291,7 @@ class NuevaVentaService
         }
 
         if ($actual === 0) {
-            $this->lineas->agregarSinVista($borradorId, $productoId, $varianteId, $objetivo, $actor);
+            $this->lineas->agregarSinVista($borradorId, $productoId, $varianteId, $objetivo, $actor, $lote);
 
             return;
         }

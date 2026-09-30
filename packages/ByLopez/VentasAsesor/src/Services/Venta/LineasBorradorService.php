@@ -10,6 +10,7 @@ use ByLopez\VentasAsesor\Exceptions\VarianteInvalidaException as VarianteInvalid
 use ByLopez\VentasAsesor\Models\SolicitudBorrador;
 use ByLopez\VentasAsesor\Support\Venta\CantidadVenta;
 use ByLopez\VentasAsesor\Support\Venta\CarritoComercial;
+use ByLopez\VentasAsesor\Support\Venta\LoteCatalogo;
 use Closure;
 use Exception;
 use Illuminate\Support\Facades\DB;
@@ -57,12 +58,20 @@ class LineasBorradorService
         protected CarritoComercial $carritos,
     ) {}
 
-    public function listar(int $borradorId): VistaLineasBorrador
+    /**
+     * Con $lote (03G-B2) se precargan en bloque las relaciones que cada linea lee (familia,
+     * valores de atributo e indice de inventario); el resultado es el mismo que sin el.
+     */
+    public function listar(int $borradorId, ?LoteCatalogo $lote = null): VistaLineasBorrador
     {
         $vista = $this->borradores->obtener($borradorId);
+        $relaciones = $lote === null ? ['product', 'child.product'] : [
+            'product.attribute_family', 'product.attribute_values', 'product.inventory_indices',
+            'child.product.attribute_family', 'child.product.attribute_values', 'child.product.inventory_indices',
+        ];
 
         $lineas = $vista->cartId === null ? [] : CartItemProxy::modelClass()::query()
-            ->with(['product', 'child.product'])
+            ->with($relaciones)
             ->where('cart_id', $vista->cartId)
             ->whereNull('parent_id')
             ->orderBy('id')
@@ -87,16 +96,18 @@ class LineasBorradorService
     }
 
     /** Misma operacion que agregar() sin reconstruir la vista (uso por lotes, 03G-B). */
-    public function agregarSinVista(int $borradorId, int $productoId, int $varianteId, mixed $cantidad, Admin $actor): void
+    public function agregarSinVista(int $borradorId, int $productoId, int $varianteId, mixed $cantidad, Admin $actor, ?LoteCatalogo $lote = null): void
     {
         $cantidad = CantidadVenta::normalizar($cantidad);
 
-        DB::transaction(function () use ($borradorId, $productoId, $varianteId, $cantidad, $actor) {
+        DB::transaction(function () use ($borradorId, $productoId, $varianteId, $cantidad, $actor, $lote) {
             [$borrador, $carrito] = $this->borradores->bloquearParaEditar($borradorId, $actor);
             $customerId = (int) $carrito->customer_id;
 
             // I-5 y grupo comercial apto del cliente: los valida el catalogo.
-            $variante = $this->catalogo->variante($productoId, $varianteId, $customerId, $cantidad);
+            $variante = $lote === null
+                ? $this->catalogo->variante($productoId, $varianteId, $customerId, $cantidad)
+                : $this->catalogo->varianteEnLote($lote, $productoId, $varianteId, $customerId, $cantidad);
 
             if (! $variante->activa) {
                 throw new VarianteInvalida(VarianteInvalida::PRODUCTO_NO_VENDIBLE);

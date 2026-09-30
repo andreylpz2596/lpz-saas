@@ -4425,3 +4425,129 @@ cliente, entrega, reaplicación, pago una vez, accesos, matriz, SKU, estado una 
 
 **Matriz:** 23, 25 y 28 consultas con 1, 2 y 4 variantes. Sin N+1 relevante. El tiempo crece unos
 110 ms por variante, por cálculo en PHP.
+
+### 41.8 03G-B2: optimización por lote del catálogo y del estado (2026-09-29, sin commit)
+
+**03G-B (con 03G-B1) quedó en el commit `a20638b4b4`.** 03G-B2 no cambia el comportamiento
+comercial ni toca `collectTotals`, `Cart`, `cart_items` ni Webkul.
+
+#### 41.8.1 Causas del N+1 propio
+
+- **Catálogo por talla (~42 consultas):** cada talla llama dos veces a
+  `CatalogoVentaService::variante()` (21 consultas y ~140 ms cada vez): una en
+  `SolicitudBorradorService::crearSinVista` o `cambiarCantidadSinVista`, y otra en
+  `LineasBorradorService::agregarSinVista`. Cada llamada repite:
+  - producto padre (3), hijo (1), cliente y grupo (2) y súper atributos con sus opciones (2);
+  - valores de atributo y familia del hijo (2) y su índice de inventario (1);
+  - las traducciones de atributos y opciones (4), que son lo más caro.
+
+  Ninguna de las dos usa el precio: el precio real lo pone Bagisto en `prepareForCart`.
+- **Estado (~35 consultas por línea):**
+  - `SolicitudBorradorService::aSolicitud` repite, por cada solicitud, `productoVendible` y
+    `hijoVerificado` (dos veces) y una `variante()` completa;
+  - `aLinea` carga de forma diferida la familia, los valores y el inventario de cada línea;
+  - las líneas se construyen **dos veces**, porque `EntregaBorradorService::vista` vuelve a
+    listarlas en `lineasSinStock`;
+  - `obtener()` del borrador se ejecuta 5 veces.
+- **Tiempo:** el SQL es poco (≈240 ms de 3,5 s con 4 tallas). El costo real está en PHP:
+  - cada acceso a una traducción de Bagisto (`$atributo->name`, `$opcion->label`, con
+    Astrotomic Translatable) cuesta ~35 ms y no se reutiliza entre accesos;
+  - `Configurable::prepareForCart` de Bagisto tarda ~240 ms por talla por el mismo motivo. Es
+    core y no se toca.
+
+**Clasificación de las consultas:**
+
+| Tipo | Consultas |
+|---|---|
+| Repetidas | Producto, hijo, cliente y grupo, súper atributos, traducciones, `obtener()` y la segunda lectura de líneas |
+| Derivables de lo ya cargado | Atributos e inventario del mismo hijo |
+| Agrupables en bloque | Relaciones de las líneas y de los hijos |
+| Dependientes de RT-03 (se conservan) | Contexto de precio (cliente y grupo) y precio de grupo y de reglas en cada `getFinalPrice` |
+| De stock (se conserva la fuente) | `inventory_indices`, que ahora se precarga pero se sigue leyendo con `totalQuantity()` |
+
+#### 41.8.2 Diseño
+
+- **`Support\Venta\LoteCatalogo`:** memoria de UNA operación.
+  - Guarda solo resultados exitosos: un fallo se vuelve a evaluar y lanza igual.
+  - No se persiste ni sobrevive a la operación, así que no es una caché comercial.
+- **Dónde se crea:**
+  - `aplicarTallas`: **dentro** de su transacción. Con REPEATABLE READ, releer en la misma
+    transacción devuelve el mismo snapshot, por lo que la revalidación por talla era redundante
+    por definición.
+  - `estado()`: al empezar cada llamada.
+- **`CatalogoVentaService::varianteEnLote`:** mismas comprobaciones, en el mismo orden y con las
+  mismas excepciones que `variante()`:
+  - cantidad → producto vendible → hijo verificado → cliente apto → súper atributos → variante;
+  - el hijo sale de los hijos precargados; si no está entre ellos, `hijoVerificado` lanza igual;
+  - las etiquetas traducidas se leen una vez por atributo y opción;
+  - precio y stock se siguen calculando con Bagisto en cada llamada, dentro de RT-03.
+- **Parámetros opcionales al final (por defecto `null`, así que los demás consumidores no
+  cambian):**
+  - `SolicitudBorradorService::crearSinVista`, `cambiarCantidadSinVista` y `listar` (con `$vista`);
+  - `LineasBorradorService::agregarSinVista` y `listar` (precarga familia, valores e inventario);
+  - `EntregaBorradorService::vista($lineas)`;
+  - `PagoBorradorService::vista(..., $vista)`.
+- **No se tocó:** los bloqueos, el orden de mutación (D-39/I-13), la validación de stock de
+  Bagisto ni ninguna excepción.
+
+#### 41.8.3 Medición (`lpz_saas_testing`, alta con 6 unidades por talla)
+
+Consultas y tiempos de `aplicarTallas`, que incluye el estado; tiempo = mediana de 3 ejecuciones.
+El «antes» reproduce el commit `a20638b4b4`.
+
+| Tallas | Consultas (antes → después) | Estado | `collectTotals` | Tiempo |
+|---|---|---|---|---|
+| 1 | 187 → 141 | 81 → 51 | 1 → 1 | ~1,15 s → ~0,99 s |
+| 2 | 333 → 231 | 116 → 60 | 2 → 2 | ~1,77 s → ~1,49 s |
+| 4 | 655 → 439 | 186 → 77 | 4 → 4 | ~3,87 s → ~2,52 s |
+
+- **Catálogo por talla:** unas 42 → 11 consultas (lo que queda es RT-03 y precio).
+- **Estado por línea:** unas 35 → 9.
+
+#### 41.8.4 Pruebas nuevas (`Fase03gbNuevaVentaTest`, 37 casos)
+
+- **Equivalencia exacta** (`toEqual`) de líneas, solicitudes, entrega y pago en lote frente a la
+  lectura normal. Escenario: precio de grupo, solicitud por encima del carrito, producto simple,
+  variante desactivada y recogida elegida.
+- **Equivalencia con cliente de grupo no apto** (sin precio).
+- **`varianteEnLote` frente a `variante()`:** misma variante con cantidades 1 y 7 en todas las
+  variantes, y el mismo error en 6 casos inválidos (variante ajena, inexistente, hijo como
+  padre, producto inexistente, cantidad 0 e invitado).
+- **Cota de N+1:** el estado crece como máximo 12 consultas por línea y `collectTotals` sigue
+  siendo uno por primitiva.
+- **Prueba de mutación:** forzar `vendible` en el camino de lote hace fallar la equivalencia.
+
+#### 41.8.5 Matriz: mismo `LoteCatalogo`, sin nuevo mecanismo (2026-09-29)
+
+`CatalogoVentaService::matriz()` crea un `LoteCatalogo` local y lo pasa a `aVariante()`: mismo
+patrón exacto de §41.8.2, ninguna clase ni parámetro nuevo. Las consultas no cambian (ya estaban
+acotadas por `hijosPrecargados`); lo que se ahorra es el costo en PHP de repetir la traducción de
+cada atributo y opción por variante.
+
+**Medición (`lpz_saas_testing`, mediana de 3 ejecuciones, comparado contra el comportamiento del
+commit `a20638b4b4`):**
+
+| Variantes | Consultas (antes → después) | Tiempo (antes → después) |
+|---|---|---|
+| 1 | 23 → 23 | ~136 ms → ~144 ms |
+| 2 | 25 → 25 | ~247 ms → ~207 ms |
+| 4 | 28 → 28 | ~978 ms → ~437 ms (−55 %) |
+
+Con 1 variante no hay traducciones repetidas que memorizar, así que el tiempo es equivalente; la
+mejora aparece a partir de 2 variantes y crece con ellas.
+
+**Equivalencia:** test que reconstruye la misma matriz variante por variante con `variante()` (sin
+lote) y compara con `toArray()` contra la construida con `matriz()` (con lote), en el mismo orden
+y sin contar `consultado_en` (cambia entre las dos llamadas). Se confirma que sigue habiendo
+variante real, padre configurable, talla, color, SKU, precio RT-03, stock Bagisto, orden de tallas
+y señal de ventas simultáneas — nada de "disponible" calculado, reservas, stock propio ni precio
+cacheado entre operaciones (la memoria vive solo dentro de esta llamada). Una mutación temporal
+(pasar `cantidad + 1` a `aVariante` dentro de `matriz()`) hizo fallar la prueba, confirmando que
+detecta un cambio real y no es un test vacío.
+
+#### 41.8.6 Deuda que queda (expresamente fuera de alcance)
+
+- **`prepareForCart` de Bagisto** (~240 ms por talla, por las traducciones), **`collectTotals`**
+  (§41.7) y las consultas de RT-03 por precio: son core o fuente de verdad, así que no se tocan.
+- **`cantidadEnCarrito`:** sigue haciendo una consulta por solicitud en el estado.
+- **`Payment` core, SMTP, shipping core e índice de `order_items`:** sin auditar en B2.
