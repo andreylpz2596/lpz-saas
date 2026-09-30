@@ -4551,3 +4551,93 @@ detecta un cambio real y no es un test vacío.
   (§41.7) y las consultas de RT-03 por precio: son core o fuente de verdad, así que no se tocan.
 - **`cantidadEnCarrito`:** sigue haciendo una consulta por solicitud en el estado.
 - **`Payment` core, SMTP, shipping core e índice de `order_items`:** sin auditar en B2.
+
+### 41.9 03G-C: API JSON de "Nueva venta rápida" (2026-09-29, sin commit)
+
+**03G-B + 03G-B1 en el commit `a20638b4b4`; 03G-B2 en `6234bf40e2`.** 03G-C conecta la futura
+interfaz rápida con `NuevaVentaService` mediante un controlador delgado: Request → autorización
+estructural → el servicio de dominio ya existente → JSON. Ninguna regla de precio, stock, grupo,
+variantes, solicitudes, Cart, envío, pago, confirmación o atribución vive en el controlador.
+
+#### 41.9.1 Rutas y controlador
+
+`Http/Controllers/Admin/NuevaVentaController`, bajo `admin/ventas-asesor/nueva-venta`, con el
+mismo middleware (`admin`, `NoCacheMiddleware`) que ya usa `InicioController`:
+
+| Operación | Ruta | Método de dominio |
+|---|---|---|
+| A. Bootstrap | `GET /nueva-venta` | `CatalogoVentaService::accesosRapidos` + config |
+| B. Buscar cliente | `POST /nueva-venta/clientes/buscar` | `BuscarClienteComercialService::buscar` |
+| C. Crear cliente | `POST /nueva-venta/clientes` | `CrearClienteComercialService::crear` |
+| D. Iniciar | `POST /nueva-venta/iniciar` | `NuevaVentaService::iniciar` |
+| D. Iniciar + cliente nuevo | `POST /nueva-venta/iniciar-cliente-nuevo` | `NuevaVentaService::iniciarConClienteNuevo` |
+| E. Colores de un acceso | `GET /nueva-venta/lineas/{clave}/colores` | `CatalogoVentaService::coloresDeAcceso` |
+| G. Matriz | `GET /nueva-venta/productos/{producto}/matriz` | `CatalogoVentaService::matriz` |
+| F/K. Estado | `GET /nueva-venta/{borrador}` | `NuevaVentaService::estado` |
+| H. Lote de tallas | `POST /nueva-venta/{borrador}/tallas` | `NuevaVentaService::aplicarTallas` |
+| I. Entrega | `POST /nueva-venta/{borrador}/entrega` | `NuevaVentaService::entregaRapida` |
+| J. Pago | `POST /nueva-venta/{borrador}/pago` | `NuevaVentaService::seleccionarPago` |
+| L/M. Confirmar | `POST /nueva-venta/{borrador}/confirmar` | `NuevaVentaService::confirmar` |
+
+Cada acción tiene su `FormRequest` propio (`Http/Requests/NuevaVenta/`) que valida SOLO forma
+(tipos, longitudes, "al menos un criterio", estructura de la dirección): nunca reglas de negocio,
+que siguen en los servicios. Las direcciones puntuales del cuerpo JSON se traducen a
+`OrigenDireccion`/`DireccionComercial` dentro del propio Request (mapeo de datos, no lógica
+comercial). La selección de propiedad comercial (`SeleccionPropiedadComercial`) sigue sin
+exponerse por HTTP, tal como ya lo documenta su propio DTO.
+
+#### 41.9.2 ACL: mismo permiso, sin clave nueva
+
+Las 12 rutas se autorizan con el permiso que `BorradorVentaService::PERMISO` ya exige en el
+dominio (`ventas_asesor.pedidos.create`), añadidas al arreglo `route` de esa MISMA entrada de
+`Config/acl.php` (`Arr::wrap`, que `Acl::getRoles()` ya soporta). No se creó ninguna clave nueva
+ni se duplicó ninguna: las pruebas `AclYMenuConfiguracionTest` (conteo exacto de 23 claves, árbol
+exacto) siguen en verde sin modificarlas, más una prueba nueva que fija que las 12 rutas quedan
+mapeadas a ese permiso.
+
+**Riesgo aceptado y documentado:** `SessionController::redirectToFirstAccessibleRoute()` (Bagisto
+core) hace `redirect()->route($permissionDetails['route'])` sin indexar `[0]`; si esta clave fuera
+algún día la primera con punto en la lista de permisos guardada de un rol `custom`, ese redirect
+fallaría con un arreglo. El propio `Admin/Config/acl.php` de Bagisto ya usa arreglos en `route` de
+forma extendida (mismo riesgo, preexistente y no introducido por 03G-C); corregirlo exigiría
+modificar `Webkul`, fuera de alcance. Se mantiene `$inicio` como primer elemento del arreglo
+(mismo target seguro que todas las demás claves del módulo).
+
+#### 41.9.3 Contrato de error único
+
+`Support\Http\RespuestaErrorNuevaVenta::envolver()` traduce cualquier excepción de dominio ya
+existente (03B–03G-B2) a JSON estable, sin crear códigos nuevos (docblock de
+`NuevaVentaInvalidaException`: "03G-C los mapea todos"). El estado HTTP se deriva del propio
+`codigo` (permiso→403, inexistente→404, conflicto de estado→409, el resto→422); para
+`LOTE_RECHAZADO` (que envuelve la falla de UNA talla del lote), el estado se calcula sobre `causa`
+(el código real de la falla envuelta, p. ej. `no_es_propietario` o `stock_insuficiente`), no sobre
+el código genérico del envoltorio. `ContextoPrecioComercialInvalidoException` ya tenía su propio
+`render()` (patrón preexistente) y se deja pasar sin envolver.
+
+#### 41.9.4 Pruebas (`Fase03gcApiNuevaVentaTest`, 7 casos, HTTP real)
+
+Pasan por el stack completo: middleware `admin` (Bouncer real), ACL real y los servicios de
+dominio reales, no solo llamadas directas al servicio.
+
+- **E2E cliente existente:** bootstrap → buscar por teléfono → iniciar → colores del acceso
+  rápido → matriz → lote M6/L6 → recogida (facturación = dirección real, D-30) → pago → estado →
+  confirmar → `Order` real verificada en `lpz_saas_testing`.
+- **E2E cliente nuevo:** teléfono no encontrado → alta mínima RT-04 (grupo explícito, email NULL)
+  + venta nueva en una transacción → continúa aplicando una talla.
+- **ACL real:** sin autenticar → 302 al login; sin el permiso del módulo → 401 del Bouncer real
+  (no simulado).
+- **Borrador ajeno:** un segundo asesor con el mismo permiso no puede operar el borrador de otro
+  (409, `no_es_propietario`); el dueño sí puede.
+- **Todo o nada por HTTP:** una talla sin stock revierte el lote completo y devuelve
+  `LOTE_RECHAZADO` con la variante y la causa; el carrito queda sin líneas.
+- **Validación estructural:** sin criterio de búsqueda, sin `customer_id`, lote vacío → 422 antes
+  de tocar el dominio.
+- **PII:** el JSON del estado y de la matriz nunca contienen `password`, `remember_token` ni
+  `api_token`.
+
+#### 41.9.5 Fuera de alcance (expresamente, para 03G-D)
+
+Sin diseño visual, sin Vue, sin polling, sin WebSockets, sin n8n/WhatsApp/IA, sin cartera, sin
+logística adicional, sin comisiones ni descuentos D-38, sin tocar Webkul. `cantidadEnCarrito`
+N+1, `prepareForCart`, `collectTotals`, Payment core, SMTP y el índice de `order_items` quedan
+como deuda ya documentada (§41.7–§41.8), sin auditar de nuevo aquí.

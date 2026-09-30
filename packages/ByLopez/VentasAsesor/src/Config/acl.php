@@ -41,7 +41,38 @@ return [
     ], [
         'key' => 'ventas_asesor.pedidos.create',
         'name' => 'ventasasesor::app.acl.crear',
-        'route' => $inicio,
+        /*
+         * $inicio va PRIMERO: la clave de esta entrada sigue siendo UNICA (ninguna clave se
+         * duplica: la prueba "el arbol ACL... es exactamente el definido" lo exige) y
+         * Acl::getRoles() mapea TODOS los elementos del arreglo (Arr::wrap), asi que
+         * autoriza tambien la API de "Nueva venta rapida" (03G-C, NuevaVentaController)
+         * bajo el MISMO permiso que ya exige BorradorVentaService::PERMISO, sin clave
+         * nueva. $inicio en la posicion 0 mantiene la regla 3 del encabezado (toda clave
+         * apunta a una ruta GET sin parametros: la prueba solo mira Arr::wrap(route)[0]).
+         *
+         * Riesgo aceptado y documentado: SessionController::redirectToFirstAccessibleRoute()
+         * (Bagisto core) hace `redirect()->route($permissionDetails['route'])` SIN indexar
+         * [0]; si esta clave fuera algun dia la PRIMERA con punto en la lista de permisos de
+         * un rol 'custom' (orden de guardado del rol, no de este archivo), ese redirect
+         * fallaria con un array. El propio Admin\Config\acl.php de Bagisto ya usa arreglos
+         * en 'route' de forma extendida (mismo riesgo, no introducido por este cambio); no
+         * se soluciona aqui porque exigiria modificar Webkul (fuera de alcance de 03G-C).
+         */
+        'route' => [
+            $inicio,
+            'admin.ventas_asesor.nueva_venta.clientes.buscar',
+            'admin.ventas_asesor.nueva_venta.clientes.crear',
+            'admin.ventas_asesor.nueva_venta.iniciar',
+            'admin.ventas_asesor.nueva_venta.iniciar_cliente_nuevo',
+            'admin.ventas_asesor.nueva_venta.lineas.colores',
+            'admin.ventas_asesor.nueva_venta.productos.matriz',
+            'admin.ventas_asesor.nueva_venta.estado_inicial',
+            'admin.ventas_asesor.nueva_venta.estado',
+            'admin.ventas_asesor.nueva_venta.tallas',
+            'admin.ventas_asesor.nueva_venta.entrega',
+            'admin.ventas_asesor.nueva_venta.pago',
+            'admin.ventas_asesor.nueva_venta.confirmar',
+        ],
         'sort' => 1,
     ], [
         'key' => 'ventas_asesor.pedidos.view_own',

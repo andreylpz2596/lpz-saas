@@ -1,5 +1,6 @@
 <?php
 
+use ByLopez\VentasAsesor\Services\Venta\BorradorVentaService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Route;
@@ -113,6 +114,30 @@ test('el arbol ACL se construye completo para la pantalla de roles de Bagisto', 
         'ventas_asesor.pedidos.assign',
         'ventas_asesor.pedidos.reassign',
     ]);
+});
+
+test('03G-C: la API de "nueva venta rapida" la autoriza el mismo permiso que BorradorVentaService::PERMISO, sin clave nueva ni duplicada', function () {
+    $roles = acl()->getRoles();
+
+    foreach ([
+        'admin.ventas_asesor.nueva_venta.clientes.buscar',
+        'admin.ventas_asesor.nueva_venta.clientes.crear',
+        'admin.ventas_asesor.nueva_venta.iniciar',
+        'admin.ventas_asesor.nueva_venta.iniciar_cliente_nuevo',
+        'admin.ventas_asesor.nueva_venta.lineas.colores',
+        'admin.ventas_asesor.nueva_venta.productos.matriz',
+        'admin.ventas_asesor.nueva_venta.estado_inicial',
+        'admin.ventas_asesor.nueva_venta.estado',
+        'admin.ventas_asesor.nueva_venta.tallas',
+        'admin.ventas_asesor.nueva_venta.entrega',
+        'admin.ventas_asesor.nueva_venta.pago',
+        'admin.ventas_asesor.nueva_venta.confirmar',
+    ] as $nombre) {
+        expect($roles->get($nombre))->toBe(BorradorVentaService::PERMISO, $nombre);
+    }
+
+    // No se duplico ninguna clave del modulo para lograrlo (las pruebas de conteo/arbol arriba lo exigen).
+    expect(va01_clavesAcl())->toHaveCount(23);
 });
 
 test('las claves del servicio existen en la ACL y ninguna clave usa guiones', function () {
