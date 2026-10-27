@@ -39,6 +39,9 @@ class AutorizacionLogistica
     /** Registrar guia y despachar, completar un despacho parcial y «Entregar en bodega». */
     public const PERMISO_DESPACHAR = 'logistica.despachos.despachar';
 
+    /** F6: despachar a credito (sin cobro) un pedido con dinero sin confirmar. Ningun rol la trae por defecto. */
+    public const PERMISO_AUTORIZAR_CREDITO = 'logistica.despachos.autorizar_credito';
+
     public const PERMISO_GUIAS = 'logistica.guias';
 
     /** Ver y descargar el PDF de cualquier guia (el asesor lo hace por sus pedidos, via AccesoGuiaPedido). */

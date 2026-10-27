@@ -33,6 +33,8 @@ class Guia extends Model
         'zona_nombre_snapshot', 'zona_origen', 'tarifa_sugerida', 'costo_adicional', 'motivo_costo',
         // C1: recaudo que calculo el servidor para ESTA guia y, si se modifico, por que (inmutables como el resto).
         'recaudo_sugerido', 'motivo_recaudo',
+        // F6: decision de cobro con la que salio la guia (cobrar al entregar / credito autorizado), si el pedido la necesitaba.
+        'disposicion_cobro_id',
         'actor_admin_id', 'actor_name_snapshot', 'idempotency_key', 'huella',
     ];
 

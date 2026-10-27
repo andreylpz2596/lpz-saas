@@ -24,6 +24,8 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
         Route::get('contexto', [DespachosController::class, 'contexto'])->name('admin.logistica.despachos.contexto');
         Route::post('despachar', [DespachosController::class, 'despachar'])->name('admin.logistica.despachos.despachar');
         Route::post('entregar-en-bodega', [DespachosController::class, 'entregarEnBodega'])->name('admin.logistica.despachos.entregar_bodega');
+        // F6: decision de cobro de un pedido que no es contra entrega con dinero sin confirmar.
+        Route::post('disposicion-cobro', [DespachosController::class, 'disposicionCobro'])->name('admin.logistica.despachos.disposicion_cobro');
 
         // Stock insuficiente: BODEGA solicita autorizacion; el Administrador regulariza en una sola operacion.
         Route::post('stock/solicitar', [IncidenciasStockController::class, 'solicitar'])->name('admin.logistica.stock.solicitar');

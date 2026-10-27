@@ -11,6 +11,7 @@ use ByLopez\Logistica\Enums\FuenteEventoLogistico;
 use ByLopez\Logistica\Enums\OrigenArchivoGuia;
 use ByLopez\Logistica\Enums\OrigenGuia;
 use ByLopez\Logistica\Enums\PagadorFlete;
+use ByLopez\Logistica\Enums\TipoDisposicionCobro;
 use ByLopez\Logistica\Exceptions\OperacionLogisticaInvalidaException as Invalida;
 use ByLopez\Logistica\Models\Entrega;
 use ByLopez\Logistica\Models\Guia;
@@ -66,6 +67,7 @@ class DespachoService
         protected CondicionDespacho $condicion,
         protected ConsecutivoGuiaInterna $consecutivos,
         protected RecaudoPorGuia $recaudos,
+        protected DisposicionCobroService $disposiciones,
     ) {}
 
     public function despachar(?Admin $actor, SolicitudDespacho $s): ResultadoDespacho
@@ -139,9 +141,14 @@ class DespachoService
 
                 $this->exigirDespachable($pedido);
 
+                // F6: un pedido que NO es contra entrega con dinero sin confirmar no sale con «no cobrar nada» sin una decision
+                // vigente (cobrar al entregar o credito autorizado). Se revalida aqui, bajo el bloqueo del pedido.
+                $disposicion = $this->disposiciones->exigirResuelta((int) $pedido->id);
+                $cobrarAlEntregar = $disposicion?->tipo === TipoDisposicionCobro::COBRAR_AL_ENTREGAR;
+
                 // F1: el saldo pendiente no bloquea; un pago EN VALIDACION solo si quien entrega cobra dinero del pedido
-                // (contra entrega o recaudo escrito): el valor a cobrar es incierto hasta que Cartera decida.
-                $this->condicion->exigirSinPagoPendiente((int) $pedido->id, $recaudo > 0 || $this->condicion->cobraAlEntregar((int) $pedido->id));
+                // (contra entrega, cobrar al entregar o recaudo escrito): el valor a cobrar es incierto hasta que Cartera decida.
+                $this->condicion->exigirSinPagoPendiente((int) $pedido->id, $recaudo > 0 || $cobrarAlEntregar || $this->condicion->cobraAlEntregar((int) $pedido->id));
 
                 // F1: condicion de envio → pagador (motivo si se aparta), zona, tarifa sugerida y costo final (snapshot).
                 $c = $this->condicion->resolver($pedido, $transportadora, $pagadorPedido, $motivoPagador, $s->zonaId, $flete, $motivoCosto);
@@ -166,7 +173,7 @@ class DespachoService
 
                 // C1: recaudo de ESTA guia (mercancia historica de sus unidades + flete una sola vez, acotado a lo que aun no comprometen
                 // las otras guias). La suma de las guias NUNCA supera el saldo exigible; apartarse del sugerido exige motivo.
-                $calculo = $this->recaudos->calcular($pedido, $unidades);
+                $calculo = $this->recaudos->calcular($pedido, $unidades, $cobrarAlEntregar);
                 $recaudo = $recaudoEscrito ?? $calculo['sugerido'];
 
                 if ($recaudo > $calculo['disponible'] + 0.001) {
@@ -222,7 +229,8 @@ class DespachoService
                     'actor_name_snapshot' => mb_substr((string) $actor->name, 0, 191),
                     'idempotency_key' => $clave,
                     'huella' => $huella,
-                ]);
+                    // F6: solo con decision (la columna existe donde existe la tabla de decisiones).
+                ] + ($disposicion !== null ? ['disposicion_cobro_id' => (int) $disposicion->id] : []));
 
                 if ($meta !== null && $s->archivo !== null) {
                     $rutaEscrita = $this->archivos->almacenar($guia, $s->archivo, $meta, OrigenArchivoGuia::MANUAL, $actor)->ruta;

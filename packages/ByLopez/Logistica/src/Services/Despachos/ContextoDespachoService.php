@@ -5,6 +5,7 @@ namespace ByLopez\Logistica\Services\Despachos;
 use ByLopez\Logistica\Contracts\SugiereRecaudo;
 use ByLopez\Logistica\Enums\OrigenGuia;
 use ByLopez\Logistica\Enums\PagadorFlete;
+use ByLopez\Logistica\Enums\TipoDisposicionCobro;
 use ByLopez\Logistica\Exceptions\OperacionLogisticaInvalidaException as Invalida;
 use ByLopez\Logistica\Services\Entregas\ConsultaEntregaService;
 use ByLopez\Logistica\Services\Guias\ConsultaGuiaService;
@@ -38,6 +39,7 @@ class ContextoDespachoService
         protected IncidenciasStockService $stock,
         protected CondicionDespacho $condicion,
         protected RecaudoPorGuia $recaudoPorGuia,
+        protected DisposicionCobroService $disposiciones,
     ) {}
 
     /** @return array<string, mixed> */
@@ -69,7 +71,10 @@ class ContextoDespachoService
 
         $recaudoSugerido = $modo === 'ver' ? 0.0 : $this->recaudo->recaudoSugerido($orderId);
         $envio = $this->condicion->contexto($pedido);
-        $recaudoGuia = $modo === 'ver' ? null : $this->recaudoGuia($pedido, $pendientes);
+        // F6: decision de cobro de un pedido que no es contra entrega con dinero sin confirmar (null en solo lectura).
+        $disposicion = $modo === 'ver' ? null : $this->disposiciones->situacion($orderId, $actor);
+        $cobrarAlEntregar = ($disposicion['vigente']['tipo'] ?? null) === TipoDisposicionCobro::COBRAR_AL_ENTREGAR->value;
+        $recaudoGuia = $modo === 'ver' ? null : $this->recaudoGuia($pedido, $pendientes, $cobrarAlEntregar);
 
         // Pendiente / disponible / maximo por linea, con la MISMA regla que valida el servidor al despachar.
         $plan = $this->unidades->plan($pedido);
@@ -110,6 +115,7 @@ class ContextoDespachoService
             'recaudo_sugerido' => $recaudoSugerido,
             // C1: base para proponer el recaudo de ESTA guia segun las unidades elegidas (el servidor lo recalcula al despachar).
             'recaudo_guia' => $recaudoGuia,
+            'disposicion_cobro' => $disposicion,
             'moneda' => $pedido->base_currency_code,
             // Limite REAL de subida del servidor (puede ser menor que el maximo logico de 5 MB): para el mensaje del drawer.
             'limite_subida' => ['archivo' => (string) ini_get('upload_max_filesize'), 'cuerpo' => (string) ini_get('post_max_size')],
@@ -155,9 +161,11 @@ class ContextoDespachoService
      * @param  Collection<int, OrderItem>  $pendientes
      * @return array<string, mixed>
      */
-    private function recaudoGuia($pedido, $pendientes): array
+    private function recaudoGuia($pedido, $pendientes, bool $cobrarAlEntregar = false): array
     {
         $c = $this->recaudoPorGuia->contextoPedido($pedido);
+        // F6: «cobrar al entregar» vigente → la guia propone el saldo como si fuera contra entrega (misma regla C1).
+        $c['contra_entrega'] = $c['contra_entrega'] || $cobrarAlEntregar;
         $unitarios = $c['contra_entrega'] ? $this->recaudoPorGuia->valoresUnitarios($pendientes->keys()->map(fn ($id) => (int) $id)->all()) : [];
 
         return [

@@ -62,8 +62,15 @@ return [
         // Registrar guia y despachar / completar un despacho / entregar en bodega (POST). Valida de nuevo el servicio.
         'key' => 'logistica.despachos.despachar',
         'name' => 'logistica::app.acl.despachar',
-        'route' => [$despachos, 'admin.logistica.despachos.despachar', 'admin.logistica.despachos.entregar_bodega'],
+        // F6: la ruta de la decision de cobro va aqui (cobrar al entregar = quien despacha); el credito lo revalida el servicio.
+        'route' => [$despachos, 'admin.logistica.despachos.despachar', 'admin.logistica.despachos.entregar_bodega', 'admin.logistica.despachos.disposicion_cobro'],
         'sort' => 1,
+    ], [
+        // F6: despachar SIN cobro un pedido con saldo pendiente (credito). Autoridad administrativa: ningun rol la trae por defecto.
+        'key' => 'logistica.despachos.autorizar_credito',
+        'name' => 'logistica::app.acl.autorizar-credito',
+        'route' => $despachos,
+        'sort' => 2,
     ], [
         'key' => 'logistica.guias.archivo',
         'name' => 'logistica::app.acl.guia-archivo',

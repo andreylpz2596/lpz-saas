@@ -38,9 +38,11 @@ class RecaudoPorGuia
      * @return array{contra_entrega: bool, exigible: float, comprometido: float, disponible: float, hay_previas: bool, completa: bool,
      *               mercancia: float, flete: float, sugerido: float, lineas: list<array<string, mixed>>}
      */
-    public function calcular(Order $pedido, array $unidades): array
+    public function calcular(Order $pedido, array $unidades, bool $cobrarAlEntregar = false): array
     {
         $contexto = $this->contextoPedido($pedido);
+        // F6: pedido que no es contra entrega con «cobrar al entregar» vigente: misma regla de recaudo por guia.
+        $contexto['contra_entrega'] = $contexto['contra_entrega'] || $cobrarAlEntregar;
         $completa = $this->esDespachoCompleto($pedido, $unidades);
         $mercancia = $this->valores->deUnidades($unidades);
         $flete = $contexto['hay_previas'] ? 0.0 : $contexto['flete_pedido'];
@@ -69,6 +71,7 @@ class RecaudoPorGuia
         $devueltoPorEnvio = $this->devueltoRecibidoPorEnvio($id);
         $comprometido = round((float) (clone $guias)->get(['shipment_id', 'recaudo_esperado'])
             ->sum(fn ($g) => max(0.0, (float) $g->recaudo_esperado - ($devueltoPorEnvio[(int) $g->shipment_id] ?? 0.0))), 2);
+
         return [
             'contra_entrega' => $this->recaudo->recaudoSugerido($id) > 0,
             'exigible' => $exigible,

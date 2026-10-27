@@ -9,6 +9,6 @@ class SinPagosPendientes implements PagosPendientesDeConfirmar
 {
     public function estado(int $orderId): array
     {
-        return ['sin_revisar' => 0.0, 'saldo' => null];
+        return ['sin_revisar' => 0.0, 'verificado' => null, 'saldo' => null];
     }
 }

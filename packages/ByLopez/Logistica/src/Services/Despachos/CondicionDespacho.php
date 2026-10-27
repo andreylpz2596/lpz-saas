@@ -54,18 +54,20 @@ class CondicionDespacho
      *    transferencia, envio gratis) es solo un aviso.
      *  - null: pedido fuera de Cartera.
      *
-     * @return array{bloquea: bool, sin_revisar: float, saldo: ?float, estado: ?string}
+     * @return array{bloquea: bool, sin_revisar: float, verificado: ?float, saldo: ?float, estado: ?string}
      */
     public function pagoPendiente(int $orderId, bool $conRecaudo): array
     {
         $estado = $this->pagos->estado($orderId);
         $sinRevisar = round((float) ($estado['sin_revisar'] ?? 0), 2);
         $saldo = isset($estado['saldo']) ? round((float) $estado['saldo'], 2) : null;
+        $verificado = isset($estado['verificado']) ? round((float) $estado['verificado'], 2) : null;
         $enValidacion = $sinRevisar > 0.001;
 
         return [
             'bloquea' => $enValidacion && $conRecaudo,
             'sin_revisar' => $sinRevisar,
+            'verificado' => $verificado,
             'saldo' => $saldo,
             'estado' => match (true) {
                 $enValidacion => 'en_validacion',

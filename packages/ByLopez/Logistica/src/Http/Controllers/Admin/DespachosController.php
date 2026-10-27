@@ -8,6 +8,7 @@ use ByLopez\Logistica\Http\Controllers\Concerns\ResponderOperacionesLogisticas;
 use ByLopez\Logistica\Services\Despachos\ConsultaDespachoService;
 use ByLopez\Logistica\Services\Despachos\ContextoDespachoService;
 use ByLopez\Logistica\Services\Despachos\DespachoService;
+use ByLopez\Logistica\Services\Despachos\DisposicionCobroService;
 use ByLopez\Logistica\Services\Stock\IncidenciasStockService;
 use ByLopez\Logistica\Support\AutorizacionLogistica;
 use Illuminate\Http\JsonResponse;
@@ -104,6 +105,20 @@ class DespachosController extends Controller
                 'guia_id' => $r->guia?->id,
                 'ya_existia' => $r->yaExistia,
                 'mensaje' => trans($r->yaExistia ? 'logistica::app.despachos.flash.ya-registrado' : 'logistica::app.despachos.flash.despachado', ['guia' => $r->guia?->numero_guia]),
+            ];
+        });
+    }
+
+    /** F6: decision de cobro del pedido (cobrar al entregar / credito autorizado). Permisos y vigencia los valida el servicio. */
+    public function disposicionCobro(int $pedido, Request $request, DisposicionCobroService $servicio): JsonResponse
+    {
+        return $this->envolver(function () use ($pedido, $request, $servicio) {
+            $d = $servicio->registrar($this->actor(), $pedido, (string) $request->input('tipo'), $request->input('motivo'));
+
+            return [
+                'disposicion_id' => (int) $d->id,
+                'situacion' => $servicio->situacion($pedido, $this->actor()),
+                'mensaje' => trans('logistica::app.despachos.disposicion.registrada-'.$d->tipo->value),
             ];
         });
     }

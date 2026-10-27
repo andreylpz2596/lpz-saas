@@ -58,6 +58,17 @@
         .dark .lgm-nota { color: #9ca3af; }
         /* Dinero reportado vs saldo, y reparto del recaudo entre guias: pares «etiqueta … valor», nunca solo por color. */
         .lgm-estado-pago, .lgm-reparto { display: grid; gap: 4px; margin: 6px 0 0; font-size: 13px; }
+        /* F6: opciones de la decision de cobro (texto + color; el radio se ve en claro y oscuro). */
+        .lgm-opciones { display: grid; gap: 6px; margin: 8px 0 0; border: 0; padding: 0; }
+        .lgm-opcion { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; color: #334155; cursor: pointer; }
+        .lgm-opcion input { margin-top: 3px; }
+        .lgm-opcion small { color: #64748b; }
+        .lgm-opcion:focus-within { outline: 2px solid #2563eb; outline-offset: 1px; }
+        .lgm-opcion--off { opacity: .65; cursor: not-allowed; }
+        .lgm-nota--ok { padding: 8px 10px; border-radius: 6px; background: #ecfdf5; color: #065f46; }
+        .dark .lgm-opcion { border-color: #374151; color: #e5e7eb; }
+        .dark .lgm-opcion small { color: #9ca3af; }
+        .dark .lgm-nota--ok { background: #064e3b; color: #d1fae5; }
         .lgm-estado-pago > div, .lgm-reparto > div { display: flex; justify-content: space-between; gap: 12px; }
         .lgm-estado-pago dt, .lgm-reparto dt { color: #475569; }
         .lgm-estado-pago dd, .lgm-reparto dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; color: #0f172a; white-space: nowrap; }
@@ -171,6 +182,7 @@
     url-contexto="{{ route('admin.logistica.despachos.contexto', ['pedido' => '__ID__']) }}"
     url-despachar="{{ route('admin.logistica.despachos.despachar', ['pedido' => '__ID__']) }}"
     url-bodega="{{ route('admin.logistica.despachos.entregar_bodega', ['pedido' => '__ID__']) }}"
+    url-disposicion="{{ route('admin.logistica.despachos.disposicion_cobro', ['pedido' => '__ID__']) }}"
     url-archivo-ver="{{ route('admin.logistica.guias.archivo', ['guia' => '__ID__', 'modo' => 'ver']) }}"
     url-archivo-descargar="{{ route('admin.logistica.guias.archivo', ['guia' => '__ID__', 'modo' => 'descargar']) }}"
     url-archivo-guardar="{{ route('admin.logistica.guias.archivo.guardar', ['guia' => '__ID__']) }}"
@@ -412,16 +424,21 @@
                                 <span v-else class="lgm-badge lgm-badge--aviso" data-logistica="pago-validacion">@{{ textos.modal['pago-pendiente-titulo'] }}</span>
 
                                 {{-- Dinero reportado vs saldo: se muestran por separado. Lo reportado sin revisar YA esta descontado del saldo de Cartera aunque aun no este confirmado. --}}
-                                <dl v-if="estadoPago === 'en_validacion'" class="lgm-fila-completa lgm-estado-pago" data-logistica="pago-desglose">
-                                    <div>
+                                <dl v-if="estadoPago === 'en_validacion' || (estadoPago === 'pendiente' && pagoConfirmado > 0)" class="lgm-fila-completa lgm-estado-pago" data-logistica="pago-desglose">
+                                    <div v-if="ctx.envio.pago_pendiente.sin_revisar > 0">
                                         <dt>@{{ textos.modal['pago-reportado'] }}</dt>
                                         <dd data-logistica="pago-reportado">@{{ precio(ctx.envio.pago_pendiente.sin_revisar) }}</dd>
+                                    </div>
+                                    {{-- F6: dinero CONFIRMADO por Cartera (no se suma a lo reportado ni al saldo: son partes de la misma cuenta). --}}
+                                    <div v-if="pagoConfirmado > 0">
+                                        <dt>@{{ textos.modal['pago-confirmado'] }}</dt>
+                                        <dd data-logistica="pago-confirmado">@{{ precio(pagoConfirmado) }}</dd>
                                     </div>
                                     <div v-if="ctx.envio.pago_pendiente.saldo !== null">
                                         <dt>@{{ textos.modal['pago-saldo-cartera'] }}</dt>
                                         <dd data-logistica="pago-saldo-cartera">@{{ precio(ctx.envio.pago_pendiente.saldo) }}</dd>
                                     </div>
-                                    <p class="lgm-nota">@{{ textos.modal['pago-descontado-nota'] }}</p>
+                                    <p v-if="ctx.envio.pago_pendiente.sin_revisar > 0" class="lgm-nota">@{{ textos.modal['pago-descontado-nota'] }}</p>
                                 </dl>
 
                                 <p v-if="estadoPago === 'pendiente' && vistaModo === 'entregar_bodega'" class="lgm-nota lgm-fila-completa">@{{ textos.modal['pago-deuda-ayuda'] }}</p>
@@ -434,6 +451,57 @@
                             <div v-if="bloqueoPago" class="lgm-alerta" data-logistica="pago-pendiente">
                                 <p class="lgm-alerta-tit"><span class="icon-information"></span>@{{ textos.modal['pago-pendiente-titulo'] }}</p>
                                 <p class="lgm-nota">@{{ t(textos.modal['pago-pendiente-texto'], { valor: precio(ctx.envio.pago_pendiente.sin_revisar) }) }}</p>
+                            </div>
+
+                            {{-- F6: pedido que NO es contra entrega con dinero sin confirmar. No sale con «no cobrar nada» sin una decision vigente
+                                 (el servidor la exige al despachar). Esperar = no despachar todavia; cobrar al entregar; credito (solo con permiso). --}}
+                            <div v-if="disposicion && disposicion.requiere && vistaModo !== 'entregar_bodega'" class="lgm-sec" data-logistica="disposicion-cobro">
+                                <p v-if="disposicion.vigente" class="lgm-nota lgm-nota--ok" role="status" data-logistica="disposicion-vigente">
+                                    @{{ t(textos.disposicion['vigente-' + disposicion.vigente.tipo], { actor: disposicion.vigente.actor, fecha: disposicion.vigente.fecha, motivo: disposicion.vigente.motivo || '' }) }}
+                                </p>
+
+                                <template v-else>
+                                    <div class="lgm-alerta" role="alert">
+                                        <p class="lgm-alerta-tit"><span class="icon-information"></span>@{{ textos.disposicion.titulo }}</p>
+                                        <p class="lgm-nota">@{{ t(textos.disposicion.explicacion, { monto: precio(disposicion.por_confirmar) }) }}</p>
+                                        <p v-if="disposicion.anterior" class="lgm-nota" data-logistica="disposicion-anterior">
+                                            @{{ t(textos.disposicion.anterior, { tipo: textos.disposicion['tipo-' + disposicion.anterior.tipo] }) }}
+                                        </p>
+                                    </div>
+
+                                    <fieldset class="lgm-opciones" data-logistica="disposicion-opciones">
+                                        <legend class="lgm-label">@{{ textos.disposicion.titulo }}</legend>
+                                        <label class="lgm-opcion">
+                                            <input type="radio" value="esperar" v-model="dispo.tipo" data-logistica="disposicion-esperar">
+                                            <span><b>@{{ textos.disposicion['opcion-esperar'] }}</b><br><small>@{{ textos.disposicion['opcion-esperar-ayuda'] }}</small></span>
+                                        </label>
+                                        <label class="lgm-opcion">
+                                            <input type="radio" value="cobrar_al_entregar" v-model="dispo.tipo" :disabled="! disposicion.permisos.cobrar_al_entregar" data-logistica="disposicion-cobrar">
+                                            <span><b>@{{ textos.disposicion['opcion-cobrar'] }}</b><br><small>@{{ textos.disposicion['opcion-cobrar-ayuda'] }}</small></span>
+                                        </label>
+                                        <label class="lgm-opcion" :class="{ 'lgm-opcion--off': ! disposicion.permisos.credito }">
+                                            <input type="radio" value="credito_autorizado" v-model="dispo.tipo" :disabled="! disposicion.permisos.credito" data-logistica="disposicion-credito">
+                                            <span>
+                                                <b>@{{ textos.disposicion['opcion-credito'] }}</b><br><small>@{{ textos.disposicion['opcion-credito-ayuda'] }}</small>
+                                                <small v-if="! disposicion.permisos.credito" class="lgm-sub">@{{ textos.disposicion['sin-permiso-credito'] }}</small>
+                                            </span>
+                                        </label>
+                                    </fieldset>
+
+                                    <div v-if="dispo.tipo === 'credito_autorizado'">
+                                        <label class="lgm-label" for="lgm-dispo-motivo">@{{ textos.disposicion.motivo }}</label>
+                                        <textarea id="lgm-dispo-motivo" rows="2" maxlength="500" v-model="dispo.motivo" data-logistica="disposicion-motivo" :class="clasesInput"></textarea>
+                                    </div>
+
+                                    <p v-if="dispo.tipo === 'esperar'" class="lgm-nota" data-logistica="disposicion-esperando">@{{ textos.disposicion.esperando }}</p>
+                                    <p v-if="dispo.error" class="lgm-error" role="alert" data-logistica="disposicion-error">@{{ dispo.error }}</p>
+
+                                    <div v-if="dispo.tipo !== 'esperar'" class="flex justify-end">
+                                        <button type="button" class="secondary-button" :disabled="dispo.enviando" data-logistica="disposicion-guardar" @click="guardarDisposicion">
+                                            @{{ dispo.enviando ? textos.disposicion.guardando : textos.disposicion.guardar }}
+                                        </button>
+                                    </div>
+                                </template>
                             </div>
 
                             {{-- Recogida en bodega: sin transportadora, guia ni PDF. Ni la deuda ni un pago en validacion impiden entregar. --}}
@@ -811,7 +879,7 @@
                         <div class="lgm-pie-botones">
                             <button type="button" class="transparent-button" :disabled="enviando" @click="cerrar">@{{ textos.modal.cancelar }}</button>
 
-                            <button type="button" class="primary-button" :disabled="enviando || ! totalSeleccionado || bloqueoPago" data-logistica="guardar" @click="enviar">
+                            <button type="button" class="primary-button" :disabled="enviando || ! totalSeleccionado || bloqueoPago || bloqueoDisposicion" data-logistica="guardar" @click="enviar">
                                 @{{ enviando ? textos.modal.guardando : textos.modal['guardar-' + vistaModo] }}
                             </button>
                         </div>
@@ -835,7 +903,7 @@
         app.component('v-logistica-despacho', {
             template: '#v-logistica-despacho-template',
 
-            props: ['urlContexto', 'urlDespachar', 'urlBodega', 'urlArchivoVer', 'urlArchivoDescargar', 'urlArchivoGuardar', 'urlCorregir', 'urlStockSolicitar', 'urlStockDirecta', 'urlIncidencia', 'urlIncidenciaRegularizar', 'urlIncidenciaRechazar', 'textos', 'nombres'],
+            props: ['urlContexto', 'urlDespachar', 'urlBodega', 'urlDisposicion', 'urlArchivoVer', 'urlArchivoDescargar', 'urlArchivoGuardar', 'urlCorregir', 'urlStockSolicitar', 'urlStockDirecta', 'urlIncidencia', 'urlIncidenciaRegularizar', 'urlIncidenciaRechazar', 'textos', 'nombres'],
 
             data() {
                 return {
@@ -868,6 +936,8 @@
                     reemplazo: { guiaId: null, archivo: null, motivo: '', enviando: false, error: null },
                     correccion: this.correccionVacia(),
                     stockForm: this.stockVacio(),
+                    // F6: decision de cobro (esperar / cobrar al entregar / credito). Esperar no se envia: es no despachar todavia.
+                    dispo: { tipo: 'esperar', motivo: '', enviando: false, error: null },
                     clasesInput: 'w-full rounded-md border px-3 py-2 text-sm text-gray-600 transition-all hover:border-gray-400 focus:border-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300',
                 };
             },
@@ -952,6 +1022,23 @@
                 // decida. Sin recaudo es solo aviso; el saldo pendiente nunca bloquea.
                 bloqueoPago() {
                     return !! (this.ctx && this.ctx.envio && this.ctx.envio.pago_pendiente && this.ctx.envio.pago_pendiente.bloquea);
+                },
+
+                // F6: situacion de la decision de cobro (null en solo lectura o sin Cartera).
+                disposicion() {
+                    return (this.ctx && this.ctx.disposicion_cobro) || null;
+                },
+
+                // F6: falta la decision (o quedo vieja porque el pago cambio): no se despacha. El servidor lo exige igual.
+                bloqueoDisposicion() {
+                    return !! (this.disposicion && this.disposicion.requiere && ! this.disposicion.resuelta && this.vistaModo !== 'entregar_bodega');
+                },
+
+                // Dinero CONFIRMADO por Cartera (verificado). Valor del servidor; aqui no se calcula nada.
+                pagoConfirmado() {
+                    const p = this.ctx && this.ctx.envio ? this.ctx.envio.pago_pendiente : null;
+
+                    return p && p.verificado ? Number(p.verificado) : 0;
                 },
 
                 // pagado | pendiente | en_validacion | null (fuera de Cartera).
@@ -1286,6 +1373,10 @@
                         return { campo: 'pago', mensaje: m['pago-pendiente-titulo'] };
                     }
 
+                    if (this.bloqueoDisposicion) {
+                        return { campo: 'disposicion', mensaje: this.textos.disposicion.titulo };
+                    }
+
                     if (! this.form.flete_pagador) {
                         return { campo: 'flete_pagador', mensaje: m['error-pagador-requerido'] };
                     }
@@ -1384,6 +1475,7 @@
                     this.pedidoId = pedidoId;
                     this.forzarVer = forzarVer;
                     this.ctx = null;
+                    this.dispo = { tipo: 'esperar', motivo: '', enviando: false, error: null };
                     this.errorCarga = null;
                     this.error = null;
                     this.ajustar = false;
@@ -1520,6 +1612,30 @@
                         .catch(e => {
                             f.error = this.mensajeDeError(e);
                             f.enviando = false;
+                        });
+                },
+
+                // F6: registra «cobrar al entregar» o «credito autorizado». El servidor valida permiso, motivo y vigencia; al volver se
+                // recarga el contexto (el recaudo propuesto cambia con la decision).
+                guardarDisposicion() {
+                    const d = this.dispo;
+
+                    if (d.tipo === 'esperar' || d.enviando) {
+                        return;
+                    }
+
+                    d.enviando = true;
+                    d.error = null;
+
+                    this.$axios.post(this.urlDisposicion.replace('__ID__', this.pedidoId), { tipo: d.tipo, motivo: d.motivo })
+                        .then(r => {
+                            this.$emitter.emit('add-flash', { type: 'success', message: r.data.mensaje });
+                            this.dispo = { tipo: 'esperar', motivo: '', enviando: false, error: null };
+                            this.recargarContexto();
+                        })
+                        .catch(e => {
+                            d.error = this.mensajeDeError(e);
+                            d.enviando = false;
                         });
                 },
 

@@ -19,9 +19,13 @@ class PagosPendientesDesdeCartera implements PagosPendientesDeConfirmar
         $saldo = $this->cartera->saldosDePedidos([$orderId])[$orderId] ?? null;
 
         if ($saldo === null || ! $saldo->enCartera) {
-            return ['sin_revisar' => 0.0, 'saldo' => null];
+            return ['sin_revisar' => 0.0, 'verificado' => null, 'saldo' => null];
         }
 
-        return ['sin_revisar' => round((float) $saldo->sinRevisar, 2), 'saldo' => round((float) $saldo->saldo, 2)];
+        return [
+            'sin_revisar' => round((float) $saldo->sinRevisar, 2),
+            'verificado' => round((float) $saldo->verificado, 2),
+            'saldo' => round((float) $saldo->saldo, 2),
+        ];
     }
 }

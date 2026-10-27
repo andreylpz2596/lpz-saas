@@ -200,6 +200,22 @@ class OperacionLogisticaInvalidaException extends RuntimeException
     /** Un pago SIN CONFIRMAR es lo que deja el saldo en 0: no se despacha como pagado hasta que Cartera decida. */
     public const PAGO_PENDIENTE_CONFIRMAR = 'pago_pendiente_confirmar';
 
+    /** El motivo de devolucion elegido no existe o esta inactivo en el catalogo. */
+    public const MOTIVO_DEVOLUCION_INVALIDO = 'motivo_devolucion_invalido';
+
+    // F6: pedido que no es contra entrega con dinero sin confirmar.
+    /** Falta decidir como se cobra (esperar el pago, cobrar al entregar o credito autorizado), o la decision quedo vieja. */
+    public const DISPOSICION_COBRO_REQUERIDA = 'disposicion_cobro_requerida';
+
+    /** Tipo de decision de cobro desconocido. */
+    public const DISPOSICION_COBRO_INVALIDA = 'disposicion_cobro_invalida';
+
+    /** El pedido no necesita decision de cobro (contra entrega, pagado o fuera de Cartera). */
+    public const DISPOSICION_NO_APLICA = 'disposicion_no_aplica';
+
+    /** El credito autorizado exige un motivo. */
+    public const MOTIVO_CREDITO_REQUERIDO = 'motivo_credito_requerido';
+
     /** Metodo de envio desconocido: el pagador del flete no se deduce y hay que elegirlo. */
     public const PAGADOR_REQUERIDO = 'pagador_requerido';
 

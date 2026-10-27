@@ -11,6 +11,7 @@ use ByLopez\Logistica\Models\Transportadora;
 use ByLopez\Logistica\Models\Zona;
 use ByLopez\Logistica\Services\Despachos\ContextoDespachoService;
 use ByLopez\Logistica\Services\Despachos\DespachoService;
+use ByLopez\Logistica\Services\Despachos\DisposicionCobroService;
 use ByLopez\Logistica\Services\Tarifas\ZonasYTarifasService;
 use ByLopez\Logistica\Services\Transportadoras\TransportadorasService;
 use ByLopez\Logistica\Support\CondicionesEnvio;
@@ -232,14 +233,19 @@ test('F1-8 saldo pendiente nunca bloquea; un pago EN VALIDACION solo bloquea si 
     log6_municipio('11001');
     $estado = fn (array $e) => app(ContextoDespachoService::class)->paraPedido((int) $e['pedido']->id, log2_bodega())['envio']['pago_pendiente'];
 
-    // Saldo pendiente sin pagos en revision: contra entrega o transferencia, se despacha (la deuda sigue en Cartera).
+    // Saldo pendiente sin pagos en revision: contra entrega se despacha (cobra quien entrega; la deuda sigue en Cartera).
+    // F6 (2026-10-26): la TRANSFERENCIA con saldo ya no sale con «no cobrar nada»: sin decision se bloquea; con «cobrar al
+    // entregar» sale (la decision es del pedido y queda en la guia).
     log6_pagos(0, 51000);
     $codDebe = log2_pedido(1, ['envio' => 'free_free', 'pago' => 'cashondelivery']);
     $trDebe = log2_pedido(1, ['envio' => 'free_free', 'pago' => 'moneytransfer']);
 
-    expect($estado($codDebe))->toBe(['bloquea' => false, 'sin_revisar' => 0.0, 'saldo' => 51000.0, 'estado' => 'pendiente'])
+    expect($estado($codDebe))->toBe(['bloquea' => false, 'sin_revisar' => 0.0, 'verificado' => null, 'saldo' => 51000.0, 'estado' => 'pendiente'])
         ->and(log6_despachar($codDebe, $c['jeison'])->id)->toBeInt()
-        ->and(log6_despachar($trDebe, $c['jeison'])->id)->toBeInt();
+        ->and(log2_error(fn () => log6_despachar($trDebe, $c['jeison'])))->toBe(Invalida::DISPOSICION_COBRO_REQUERIDA);
+
+    app(DisposicionCobroService::class)->registrar(log2_bodega(), (int) $trDebe['pedido']->id, 'cobrar_al_entregar', null);
+    expect(log6_despachar($trDebe, $c['jeison'])->disposicion_cobro_id)->toBeInt();
 
     // Contra entrega + pago en validacion (total o parcial): el valor a cobrar es incierto → bloqueado.
     $cod = log2_pedido(1, ['envio' => 'free_free', 'pago' => 'cashondelivery']);
@@ -254,12 +260,17 @@ test('F1-8 saldo pendiente nunca bloquea; un pago EN VALIDACION solo bloquea si 
 
     expect(DB::table('shipments')->where('order_id', $cod['pedido']->id)->count())->toBe(0);
 
-    // Sin recaudo (transferencia, envio gratis) + pago en validacion: solo aviso, se despacha.
+    // Sin recaudo (transferencia, envio gratis) + pago en validacion: el pago de recaudo no bloquea (nadie cobra), pero F6 exige
+    // decision porque lo reportado no es verificado; «cobrar al entregar» tampoco cabe (valor incierto) → credito autorizado.
     log6_pagos(51000, 0);
     $transferencia = log2_pedido(1, ['envio' => 'free_free', 'pago' => 'moneytransfer']);
 
-    expect($estado($transferencia))->toBe(['bloquea' => false, 'sin_revisar' => 51000.0, 'saldo' => 0.0, 'estado' => 'en_validacion'])
-        ->and(log6_despachar($transferencia, $c['jeison'])->id)->toBeInt();
+    expect($estado($transferencia))->toBe(['bloquea' => false, 'sin_revisar' => 51000.0, 'verificado' => null, 'saldo' => 0.0, 'estado' => 'en_validacion'])
+        ->and(log2_error(fn () => log6_despachar($transferencia, $c['jeison'])))->toBe(Invalida::DISPOSICION_COBRO_REQUERIDA)
+        ->and(log2_error(fn () => app(DisposicionCobroService::class)->registrar(log2_bodega(), (int) $transferencia['pedido']->id, 'cobrar_al_entregar', null)))->toBe(Invalida::PAGO_PENDIENTE_CONFIRMAR);
+
+    app(DisposicionCobroService::class)->registrar(f03b_admin('all'), (int) $transferencia['pedido']->id, 'credito_autorizado', 'Prueba: sale mientras Cartera revisa');
+    expect(log6_despachar($transferencia, $c['jeison'])->id)->toBeInt();
 
     // Pagado y fuera de Cartera: se despacha.
     log6_pagos(0, 0);
@@ -268,7 +279,7 @@ test('F1-8 saldo pendiente nunca bloquea; un pago EN VALIDACION solo bloquea si 
     log6_pagos(0, null);
     $fuera = log2_pedido(1, ['envio' => 'free_free']);
 
-    expect($estado($fuera))->toBe(['bloquea' => false, 'sin_revisar' => 0.0, 'saldo' => null, 'estado' => null])
+    expect($estado($fuera))->toBe(['bloquea' => false, 'sin_revisar' => 0.0, 'verificado' => null, 'saldo' => null, 'estado' => null])
         ->and(log6_despachar($fuera, $c['jeison'])->id)->toBeInt();
 });
 
@@ -301,13 +312,18 @@ test('F1-9 con Cartera real: contra entrega con pago en validacion se bloquea; r
         ->and($ctx($confirmado)['recaudo_sugerido'])->toBe(31000.0)
         ->and((float) log6_despachar($confirmado, $c['jeison'], ['recaudoEsperado' => '31000'])->recaudo_esperado)->toBe(31000.0);
 
-    // Transferencia (nadie cobra al entregar) con pago en validacion: aviso y despacho; Cartera conserva el pago sin revisar.
+    // Transferencia (nadie cobra al entregar) con pago en validacion. F6 (2026-10-26): un pago reportado NO es dinero verificado,
+    // asi que ya no sale en silencio: sin decision se bloquea; con credito autorizado sale. Cartera conserva el pago sin revisar.
     $transferencia = log6_en_cartera(['envio' => 'free_free', 'pago' => 'moneytransfer']);
     log6_transferencia($transferencia, $admin);
     $antes = log6_dinero($transferencia);
 
-    expect($ctx($transferencia)['envio']['pago_pendiente'])->toBe(['bloquea' => false, 'sin_revisar' => 51000.0, 'saldo' => 0.0, 'estado' => 'en_validacion'])
-        ->and(log6_despachar($transferencia, $c['jeison'])->condicion_envio)->toBe('gratis')
+    expect($ctx($transferencia)['envio']['pago_pendiente'])->toBe(['bloquea' => false, 'sin_revisar' => 51000.0, 'verificado' => 0.0, 'saldo' => 0.0, 'estado' => 'en_validacion'])
+        ->and(log2_error(fn () => log6_despachar($transferencia, $c['jeison'])))->toBe(Invalida::DISPOSICION_COBRO_REQUERIDA);
+
+    app(DisposicionCobroService::class)->registrar($admin, (int) $transferencia['pedido']->id, 'credito_autorizado', 'Prueba: sale mientras Cartera revisa');
+
+    expect(log6_despachar($transferencia, $c['jeison'])->condicion_envio)->toBe('gratis')
         ->and($ctx($transferencia)['envio']['pago_pendiente']['sin_revisar'])->toBe(51000.0)
         ->and(log6_dinero($transferencia))->toBe($antes);
 });
@@ -401,7 +417,7 @@ test('F1-12 recogida con Cartera real: con saldo pendiente SE ENTREGA y la deuda
     $antes = log6_dinero($debe);
 
     expect($ctx($debe)['modo'])->toBe('entregar_bodega')
-        ->and($ctx($debe)['envio']['pago_pendiente'])->toBe(['bloquea' => false, 'sin_revisar' => 0.0, 'saldo' => 51000.0, 'estado' => 'pendiente'])
+        ->and($ctx($debe)['envio']['pago_pendiente'])->toBe(['bloquea' => false, 'sin_revisar' => 0.0, 'verificado' => 0.0, 'saldo' => 51000.0, 'estado' => 'pendiente'])
         ->and($entregar($debe)->entrega)->not->toBeNull()
         ->and(log6_saldo($debe))->toBe(51000.0)
         ->and(log6_dinero($debe))->toBe($antes);
@@ -411,7 +427,7 @@ test('F1-12 recogida con Cartera real: con saldo pendiente SE ENTREGA y la deuda
     $pago = log6_transferencia($validacion, $admin);
     $antes = log6_dinero($validacion);
 
-    expect($ctx($validacion)['envio']['pago_pendiente'])->toBe(['bloquea' => false, 'sin_revisar' => 51000.0, 'saldo' => 0.0, 'estado' => 'en_validacion'])
+    expect($ctx($validacion)['envio']['pago_pendiente'])->toBe(['bloquea' => false, 'sin_revisar' => 51000.0, 'verificado' => 0.0, 'saldo' => 0.0, 'estado' => 'en_validacion'])
         ->and($entregar($validacion)->entrega)->not->toBeNull()
         ->and(DB::table('bylopez_va_pagos')->where('id', $pago)->value('estado'))->toBe('sin_revisar')
         ->and(log6_dinero($validacion))->toBe($antes);
@@ -448,11 +464,18 @@ test('F1-13 contraentrega y domiciliario con saldo pendiente se despachan; el re
         ->and(log6_saldo($cod))->toBe(51000.0)
         ->and(log6_dinero($cod))->toBe($antes);
 
-    // Domiciliario local (Jeison) con el pedido pendiente de pago: se despacha; despachar no es cobrar.
+    // Domiciliario local (Jeison) con un pedido por TRANSFERENCIA pendiente de pago. F6: sin decision no sale; con «cobrar al
+    // entregar» el domiciliario lleva el saldo (51.000) como recaudo. Despachar sigue sin ser cobrar: ningun pago nuevo.
     $dom = log6_en_cartera(['envio' => 'domicilio_local', 'pago' => 'moneytransfer']);
     $antes = log6_dinero($dom);
 
-    expect(log6_despachar($dom, $c['jeison'])->condicion_envio)->toBe('cobrado_en_pedido')
+    expect(log2_error(fn () => log6_despachar($dom, $c['jeison'])))->toBe(Invalida::DISPOSICION_COBRO_REQUERIDA);
+
+    app(DisposicionCobroService::class)->registrar($bodega, (int) $dom['pedido']->id, 'cobrar_al_entregar', null);
+    $guiaDom = log6_despachar($dom, $c['jeison']);
+
+    expect($guiaDom->condicion_envio)->toBe('cobrado_en_pedido')
+        ->and((float) $guiaDom->recaudo_esperado)->toBe(51000.0)
         ->and(log6_saldo($dom))->toBe(51000.0)
         ->and(log6_dinero($dom))->toBe($antes);
 });
