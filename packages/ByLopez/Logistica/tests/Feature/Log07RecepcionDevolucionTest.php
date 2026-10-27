@@ -9,6 +9,7 @@ use ByLopez\Logistica\Exceptions\OperacionLogisticaInvalidaException as Invalida
 use ByLopez\Logistica\Models\RecepcionDevolucion;
 use ByLopez\Logistica\Services\Entregas\AnularEventoLogisticoService;
 use ByLopez\Logistica\Services\Entregas\ConsultaEntregaService;
+use ByLopez\Logistica\Services\Entregas\ContextoEntregaService;
 use ByLopez\Logistica\Services\Entregas\RecibirDevolucionService;
 use ByLopez\Logistica\Services\Entregas\RegistrarRetornoTransportadoraService;
 use ByLopez\Logistica\Support\Inventario\ReingresoViaCorteConfeccion;
@@ -449,4 +450,42 @@ test('RD-14 la logica del drawer unico (modos, validaciones, recepcion con noved
 
     expect($codigo)->toBe(0, implode("\n", $salida))
         ->and(implode("\n", $salida))->toContain('JS-OK');
+});
+
+test('RD-15 motivos de devolucion estandarizados: codigo del catalogo propio, «otro» exige detalle, sin codigo sigue el texto libre, no se mezclan con defectos', function () {
+    $registrar = fn (array $e, ?string $codigo, ?string $motivo, ?string $clave = null) => app(RegistrarRetornoTransportadoraService::class)->registrar(rd_bodega(), new SolicitudEventoEnvio(
+        shipmentId: (int) $e['envio']->id, orderId: (int) $e['pedido']->id, fecha: now()->toDateString(), items: [$e['si'] => 1],
+        fuente: Fuente::BODEGA_MANUAL, idempotencyKey: $clave ?? 'rd15-'.Str::uuid(), motivo: $motivo, motivoCodigo: $codigo,
+    ))->registro;
+
+    $e = rd_envio(4);
+
+    // Codigo valido sin detalle: el texto guarda el nombre del motivo (lectura igual que los historicos).
+    $r = $registrar($e, 'cliente_ausente', null);
+    expect($r->motivo_codigo)->toBe('cliente_ausente')->and($r->motivo)->toBe('Cliente ausente o no contesta');
+
+    // Codigo + detalle: el detalle es el texto.
+    $r2 = $registrar($e, 'talla', 'Pidio M y le quedo grande');
+    expect($r2->motivo_codigo)->toBe('talla')->and($r2->motivo)->toBe('Pidio M y le quedo grande');
+
+    // «Otro» sin detalle, codigo inexistente o un codigo de DEFECTO (otro tipo del catalogo): rechazados.
+    expect(rd_error(fn () => $registrar($e, 'otro', ' ')))->toBe(Invalida::MOTIVO_REQUERIDO)
+        ->and(rd_error(fn () => $registrar($e, 'regalo', null)))->toBe(Invalida::MOTIVO_DEVOLUCION_INVALIDO)
+        ->and(rd_error(fn () => $registrar($e, 'mancha', null)))->toBe(Invalida::MOTIVO_DEVOLUCION_INVALIDO);
+
+    // Sin codigo (integracion o pantalla anterior): texto libre obligatorio, como antes.
+    $r3 = $registrar($e, null, 'No quiso contestar');
+    expect($r3->motivo_codigo)->toBeNull()->and($r3->motivo)->toBe('No quiso contestar')
+        ->and(rd_error(fn () => $registrar($e, null, null)))->toBe(Invalida::MOTIVO_REQUERIDO);
+
+    // Misma clave con otro motivo: conflicto de idempotencia (el codigo entra en la huella).
+    $clave = 'rd15-clave-'.Str::uuid();
+    $e2 = rd_envio(2);
+    $registrar($e2, 'rechazado', null, $clave);
+    expect(rd_error(fn () => $registrar($e2, 'sin_dinero', null, $clave)))->toBe(Invalida::IDEMPOTENCIA_CONFLICTO);
+
+    // Separacion: los catalogos del drawer no se mezclan.
+    $ctx = app(ContextoEntregaService::class)->paraEnvio((int) $e['envio']->id, rd_bodega());
+    expect(collect($ctx['motivos_devolucion'])->pluck('codigo')->all())->toContain('cliente_ausente')->not->toContain('mancha')
+        ->and(collect($ctx['catalogo_defectos']['motivos'])->pluck('codigo')->all())->toContain('mancha')->not->toContain('cliente_ausente');
 });

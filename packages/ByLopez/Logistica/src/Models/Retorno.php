@@ -19,7 +19,7 @@ class Retorno extends Model
     protected $table = 'bylopez_lg_retornos';
 
     protected $fillable = [
-        'order_id', 'shipment_id', 'fecha_retorno', 'fuente', 'motivo', 'actor_admin_id', 'actor_name_snapshot',
+        'order_id', 'shipment_id', 'fecha_retorno', 'fuente', 'motivo', 'motivo_codigo', 'actor_admin_id', 'actor_name_snapshot',
         'carrier_code_snapshot', 'carrier_title_snapshot', 'track_number_snapshot', 'evidencia_referencia',
         'estado', 'idempotency_key', 'huella',
     ];

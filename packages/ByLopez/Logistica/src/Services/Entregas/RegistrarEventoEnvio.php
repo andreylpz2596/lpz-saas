@@ -219,7 +219,7 @@ abstract class RegistrarEventoEnvio
         return hash('sha256', json_encode([
             $this->tipo(), $s->shipmentId, $s->orderId, $fecha, $items, $fuente->value,
             trim((string) $s->carrierCode), $this->texto($s->evidenciaReferencia, 500), $this->texto($s->motivo, 500),
-        ]));
+        ] + ($this->texto($s->motivoCodigo, 40) === null ? [] : ['motivo_codigo' => $this->texto($s->motivoCodigo, 40)])));
     }
 
     protected function texto(?string $valor, int $max): ?string

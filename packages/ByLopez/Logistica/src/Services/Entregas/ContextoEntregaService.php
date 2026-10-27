@@ -2,9 +2,9 @@
 
 namespace ByLopez\Logistica\Services\Entregas;
 
-use ByLopez\Logistica\Models\CatalogoDefecto;
 use ByLopez\Logistica\Contracts\GestionaCobroPedido;
 use ByLopez\Logistica\Exceptions\OperacionLogisticaInvalidaException as Invalida;
+use ByLopez\Logistica\Models\CatalogoDefecto;
 use ByLopez\Logistica\Services\Transportadoras\TransportadorasService;
 use ByLopez\Logistica\Support\AutorizacionLogistica;
 use Illuminate\Support\Carbon;
@@ -98,6 +98,8 @@ class ContextoEntregaService
             'devoluciones' => $devoluciones,
             // C5: clasificacion de defectuosas al recibir (catalogo parametrizable: motivo del defecto y origen probable).
             'catalogo_defectos' => ['motivos' => CatalogoDefecto::activos(CatalogoDefecto::MOTIVO), 'origenes' => CatalogoDefecto::activos(CatalogoDefecto::ORIGEN)],
+            // Motivos COMERCIALES para registrar una devolucion (otro tipo del catalogo; vacio si la base no tiene la migracion).
+            'motivos_devolucion' => CatalogoDefecto::activos(CatalogoDefecto::DEVOLUCION),
             'historial' => $historial,
             'reporte_proveedor' => $this->reporteProveedor((int) $envio->id, $fechaHora),
             'cita_recogida' => $d['cita_recogida'] ? ['fecha' => $fecha($d['cita_recogida']->pickup_date), 'desde' => substr((string) $d['cita_recogida']->start_time, 0, 5), 'hasta' => substr((string) $d['cita_recogida']->end_time, 0, 5)] : null,

@@ -264,7 +264,21 @@
                                 <p v-if="! productosConPendientes.length" class="lge-nota">@{{ textos.sin_pendientes }}</p>
                             </section>
 
-                            <div v-if="modo === 'devolver'">
+                            {{-- Motivo ESTANDARIZADO (catalogo de devoluciones; no es el diagnostico de defectos de la recepcion). Sin catalogo: texto libre como antes. --}}
+                            <div v-if="modo === 'devolver' && motivosDevolucion.length" class="grid gap-2">
+                                <div>
+                                    <label class="lge-label" for="lge-motivo-codigo">@{{ textos.motivo_devolucion }} *</label>
+                                    <select id="lge-motivo-codigo" v-model="form.motivo_codigo" data-logistica="motivo-codigo" class="lg-input">
+                                        <option value="">@{{ textos.motivo_devolucion_elige }}</option>
+                                        <option v-for="m in motivosDevolucion" :key="m.codigo" :value="m.codigo">@{{ m.nombre }}</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="lge-label" for="lge-motivo-detalle">@{{ motivoSel && motivoSel.requiere_detalle ? textos.motivo_detalle + ' *' : textos.motivo_detalle }}</label>
+                                    <input id="lge-motivo-detalle" type="text" maxlength="500" v-model="form.motivo" data-logistica="motivo" class="lg-input" :placeholder="textos.motivo_devolucion_ph">
+                                </div>
+                            </div>
+                            <div v-else-if="modo === 'devolver'">
                                 <label class="lge-label">@{{ textos.motivo_devolucion }} *</label>
                                 <input type="text" maxlength="500" v-model="form.motivo" data-logistica="motivo" class="lg-input" :placeholder="textos.motivo_devolucion_ph">
                             </div>
@@ -452,7 +466,7 @@
                     enviando: false,
                     error: null,
                     clave: null,
-                    form: { fecha: '', carrier_code: '', motivo: '', evidencia: '', observacion: '' },
+                    form: { fecha: '', carrier_code: '', motivo: '', motivo_codigo: '', evidencia: '', observacion: '' },
                     cantidades: {},
                     // Recepcion: retorno_item_id => { recibidas, aptas, motivo }. `novedad` y `faltantes` se DERIVAN (nunca incoherentes).
                     recibido: {},
@@ -468,6 +482,15 @@
             computed: {
                 titulo() {
                     return this.textos['titulo_' + this.modo] || this.textos.titulo_ver;
+                },
+
+                // Catalogo de motivos de DEVOLUCION del servidor (vacio si la base no tiene la migracion → texto libre).
+                motivosDevolucion() {
+                    return (this.ctx && this.ctx.motivos_devolucion) || [];
+                },
+
+                motivoSel() {
+                    return this.motivosDevolucion.find(m => m.codigo === this.form.motivo_codigo) || null;
                 },
 
                 colorEntrega() {
@@ -631,7 +654,7 @@
                     }
 
                     this.modo = modo;
-                    this.form = { fecha: this.ctx.form.hoy, carrier_code: '', motivo: '', evidencia: '', observacion: '' };
+                    this.form = { fecha: this.ctx.form.hoy, carrier_code: '', motivo: '', motivo_codigo: '', evidencia: '', observacion: '' };
 
                     // Validar y cobrar solo existen con permiso y cuando corresponden; el servidor igual lo vuelve a exigir.
                     if (modo === 'validar' && ! (this.ctx.permisos.validar && this.ctx.lista_para_validar)) {
@@ -697,7 +720,10 @@
                         return;
                     }
 
-                    if (this.modo === 'devolver' && ! this.form.motivo.trim()) {
+                    // Con catalogo: motivo elegido de la lista y detalle solo si el motivo lo exige («Otro»). El servidor valida igual.
+                    const exigeTexto = this.motivosDevolucion.length ? !! (this.motivoSel && this.motivoSel.requiere_detalle) : true;
+
+                    if (this.modo === 'devolver' && ((this.motivosDevolucion.length && ! this.form.motivo_codigo) || (exigeTexto && ! this.form.motivo.trim()))) {
                         this.error = this.textos.err_motivo;
 
                         return;
@@ -723,6 +749,7 @@
                         carrier_code: this.form.carrier_code,
                         evidencia_referencia: this.form.evidencia,
                         motivo: this.form.motivo,
+                        motivo_codigo: this.form.motivo_codigo || null,
                     });
                 },
 

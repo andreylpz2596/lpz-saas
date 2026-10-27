@@ -17,6 +17,9 @@ class CatalogoDefecto extends Model
 
     public const ORIGEN_PREDETERMINADO = 'por_determinar';
 
+    /** Motivos COMERCIALES de devolucion (por que el cliente no recibio). Tipo propio: nunca es un diagnostico de la prenda. */
+    public const DEVOLUCION = 'devolucion';
+
     protected $table = 'bylopez_lg_catalogo_defectos';
 
     protected $fillable = ['tipo', 'codigo', 'nombre', 'requiere_detalle', 'activo', 'orden'];

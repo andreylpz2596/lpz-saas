@@ -24,6 +24,7 @@ trait ArmaSolicitudEvento
             carrierCode: $request->input('carrier_code'),
             evidenciaReferencia: $request->input('evidencia_referencia'),
             motivo: $request->input('motivo'),
+            motivoCodigo: $request->input('motivo_codigo'),
         );
     }
 }

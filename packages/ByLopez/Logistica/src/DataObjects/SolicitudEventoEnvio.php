@@ -26,5 +26,7 @@ final class SolicitudEventoEnvio
         public readonly ?string $carrierCode = null,
         public readonly ?string $evidenciaReferencia = null,
         public readonly ?string $motivo = null,
+        // Retorno: codigo del catalogo de motivos de devolucion (tipo «devolucion»); `motivo` queda como detalle escrito.
+        public readonly ?string $motivoCodigo = null,
     ) {}
 }
