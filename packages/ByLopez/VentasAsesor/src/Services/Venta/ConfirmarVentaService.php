@@ -2,11 +2,14 @@
 
 namespace ByLopez\VentasAsesor\Services\Venta;
 
+use ByLopez\Logistica\Contracts\DomiciliarioDeVenta;
+use ByLopez\Logistica\Support\PuntosRecogida;
 use ByLopez\VentasAsesor\DataObjects\ConfirmacionVenta;
 use ByLopez\VentasAsesor\DataObjects\ReconciliacionConfirmacion as Reconciliacion;
 use ByLopez\VentasAsesor\DataObjects\SeleccionPropiedadComercial;
 use ByLopez\VentasAsesor\Enums\EstadoBorradorVenta as Estado;
 use ByLopez\VentasAsesor\Enums\EstadoReconciliacionConfirmacion as Clasificacion;
+use ByLopez\VentasAsesor\Enums\TipoOperacionPedido;
 use ByLopez\VentasAsesor\Exceptions\BorradorVentaInvalidoException as BorradorInvalido;
 use ByLopez\VentasAsesor\Exceptions\ConfirmacionVentaInvalidaException as Rechazo;
 use ByLopez\VentasAsesor\Exceptions\GrupoComercialInvalidoException;
@@ -14,10 +17,14 @@ use ByLopez\VentasAsesor\Exceptions\PagoBorradorInvalidoException;
 use ByLopez\VentasAsesor\Exceptions\PedidoRechazadoPorCercoException as RechazoDelCerco;
 use ByLopez\VentasAsesor\Models\BorradorVenta;
 use ByLopez\VentasAsesor\Models\SolicitudBorrador;
+use ByLopez\VentasAsesor\Services\Asesores\AsesorActualService;
+use ByLopez\VentasAsesor\Services\Comisiones\TipoOperacionPedidoService;
+use ByLopez\VentasAsesor\Services\Rentabilidad\RentabilidadVentaService;
 use ByLopez\VentasAsesor\Services\ResolverAtribucionService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Clientes\ValidadorGrupoComercial;
 use ByLopez\VentasAsesor\Support\ContextoComercialDePeticion;
+use ByLopez\VentasAsesor\Support\Logistica\MunicipioDesdeCatalogo;
 use ByLopez\VentasAsesor\Support\Venta\CarritoComercial;
 use ByLopez\VentasAsesor\Support\Venta\ConfirmacionEnCurso;
 use Illuminate\Support\Facades\DB;
@@ -73,6 +80,10 @@ class ConfirmarVentaService
         protected ConfirmacionEnCurso $confirmaciones,
         protected OrderRepository $pedidos,
         protected CartRepository $carritosBagisto,
+        protected PuntosRecogida $puntosRecogida,
+        protected AsesorActualService $asesorActual,
+        protected TipoOperacionPedidoService $tiposOperacion,
+        protected RentabilidadVentaService $rentabilidad,
     ) {}
 
     /**
@@ -83,9 +94,11 @@ class ConfirmarVentaService
         Admin $actor,
         int|float|string $totalEsperado,
         ?SeleccionPropiedadComercial $seleccion = null,
+        TipoOperacionPedido|string|null $tipoOperacion = null,
     ): ConfirmacionVenta {
         $this->exigirPermiso($actor);
         $totalEsperado = $this->normalizarTotal($totalEsperado);
+        $tipoOperacion = $this->tipoOperacionPermitido($actor, $tipoOperacion);
 
         $inicio = $this->iniciar($borradorId, $actor);
 
@@ -96,7 +109,7 @@ class ConfirmarVentaService
         [$token, $cartId] = $inicio;
 
         try {
-            $pedido = $this->crearPedido($borradorId, $token, $actor, $totalEsperado, $seleccion);
+            $pedido = $this->crearPedido($borradorId, $token, $actor, $totalEsperado, $seleccion, $tipoOperacion);
         } catch (Throwable $e) {
             $this->liberar($borradorId, $token);
 
@@ -211,8 +224,14 @@ class ConfirmarVentaService
     }
 
     /** Paso B: revalidacion completa y pedido. Sin transaccion exterior. */
-    protected function crearPedido(int $borradorId, string $token, Admin $actor, float $totalEsperado, ?SeleccionPropiedadComercial $seleccion): Order
-    {
+    protected function crearPedido(
+        int $borradorId,
+        string $token,
+        Admin $actor,
+        float $totalEsperado,
+        ?SeleccionPropiedadComercial $seleccion,
+        TipoOperacionPedido $tipoOperacion = TipoOperacionPedido::VENTA_NORMAL,
+    ): Order {
         $borrador = BorradorVenta::query()->find($borradorId);
 
         if (! $borrador || $borrador->confirmation_token !== $token || $borrador->estado !== Estado::CONFIRMANDO) {
@@ -225,13 +244,13 @@ class ConfirmarVentaService
         $customerId = $this->revalidarCliente($carrito);
         $lineas = $this->revalidarLineas($borrador, $carrito);
 
-        return $this->carritos->operar($carrito, $customerId, function () use ($borrador, $token, $actor, $totalEsperado, $seleccion, $lineas) {
+        return $this->carritos->operar($carrito, $customerId, function () use ($borrador, $token, $actor, $totalEsperado, $seleccion, $lineas, $tipoOperacion) {
             // RT-03: reprecia con el grupo ACTUAL del cliente; reglas, descuentos e impuestos.
             Cart::collectTotals();
 
             $cart = $this->exigirMismasLineas($lineas);
             $this->revalidarStock($cart);
-            $this->revalidarEntrega($cart);
+            $this->revalidarEntrega($cart, $borrador);
             $this->revalidarPago();
 
             $cart = Cart::getCart();
@@ -252,9 +271,13 @@ class ConfirmarVentaService
                 referenciaExterna: $borrador->external_reference,
             );
 
+            // R2 (Doc. 23): proteccion de rentabilidad sobre el precio FINAL de cada linea, con el % vigente AHORA del
+            // propietario comercial real. Solo actua con el bloqueo activo; si rechaza, el pedido no se crea.
+            $this->rentabilidad->exigirEnConfirmacion($cartId, $contexto->propiedad->value, $contexto->advisorId, $tipoOperacion);
+
             return $this->contextoComercial->durante($cartId, $contexto,
                 fn () => $this->confirmaciones->durante($cartId, (int) $borrador->id, $token,
-                    fn () => $this->pedidos->create($datos)));
+                    fn () => $this->pedidos->create($datos), $tipoOperacion, (int) $actor->id));
         });
     }
 
@@ -393,13 +416,18 @@ class ConfirmarVentaService
      * elegido siga entre ellas (la recogida solo existe si el envio es una bodega real).
      * Luego collectTotals aplica la tarifa vigente y el envio gratis de CartRule.
      */
-    protected function revalidarEntrega(CartContract $cart): void
+    protected function revalidarEntrega(CartContract $cart, BorradorVenta $borrador): void
     {
         $motivo = match (true) {
             ! $cart->billing_address => 'facturacion_requerida',
             ! $cart->haveStockableItems() => null,
             ! $cart->shipping_address => 'direccion_envio_requerida',
             (string) $cart->shipping_method === '' => 'metodo_entrega_requerido',
+            // D-41: la recogida (`pickup` de bagisto-eu/pickup) solo con envio a una bodega real.
+            ! $this->puntosRecogida->metodoPermitido((string) $cart->shipping_method, $cart->shipping_address),
+            // Domicilio local (zona local de Logistica): exige domiciliario valido con tarifa resoluble; sin el, el metodo
+            // ni siquiera se ofreceria (no hay valor generico).
+            $this->domicilioLocalSinDomiciliario($cart, $borrador) => 'domiciliario_requerido',
             ! Cart::saveShippingMethod((string) $cart->shipping_method) => 'metodo_entrega_no_disponible',
             default => null,
         };
@@ -413,6 +441,20 @@ class ConfirmarVentaService
         // gratis de CartRule se aplicaria sobre esa fila ya borrada. Se recarga el Cart.
         Cart::refreshCart();
         Cart::collectTotals();
+    }
+
+    /** true si la entrega es un domicilio local y NO hay domiciliario valido con tarifa en la zona (DomiciliarioDeVenta). */
+    protected function domicilioLocalSinDomiciliario(CartContract $cart, BorradorVenta $borrador): bool
+    {
+        $envio = $cart->shipping_address;
+
+        $opciones = app(DomiciliarioDeVenta::class)->opcionesParaVenta(
+            app(MunicipioDesdeCatalogo::class)->municipioDeDireccion($envio->city, $envio->state, $envio->country),
+            (string) $cart->shipping_method,
+            $borrador->transportadora_id,
+        );
+
+        return $opciones !== null && ! $opciones['listo'];
     }
 
     /** 03E: el metodo guardado sigue en allowlist ∩ Payment::getPaymentMethods(). */
@@ -586,10 +628,34 @@ class ConfirmarVentaService
         return $valor;
     }
 
+    /**
+     * G-11 (COM-D-15, bloques 21-23): sin valor = `venta_normal` (nunca se infiere de precio, cliente ni comentario).
+     * Muestra / reposicion / garantia exigen `ventas_asesor.pedidos.tipo_operacion`; el asesor solo crea venta normal.
+     */
+    protected function tipoOperacionPermitido(Admin $actor, TipoOperacionPedido|string|null $tipo): TipoOperacionPedido
+    {
+        $tipo = match (true) {
+            $tipo instanceof TipoOperacionPedido => $tipo,
+            $tipo === null || $tipo === '' => TipoOperacionPedido::VENTA_NORMAL,
+            default => TipoOperacionPedido::tryFrom($tipo) ?? throw new Rechazo(Rechazo::TIPO_OPERACION_INVALIDO),
+        };
+
+        if (! $this->tiposOperacion->puedeElegir($actor, $tipo)) {
+            throw new Rechazo(Rechazo::TIPO_OPERACION_SIN_PERMISO, ['tipo_operacion' => $tipo->value]);
+        }
+
+        return $tipo;
+    }
+
     protected function exigirPermiso(Admin $actor): void
     {
         if (! $this->autorizacion->tienePermiso($actor, BorradorVentaService::PERMISO)) {
             throw new BorradorInvalido(BorradorInvalido::SIN_PERMISO);
+        }
+
+        // ASESOR-01: el perfil puede haberse inactivado entre el borrador y la confirmacion; falla cerrado.
+        if (! $this->asesorActual->operable($actor)) {
+            throw new BorradorInvalido(BorradorInvalido::ASESOR_SIN_ASOCIACION);
         }
     }
 }

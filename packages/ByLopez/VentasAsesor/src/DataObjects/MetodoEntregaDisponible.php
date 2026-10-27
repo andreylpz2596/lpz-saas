@@ -23,6 +23,12 @@ final class MetodoEntregaDisponible
         public readonly ?string $descripcion,
         public readonly float $precio,
         public readonly float $descuento,
+        /**
+         * Quien paga el envio (`gratis` | `por_pagar` | `cobrado_en_pedido` | `recogida` | `sin_definir`), deducido por
+         * Logistica desde el codigo del metodo (Config/condiciones_envio.php). Solo informativo para la pantalla: no
+         * cambia el precio ni lo que Bagisto cobra.
+         */
+        public readonly ?string $condicion = null,
     ) {}
 
     public function toArray(): array

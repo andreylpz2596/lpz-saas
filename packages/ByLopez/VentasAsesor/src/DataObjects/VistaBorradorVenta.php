@@ -41,5 +41,12 @@ final class VistaBorradorVenta
         public readonly ?int $orderId,
         public readonly bool $clienteConfirmable,
         public readonly array $avisos,
+        /**
+         * GRP-01: grupo habitual del cliente vs grupo APLICADO a esta venta (override temporal). `cambios` = eventos del
+         * historial de grupo de la venta.
+         *
+         * @var array{habitual_id: ?int, habitual_nombre: ?string, aplicado_id: ?int, aplicado_nombre: ?string, override: bool, cambios: int}|null
+         */
+        public readonly ?array $grupo = null,
     ) {}
 }

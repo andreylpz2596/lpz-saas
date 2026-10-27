@@ -10,15 +10,18 @@ use ByLopez\VentasAsesor\Enums\MecanismoCreacion;
 use ByLopez\VentasAsesor\Exceptions\BorradorVentaInvalidoException as Invalido;
 use ByLopez\VentasAsesor\Exceptions\GrupoComercialInvalidoException;
 use ByLopez\VentasAsesor\Models\BorradorVenta;
+use ByLopez\VentasAsesor\Services\Asesores\AsesorActualService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Clientes\ValidadorGrupoComercial;
 use ByLopez\VentasAsesor\Support\ContextoPrecioComercial;
+use ByLopez\VentasAsesor\Support\Venta\RegistroGrupoVenta;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Webkul\Checkout\Facades\Cart;
 use Webkul\Checkout\Models\CartAddressProxy;
 use Webkul\Checkout\Models\CartPaymentProxy;
 use Webkul\Checkout\Models\CartProxy;
+use Webkul\Customer\Models\CustomerGroupProxy;
 use Webkul\Customer\Models\CustomerProxy;
 use Webkul\User\Contracts\Admin;
 
@@ -49,6 +52,8 @@ class BorradorVentaService
         protected ValidadorGrupoComercial $validadorGrupo,
         protected CalendarioLaboral $calendario,
         protected AutorizacionVentasAsesor $autorizacion,
+        protected AsesorActualService $asesorActual,
+        protected RegistroGrupoVenta $registroGrupo,
     ) {}
 
     public function crear(
@@ -80,6 +85,9 @@ class BorradorVentaService
                     'mecanismo_creacion' => $mecanismo,
                     'external_reference' => $referencia,
                     'asignado_hasta' => $this->finDeAsignacion(),
+                    // GRP-01: sin override, grupo original = efectivo = grupo habitual del cliente.
+                    'grupo_original_id' => $cliente->customer_group_id === null ? null : (int) $cliente->customer_group_id,
+                    'grupo_efectivo_id' => $cliente->customer_group_id === null ? null : (int) $cliente->customer_group_id,
                 ]);
             });
         } catch (UniqueConstraintViolationException $e) {
@@ -104,7 +112,7 @@ class BorradorVentaService
 
     public function obtener(int $borradorId): Vista
     {
-        $borrador = BorradorVenta::query()->with('carrito.customer.group')->find($borradorId);
+        $borrador = BorradorVenta::query()->with('carrito.customer.group', 'carrito.customer.addresses')->find($borradorId);
 
         if (! $borrador) {
             throw new Invalido(Invalido::INEXISTENTE);
@@ -117,7 +125,7 @@ class BorradorVentaService
     public function listarDelPropietario(int $adminId, bool $soloActivos = true): array
     {
         return BorradorVenta::query()
-            ->with('carrito.customer.group')
+            ->with('carrito.customer.group', 'carrito.customer.addresses')
             ->where('propietario_admin_id', $adminId)
             ->when($soloActivos, fn ($q) => $q->where('estado', Estado::ACTIVO->value))
             ->orderByDesc('id')
@@ -185,6 +193,15 @@ class BorradorVentaService
             $borrador = $this->bloquearEditable($borradorId);
             $this->exigirPropietario($borrador, $actor);
             $carrito = $this->carritoBloqueado($borrador);
+
+            // GRP-01: el override del cliente anterior se cancela (con su evento) y la venta arranca con el grupo habitual del nuevo.
+            $this->registroGrupo->alCambiarCliente(
+                $borrador,
+                (int) $carrito->customer_id,
+                (int) $cliente->id,
+                $cliente->customer_group_id === null ? null : (int) $cliente->customer_group_id,
+                $actor,
+            );
 
             $carrito->update([
                 'customer_id' => $cliente->id,
@@ -298,6 +315,11 @@ class BorradorVentaService
         if (! $this->autorizacion->tienePermiso($actor, self::PERMISO)) {
             throw new Invalido(Invalido::SIN_PERMISO);
         }
+
+        // ASESOR-01: quien vende como asesor necesita su perfil activo; si no, falla cerrado (no hay atribucion ambigua).
+        if (! $this->asesorActual->operable($actor)) {
+            throw new Invalido(Invalido::ASESOR_SIN_ASOCIACION);
+        }
     }
 
     /** Cliente existente con grupo comercial apto (invitado y sin grupo, rechazados). */
@@ -391,7 +413,10 @@ class BorradorVentaService
                 'nombre' => (string) $cliente->first_name,
                 'apellido' => (string) $cliente->last_name,
                 'email' => $cliente->email,
-                'telefono_principal' => $cliente->phone,
+                // D-57 (Camilo): el telefono de la direccion predeterminada es el del envio y
+                // pesa mas para el asesor; si no existe, se cae al telefono de la ficha del
+                // cliente. `addresses` va eager-cargada (sin N+1): no dispara consulta nueva.
+                'telefono_principal' => optional($cliente->addresses->firstWhere('default_address', true))->phone ?: $cliente->phone,
                 'grupo_id' => $cliente->customer_group_id === null ? null : (int) $cliente->customer_group_id,
                 'grupo_nombre' => $cliente->group?->name,
                 'activo' => (bool) $cliente->status,
@@ -416,6 +441,34 @@ class BorradorVentaService
             orderId: $borrador->order_id,
             clienteConfirmable: $cliente !== null && $grupoApto && $cliente->status && ! $cliente->is_suspended,
             avisos: $avisos,
+            grupo: $this->vistaGrupo($borrador, $cliente),
         );
+    }
+
+    /**
+     * GRP-01: grupo habitual (el real del cliente) y grupo aplicado a ESTA venta. El nombre del grupo aplicado solo cuesta una
+     * consulta cuando hay override; sin override es el del cliente, ya cargado.
+     *
+     * @return array{habitual_id: ?int, habitual_nombre: ?string, aplicado_id: ?int, aplicado_nombre: ?string, override: bool, cambios: int}|null
+     */
+    protected function vistaGrupo(BorradorVenta $borrador, ?object $cliente): ?array
+    {
+        if (! $cliente) {
+            return null;
+        }
+
+        $habitualId = $cliente->customer_group_id === null ? null : (int) $cliente->customer_group_id;
+        $override = $borrador->grupo_override && $borrador->grupo_override_customer_id === (int) $cliente->id && $borrador->grupo_efectivo_id !== null;
+
+        return [
+            'habitual_id' => $habitualId,
+            'habitual_nombre' => $cliente->group?->name,
+            'aplicado_id' => $override ? $borrador->grupo_efectivo_id : $habitualId,
+            'aplicado_nombre' => $override
+                ? CustomerGroupProxy::modelClass()::query()->whereKey($borrador->grupo_efectivo_id)->value('name')
+                : $cliente->group?->name,
+            'override' => $override,
+            'cambios' => (int) $borrador->grupo_eventos,
+        ];
     }
 }

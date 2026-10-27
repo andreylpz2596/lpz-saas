@@ -5,6 +5,7 @@ namespace ByLopez\VentasAsesor\Support\Clientes;
 use ByLopez\VentasAsesor\Contracts\NormalizadorTelefono;
 use ByLopez\VentasAsesor\DataObjects\DireccionComercial;
 use ByLopez\VentasAsesor\Exceptions\DatosClienteComercialInvalidosException as Invalidos;
+use ByLopez\VentasAsesor\Services\Geo\CatalogoUbicaciones;
 use ByLopez\VentasAsesor\Support\Correo\DestinatarioCorreo;
 use Illuminate\Support\Facades\Validator;
 use Webkul\Core\Rules\PostCode;
@@ -18,12 +19,15 @@ use Webkul\Core\Rules\PostCode;
  * apellido, lineas, ciudad, departamento, pais y telefono.
  *
  * Codigo postal (D-46): la BD lo admite NULL, en lpz_saas no hay tasas de impuesto y
- * ningun carrier lo usa. Las direcciones GUARDADAS lo siguen exigiendo (decision de
- * RT-04, sin cambios); en el borrador es opcional. Si viene, se valida con PostCode.
+ * ningun carrier lo usa. Las direcciones GUARDADAS lo exigen solo si Bagisto lo exige
+ * (customer.address.requirements.postcode, D-58); en el borrador es opcional. Si viene, se valida con PostCode.
  */
 class ValidadorDireccionComercial
 {
-    public function __construct(protected NormalizadorTelefono $normalizador) {}
+    public function __construct(
+        protected NormalizadorTelefono $normalizador,
+        protected CatalogoUbicaciones $ubicaciones,
+    ) {}
 
     /** @return array<string, mixed> columnas de addresses (address con lineas unidas por PHP_EOL) */
     public function validar(DireccionComercial $d, bool $exigirCodigoPostal): array
@@ -32,8 +36,24 @@ class ValidadorDireccionComercial
         $lineas = array_values(array_filter(array_map('trim', $d->lineas), fn ($l) => $l !== ''));
         $codigoPostal = trim((string) $d->codigoPostal);
 
-        $obligatorios = ['nombre' => $d->nombre, 'apellido' => $d->apellido, 'ciudad' => $d->ciudad,
-            'departamento' => $d->departamento, 'pais' => $d->pais];
+        // D-58: con municipio DIVIPOLA, ciudad/departamento/pais salen del catalogo (el backend es la
+        // autoridad); lo que mande el navegador en esos campos se ignora. Un codigo desconocido,
+        // inactivo o mal formado se rechaza: nunca se persiste texto parcial como ciudad.
+        $ubicacion = null;
+
+        if ($d->municipioCodigo !== null) {
+            $ubicacion = $this->ubicaciones->resolver(trim($d->municipioCodigo));
+
+            if ($ubicacion === null) {
+                $errores['municipio_codigo'] = Invalidos::FORMATO_INVALIDO;
+            }
+        }
+
+        $obligatorios = ['nombre' => $d->nombre, 'apellido' => $d->apellido];
+
+        if ($d->municipioCodigo === null) {
+            $obligatorios += ['ciudad' => $d->ciudad, 'departamento' => $d->departamento, 'pais' => $d->pais];
+        }
 
         if ($exigirCodigoPostal) {
             $obligatorios['codigo_postal'] = $codigoPostal;
@@ -77,9 +97,9 @@ class ValidadorDireccionComercial
             'last_name' => trim($d->apellido),
             'company_name' => $d->empresa === null || trim($d->empresa) === '' ? null : trim($d->empresa),
             'address' => implode(PHP_EOL, $lineas),
-            'city' => trim($d->ciudad),
-            'state' => trim($d->departamento),
-            'country' => strtoupper(trim($d->pais)),
+            'city' => $ubicacion?->municipio ?? trim($d->ciudad),
+            'state' => $ubicacion?->stateCode ?? trim($d->departamento),
+            'country' => $ubicacion?->pais ?? strtoupper(trim($d->pais)),
             'postcode' => $codigoPostal === '' ? null : $codigoPostal,
             'phone' => $telefono->normalizado,
             'email' => $email,

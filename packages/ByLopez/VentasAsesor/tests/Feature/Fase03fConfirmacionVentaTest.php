@@ -1,5 +1,6 @@
 <?php
 
+use ByLopez\Logistica\Support\PuntosRecogida;
 use ByLopez\VentasAsesor\DataObjects\ConfirmacionVenta;
 use ByLopez\VentasAsesor\DataObjects\ContextoComercial;
 use ByLopez\VentasAsesor\DataObjects\ReconciliacionConfirmacion;
@@ -11,9 +12,11 @@ use ByLopez\VentasAsesor\Exceptions\AtribucionInvalidaException;
 use ByLopez\VentasAsesor\Exceptions\BorradorVentaInvalidoException as BorradorInvalido;
 use ByLopez\VentasAsesor\Exceptions\ConfirmacionVentaInvalidaException as Rechazo;
 use ByLopez\VentasAsesor\Exceptions\LineaBorradorInvalidaException;
+use ByLopez\VentasAsesor\Exceptions\PagoBorradorInvalidoException;
 use ByLopez\VentasAsesor\Exceptions\PedidoRechazadoPorCercoException as RechazoDelCerco;
 use ByLopez\VentasAsesor\Listeners\AtribuirPedidoCreado;
 use ByLopez\VentasAsesor\Listeners\CercoCreacionPedido;
+use ByLopez\VentasAsesor\Listeners\ClasificarOperacionPedido;
 use ByLopez\VentasAsesor\Listeners\EnlazarPedidoConBorrador;
 use ByLopez\VentasAsesor\Models\AtribucionPedido;
 use ByLopez\VentasAsesor\Models\BorradorVenta;
@@ -23,6 +26,7 @@ use ByLopez\VentasAsesor\Services\RegistrarAtribucionService;
 use ByLopez\VentasAsesor\Services\Venta\BorradorVentaService;
 use ByLopez\VentasAsesor\Services\Venta\ConfirmarVentaService;
 use ByLopez\VentasAsesor\Services\Venta\LineasBorradorService;
+use ByLopez\VentasAsesor\Services\Venta\PagoBorradorService;
 use ByLopez\VentasAsesor\Services\Venta\SolicitudBorradorService;
 use ByLopez\VentasAsesor\Support\Venta\CercoInventario;
 use Illuminate\Support\Facades\Cache;
@@ -133,8 +137,9 @@ test('03F-01 confirmacion normal: pedido real, borrador confirmado y enlazado, t
         ->and($r->cliente['customer_id'])->toBe($this->cliente->id)
         ->and($r->total)->toBe($total)
         ->and($r->moneda)->toBe((string) $pedido->order_currency_code)
-        ->and($r->metodoPago['codigo'])->toBe('cashondelivery')
-        ->and($r->entrega['codigo'])->toBe('recogida_bodega')
+        // Recogida (pickup de bagisto-eu/pickup): la extension quita contraentrega → transferencia.
+        ->and($r->metodoPago['codigo'])->toBe('moneytransfer')
+        ->and($r->entrega['codigo'])->toBe('pickup')
         ->and($b->estado)->toBe(Estado::CONFIRMADO)
         ->and($b->order_id)->toBe($pedido->id)
         ->and($b->getRawOriginal('confirmation_token'))->toBeNull()
@@ -145,6 +150,9 @@ test('03F-01 confirmacion normal: pedido real, borrador confirmado y enlazado, t
 });
 
 test('03F-19/21 contra entrega: factura automatica PENDIENTE, estado de pago derivado pendiente y saldo = total', function () {
+    // Contraentrega no existe con recogida (la extension la quita): envio nacional, tarifa 0.
+    $this->borrador = f03f_borradorListo($this->cliente->id, $this->asesor, [[$this->configurable, $this->variante, 2]], 'envio_nacional', 'cashondelivery');
+
     $r = f03f_confirmar($this);
     $factura = Invoice::query()->where('order_id', $r->orderId)->sole();
 
@@ -154,7 +162,7 @@ test('03F-19/21 contra entrega: factura automatica PENDIENTE, estado de pago der
 });
 
 test('03F-20 transferencia con la configuracion ACTUAL (D-48 sin desplegar): factura paid sin transaccion → «revisar», nunca cobro verificado', function () {
-    $this->borrador = f03f_borradorListo($this->cliente->id, $this->asesor, [[$this->configurable, $this->variante, 2]], 'recogida_bodega', 'moneytransfer');
+    $this->borrador = f03f_borradorListo($this->cliente->id, $this->asesor, [[$this->configurable, $this->variante, 2]], 'pickup', 'moneytransfer');
 
     $r = f03f_confirmar($this);
 
@@ -464,7 +472,7 @@ test('03F-22 recogida: el pedido lleva la direccion REAL de la bodega y tarifa 0
     $r = f03f_confirmar($this);
     $pedido = Order::query()->find($r->orderId);
 
-    expect($pedido->shipping_method)->toBe('recogida_bodega')
+    expect($pedido->shipping_method)->toBe('pickup')
         ->and((float) $pedido->shipping_amount)->toBe(0.0)
         ->and($pedido->shipping_address->address)->toBe($bodega->street)
         ->and($pedido->shipping_address->city)->toBe($bodega->city);
@@ -500,6 +508,10 @@ test('envio gratis por CartRule: el metodo sigue siendo domicilio y el envio del
 // ------------------------------------------------------------------ pago: 03F-12
 
 test('03F-12 el metodo de pago deja de estar disponible (Bagisto o allowlist) → pago_invalido; nunca Transaction', function () {
+    // El pago guardado debe ser contraentrega, que no existe con recogida: envio nacional.
+    $this->borrador = f03f_borradorListo($this->cliente->id, $this->asesor, [[$this->configurable, $this->variante, 1]], 'envio_nacional', 'cashondelivery');
+    $this->cartId = $this->borrador->cart_id;
+
     config(['ventasasesor.pagos.metodos_permitidos' => ['moneytransfer']]);
     $allowlist = f03f_rechazo($this);
 
@@ -516,6 +528,16 @@ test('03F-12 el metodo de pago deja de estar disponible (Bagisto o allowlist) �
         ->and($bagisto->codigo)->toBe(Rechazo::PAGO_INVALIDO)
         ->and(DB::table('order_transactions')->count())->toBe(DB::table('order_transactions')->count());
     f03f_esperarLiberado($this);
+});
+
+test('recogida (pickup de bagisto-eu/pickup): la extension quita contraentrega; solo se ofrece transferencia y contraentrega se rechaza', function () {
+    $pagos = app(PagoBorradorService::class);
+    $ofrecidos = collect($pagos->vista($this->borrador->id)->metodosDisponibles)->pluck('codigo')->all();
+
+    expect($this->borrador->fresh()->carrito->shipping_method)->toBe(PuntosRecogida::METODO)
+        ->and($ofrecidos)->toBe(['moneytransfer'])
+        ->and(fn () => $pagos->seleccionar($this->borrador->id, 'cashondelivery', $this->asesor))
+        ->toThrow(fn (PagoBorradorInvalidoException $e) => expect($e->codigo)->toBe(PagoBorradorInvalidoException::METODO_NO_DISPONIBLE));
 });
 
 // ------------------------------------------------------------------ carrito y variantes: 03F-13, 14, 15
@@ -709,10 +731,12 @@ test('03F-45 orden de listeners: cerco UNICO en save.before; enlace PRIMERO en s
 
     expect($antes)->toBe([CercoCreacionPedido::class.'@handle'])
         ->and($despues[0])->toBe(EnlazarPedidoConBorrador::class.'@handle')
-        ->and($despues[1])->toBe(AtribuirPedidoCreado::class.'@handle')
-        ->and(array_search('Webkul\Admin\Listeners\Order@afterCreated', $despues, true))->toBeGreaterThan(1)
-        ->and(array_search('Webkul\Payment\Listeners\GenerateInvoice@handle', $despues, true))->toBeGreaterThan(1)
-        ->and(array_search('Webkul\Shop\Listeners\Order@afterCreated', $despues, true))->toBeGreaterThan(1);
+        // G-11: la clasificacion comercial va justo despues del enlace (misma transaccion, lanza si falla).
+        ->and($despues[1])->toBe(ClasificarOperacionPedido::class.'@handle')
+        ->and($despues[2])->toBe(AtribuirPedidoCreado::class.'@handle')
+        ->and(array_search('Webkul\Admin\Listeners\Order@afterCreated', $despues, true))->toBeGreaterThan(2)
+        ->and(array_search('Webkul\Payment\Listeners\GenerateInvoice@handle', $despues, true))->toBeGreaterThan(2)
+        ->and(array_search('Webkul\Shop\Listeners\Order@afterCreated', $despues, true))->toBeGreaterThan(2);
 });
 
 // ------------------------------------------------------------------ cerco para pedidos nativos: 03F-42 y regresion

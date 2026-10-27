@@ -41,14 +41,9 @@ $estado = [
     'locale_based' => false,
 ];
 
+// La recogida ya no es de ByLopez: la da la extension bagisto-eu/pickup (carrier `pickup`).
 return [
     [
-        'key' => 'sales.carriers.recogida_bodega',
-        'name' => 'logistica::app.carriers.recogida_bodega.nombre',
-        'info' => 'logistica::app.carriers.recogida_bodega.info',
-        'sort' => 3,
-        'fields' => [$titulo, $descripcion, $estado],
-    ], [
         'key' => 'sales.carriers.domicilio_local',
         'name' => 'logistica::app.carriers.domicilio_local.nombre',
         'info' => 'logistica::app.carriers.domicilio_local.info',

@@ -218,7 +218,7 @@ test('todo o nada: M6 ya aplicada en el lote + L sin stock → carrito, lineas, 
     f03b_stock($this->l, 4);
     $b = f03gb_iniciar($this)->borrador->id;
     $this->nv->aplicarTallas($b, $this->configurable->id, [$this->m->id => 2, $this->l->id => 2], $this->asesor);
-    $this->nv->entregaRapida($b, $this->asesor, OrigenDireccion::puntoRecogida(), 'recogida_bodega', OrigenDireccion::puntual(f03f_direccion()));
+    $this->nv->entregaRapida($b, $this->asesor, OrigenDireccion::puntoRecogida(), 'pickup', OrigenDireccion::puntual(f03f_direccion()));
     $cartId = (int) BorradorVenta::query()->whereKey($b)->value('cart_id');
 
     $foto = fn () => [
@@ -239,7 +239,7 @@ test('todo o nada: M6 ya aplicada en el lote + L sin stock → carrito, lineas, 
         ->toBe(Invalida::LOTE_RECHAZADO);
 
     expect($mutadas)->toBe([[$this->m->id, 6]])
-        ->and($antes['cart']['shipping_method'])->toBe('recogida_bodega')
+        ->and($antes['cart']['shipping_method'])->toBe('pickup')
         ->and($antes['tarifas'])->not->toBeEmpty()
         ->and($foto())->toBe($antes)
         ->and(f03gb_cantidadesCarrito($b))->toBe([$this->m->id => 2, $this->l->id => 2])
@@ -282,7 +282,7 @@ test('el estado se compone UNA vez por operacion', function () {
     expect($nv->estados)->toBe(1);
 
     $nv->estados = 0;
-    $nv->entregaRapida($inicio->borrador->id, $this->asesor, OrigenDireccion::puntoRecogida(), 'recogida_bodega', OrigenDireccion::puntual(f03f_direccion()));
+    $nv->entregaRapida($inicio->borrador->id, $this->asesor, OrigenDireccion::puntoRecogida(), 'pickup', OrigenDireccion::puntual(f03f_direccion()));
     expect($nv->estados)->toBe(1);
 });
 
@@ -381,11 +381,11 @@ test('recogida con facturacion REAL: usa la direccion predeterminada y la bodega
 
     expect($this->nv->direccionPredeterminadaId($this->cliente->id))->toBe($direccion->id);
 
-    $estado = $this->nv->entregaRapida($b, $this->asesor, OrigenDireccion::puntoRecogida(), 'recogida_bodega');
+    $estado = $this->nv->entregaRapida($b, $this->asesor, OrigenDireccion::puntoRecogida(), 'pickup');
 
     expect($estado->requiereDireccionFacturacion)->toBeFalse()
         ->and($estado->entrega->facturacion->nombre ?? null)->toBe('Real')
-        ->and($estado->entrega->metodoSeleccionado->codigo)->toBe('recogida_bodega')
+        ->and($estado->entrega->metodoSeleccionado->codigo)->toBe('pickup')
         ->and($estado->entrega->entregaCompleta)->toBeTrue();
 });
 
@@ -394,10 +394,10 @@ test('recogida sin ninguna direccion: exige una real y NO inventa la de la bodeg
     $this->nv->aplicarTallas($b, $this->configurable->id, [$this->m->id => 2], $this->asesor);
 
     expect(f03gb_iniciar($this)->requiereDireccionFacturacion)->toBeTrue()
-        ->and(f03gb_codigo(fn () => $this->nv->entregaRapida($b, $this->asesor, OrigenDireccion::puntoRecogida(), 'recogida_bodega')))
+        ->and(f03gb_codigo(fn () => $this->nv->entregaRapida($b, $this->asesor, OrigenDireccion::puntoRecogida(), 'pickup')))
         ->toBe(Invalida::DIRECCION_FACTURACION_REQUERIDA);
 
-    $estado = $this->nv->entregaRapida($b, $this->asesor, OrigenDireccion::puntoRecogida(), 'recogida_bodega', OrigenDireccion::puntual(f03f_direccion()));
+    $estado = $this->nv->entregaRapida($b, $this->asesor, OrigenDireccion::puntoRecogida(), 'pickup', OrigenDireccion::puntual(f03f_direccion()));
 
     expect($estado->requiereDireccionFacturacion)->toBeFalse()
         ->and($estado->entrega->facturacion->nombre)->toBe('Ana')
@@ -464,21 +464,21 @@ test('pago: los metodos ofrecidos se resuelven UNA vez por operacion y solo si s
 
     $b = $nv->iniciar($this->cliente->id, $this->asesor, 'whatsapp')->borrador->id;
     $nv->aplicarTallas($b, $this->configurable->id, [$this->m->id => 2], $this->asesor);
-    $nv->entregaRapida($b, $this->asesor, OrigenDireccion::puntoRecogida(), 'recogida_bodega', OrigenDireccion::puntual(f03f_direccion()));
+    $nv->entregaRapida($b, $this->asesor, OrigenDireccion::puntoRecogida(), 'pickup', OrigenDireccion::puntual(f03f_direccion()));
     expect($contado->resoluciones)->toBe(0);
 
-    $estado = $nv->seleccionarPago($b, 'cashondelivery', $this->asesor);
+    $estado = $nv->seleccionarPago($b, 'moneytransfer', $this->asesor);
 
     expect($contado->resoluciones)->toBe(1)
         ->and($estado->metodosPagoResueltos)->toBeTrue()
-        ->and($estado->pago->metodoSeleccionado?->codigo)->toBe('cashondelivery');
+        ->and($estado->pago->metodoSeleccionado?->codigo)->toBe('moneytransfer');
 });
 
 test('venta completa: el total del estado es el que confirma 03F', function () {
     $b = f03gb_iniciar($this)->borrador->id;
     $this->nv->aplicarTallas($b, $this->configurable->id, [$this->m->id => 3, $this->l->id => 3], $this->asesor);
-    $this->nv->entregaRapida($b, $this->asesor, OrigenDireccion::puntoRecogida(), 'recogida_bodega', OrigenDireccion::puntual(f03f_direccion()));
-    $estado = $this->nv->seleccionarPago($b, 'cashondelivery', $this->asesor);
+    $this->nv->entregaRapida($b, $this->asesor, OrigenDireccion::puntoRecogida(), 'pickup', OrigenDireccion::puntual(f03f_direccion()));
+    $estado = $this->nv->seleccionarPago($b, 'moneytransfer', $this->asesor);
 
     expect($estado->confirmable())->toBeTrue()->and($estado->totalEsperado)->toBe(60000.0);
 
@@ -671,7 +671,7 @@ function f03gb2_borradorVariado($t): int
     $t->nv->aplicarTallas($b, $simple->id, [$simple->id => 2], $t->asesor);
     app(SolicitudBorradorService::class)
         ->cambiarCantidad($b, (int) SolicitudBorrador::query()->where('borrador_id', $b)->where('variante_id', $t->l->id)->value('id'), 9, $t->asesor);
-    $t->nv->entregaRapida($b, $t->asesor, OrigenDireccion::puntoRecogida(), 'recogida_bodega', OrigenDireccion::puntual(f03f_direccion()));
+    $t->nv->entregaRapida($b, $t->asesor, OrigenDireccion::puntoRecogida(), 'pickup', OrigenDireccion::puntual(f03f_direccion()));
 
     DB::table('product_attribute_values')->where('product_id', $tercera)
         ->where('attribute_id', DB::table('attributes')->where('code', 'status')->value('id'))->update(['boolean_value' => 0]);
@@ -702,7 +702,7 @@ test('03G-B2 equivalencia: lineas, solicitudes, entrega y pago en lote son IDENT
         ->and($normal['solicitudes']->solicitudes)->toHaveCount(4)
         ->and(collect($normal['solicitudes']->solicitudes)->where('vendible', false))->toHaveCount(1)
         ->and(collect($normal['solicitudes']->solicitudes)->firstWhere('varianteId', $this->m->id)->precioUnitarioReferencia)->toBe(8000.0)
-        ->and($normal['entrega']->metodoSeleccionado?->codigo)->toBe('recogida_bodega');
+        ->and($normal['entrega']->metodoSeleccionado?->codigo)->toBe('pickup');
 });
 
 test('03G-B2 equivalencia: cliente con grupo no apto → misma vista en lote (sin precio) que sin lote', function () {

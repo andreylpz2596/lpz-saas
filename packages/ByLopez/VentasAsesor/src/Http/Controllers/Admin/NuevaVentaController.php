@@ -2,7 +2,10 @@
 
 namespace ByLopez\VentasAsesor\Http\Controllers\Admin;
 
+use ByLopez\VentasAsesor\Enums\TipoOperacionPedido;
+use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\AgregarDireccionNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\AplicarTallasNuevaVentaRequest;
+use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\CambiarGrupoNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\BuscarClienteNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\ColoresNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\ConfirmarNuevaVentaRequest;
@@ -10,15 +13,30 @@ use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\CrearClienteNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\EntregaNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\IniciarConClienteNuevoNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\IniciarNuevaVentaRequest;
+use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\MatricesNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\MatrizNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\PagoNuevaVentaRequest;
+use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\RestaurarGrupoNuevaVentaRequest;
+use ByLopez\VentasAsesor\Services\Asesores\AsesorActualService;
 use ByLopez\VentasAsesor\Services\Clientes\BuscarClienteComercialService;
 use ByLopez\VentasAsesor\Services\Clientes\CrearClienteComercialService;
+use ByLopez\VentasAsesor\Services\Comisiones\TipoOperacionPedidoService;
+use ByLopez\VentasAsesor\Services\Venta\BorradorVentaService;
 use ByLopez\VentasAsesor\Services\Venta\CatalogoVentaService;
+use ByLopez\VentasAsesor\Services\Venta\GrupoVentaService;
 use ByLopez\VentasAsesor\Services\Venta\NuevaVentaService;
+use ByLopez\VentasAsesor\Models\BorradorVenta;
+use ByLopez\VentasAsesor\Services\Rentabilidad\RentabilidadVentaService;
+use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Http\RespuestaErrorNuevaVenta as Respuesta;
+use ByLopez\VentasAsesor\Support\Venta\VenderPara;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\DB;
+use Webkul\Customer\Models\CustomerAddress;
+use Webkul\Customer\Models\CustomerGroup;
 use Webkul\User\Contracts\Admin;
 
 /**
@@ -40,7 +58,118 @@ class NuevaVentaController extends Controller
         protected CatalogoVentaService $catalogo,
         protected BuscarClienteComercialService $buscarCliente,
         protected CrearClienteComercialService $crearCliente,
+        protected BorradorVentaService $borradores,
+        protected AsesorActualService $asesorActual,
+        protected GrupoVentaService $grupos,
     ) {}
+
+    /**
+     * 03G-D: la pantalla desktop. Los datos de LA venta (cliente, catalogo, matriz, estado)
+     * los pide el Vue de la vista via la API 03G-C; aqui solo se pasan los grupos
+     * comerciales (catalogo estatico de Bagisto, sin invitado) para el select de "crear
+     * cliente nuevo", igual que hace CustomerCreateForm del core.
+     */
+    public function pantalla(): View
+    {
+        $grupos = CustomerGroup::query()
+            ->where('code', '!=', 'guest')
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        // Rediseno 03G-D §23: departamentos REALES de Bagisto (country_states), no inventados.
+        // Bagisto no tiene catalogo de municipios/ciudades (Schema sin tabla 'cities'); por eso
+        // Ciudad sigue siendo texto libre en el formulario, decision documentada en el informe.
+        // 03G-D (modal de direccion): Bagisto guarda en addresses.state el CODIGO de country_states
+        // (asi lo hace su checkout), no el nombre; el select usa codigo como valor.
+        $departamentos = DB::table('country_states')
+            ->where('country_code', 'CO')
+            ->orderBy('default_name')
+            ->get(['code', 'default_name'])
+            ->map(fn ($e) => ['codigo' => (string) $e->code, 'nombre' => (string) $e->default_name])
+            ->all();
+
+        // 03G-D (entrega): la opcion "recogida" usa el titulo/descripcion REALES del carrier pickup
+        // (core_config de bagisto-eu/pickup), los mismos que Bagisto guarda en la tarifa.
+        $recogida = [
+            'titulo' => (string) (core()->getConfigData('sales.carriers.pickup.title') ?: 'Recogida en tienda'),
+            'descripcion' => (string) (core()->getConfigData('sales.carriers.pickup.description') ?: ''),
+        ];
+
+        return view('ventasasesor::admin.nueva-venta.index', [
+            'grupos' => $grupos, 'departamentos' => $departamentos, 'recogida' => $recogida,
+            'postcodeObligatorio' => core()->isPostCodeRequired(),
+            // ASESOR-01: aviso visible; la autoridad es BorradorVentaService (rechaza `asesor_sin_asociacion`).
+            'asesorSinAsociacion' => ! $this->asesorActual->operable($this->actor()),
+            // G-11: selector de tipo de operacion solo con permiso (el servicio vuelve a validar al confirmar).
+            'puedeClasificar' => app(TipoOperacionPedidoService::class)->puedeClasificar($this->actor()),
+            // GRP-01: la accion «Cambiar para esta venta» solo se ofrece con permiso (el servicio y el ACL lo vuelven a exigir).
+            'puedeCambiarGrupo' => $this->grupos->puedeCambiar($this->actor()),
+            // R2: «Vender para» solo con `pedidos.assign` (el servicio lo vuelve a exigir al confirmar).
+            'puedeVenderPara' => app(VenderPara::class)->puedeElegir($this->actor()),
+            'asesoresVenta' => app(VenderPara::class)->puedeElegir($this->actor()) ? app(VenderPara::class)->opciones() : [],
+        ]);
+    }
+
+    /** 03G-D §23: borradores activos del asesor (BorradorVentaService::listarDelPropietario, sin logica nueva). */
+    public function enCurso(): JsonResponse
+    {
+        return Respuesta::envolver(fn () => array_map(
+            fn ($v) => get_object_vars($v),
+            $this->borradores->listarDelPropietario((int) $this->actor()->id),
+        ));
+    }
+
+    /**
+     * Rediseno 03G-D: eliminar una venta en curso = BorradorVentaService::descartar(), que
+     * YA exige ser propietario y borra el Cart en cascada. Ninguna logica nueva aqui.
+     */
+    public function eliminar(int $borrador): JsonResponse
+    {
+        return Respuesta::envolver(fn () => get_object_vars($this->borradores->descartar($borrador, $this->actor())));
+    }
+
+    /**
+     * Rediseno 03G-D: direcciones reales del cliente (Webkul\Customer\Models\CustomerAddress),
+     * solo lectura, para precargar Entrega en vez de pedir que el asesor las vuelva a escribir.
+     * Nunca se persiste nada aqui; usarla para la venta es responsabilidad de EntregaNuevaVentaRequest.
+     */
+    public function direccionesCliente(int $cliente): JsonResponse
+    {
+        return Respuesta::envolver(fn () => CustomerAddress::query()
+            ->where('customer_id', $cliente)
+            ->orderByDesc('default_address')
+            ->get(['id', 'first_name', 'last_name', 'address', 'city', 'state', 'country', 'postcode', 'phone', 'default_address'])
+            ->map(fn ($d) => [
+                'id' => (int) $d->id,
+                'nombre' => $d->first_name,
+                'apellido' => $d->last_name,
+                'direccion' => $d->address,
+                'ciudad' => $d->city,
+                'departamento' => $d->state,
+                'pais' => $d->country,
+                'telefono' => $d->phone,
+                'predeterminada' => (bool) $d->default_address,
+            ])
+            ->values()
+            ->all());
+    }
+
+    /**
+     * 03G-D: agrega una direccion reutilizable al cliente DEL BORRADOR (RT-04, via
+     * NuevaVentaService::agregarDireccionCliente, que exige ser propietario). Devuelve la
+     * nueva y la lista actualizada; usarla en la venta es la llamada normal de entrega.
+     */
+    public function agregarDireccion(int $borrador, AgregarDireccionNuevaVentaRequest $request): JsonResponse
+    {
+        return Respuesta::envolver(function () use ($borrador, $request) {
+            $nueva = $this->nuevaVenta->agregarDireccionCliente($borrador, $request->aDireccion(), $this->actor());
+
+            return [
+                'direccion_id' => (int) $nueva->id,
+                'direcciones' => $this->direccionesCliente((int) $nueva->customer_id)->getData(true),
+            ];
+        });
+    }
 
     /** A. Bootstrap: canales y accesos rapidos permitidos, sin borrador todavia. */
     public function estadoInicial(): JsonResponse
@@ -110,6 +239,21 @@ class NuevaVentaController extends Controller
         )->toArray());
     }
 
+    /**
+     * G2. Matrices de VARIAS combinaciones linea x color, cada una independiente: las que no se pueden vender vienen en
+     * `excluidas` (con motivo) y no bloquean a las demas.
+     */
+    public function matrices(MatricesNuevaVentaRequest $request): JsonResponse
+    {
+        return Respuesta::envolver(fn () => $this->catalogo->matrices(
+            array_map('intval', (array) $request->input('productos')),
+            (int) $request->integer('customer_id'),
+            $this->actor(),
+            $request->integer('borrador_id') ?: null,
+            $request->has('solo_vendibles') ? $request->boolean('solo_vendibles') : true,
+        ));
+    }
+
     /** F. Estado/resumen actual de la venta (K). */
     public function estado(int $borrador): JsonResponse
     {
@@ -139,6 +283,18 @@ class NuevaVentaController extends Controller
         )->toArray());
     }
 
+    /** Cierre F1 (D1): domiciliario que entrega un domicilio local (opcional; vacio = sin elegir). */
+    public function domiciliario(int $borrador): JsonResponse
+    {
+        $datos = request()->validate(['transportadora_id' => ['nullable', 'integer', 'min:1']]);
+
+        return Respuesta::envolver(fn () => $this->nuevaVenta->elegirDomiciliario(
+            $borrador,
+            isset($datos['transportadora_id']) ? (int) $datos['transportadora_id'] : null,
+            $this->actor(),
+        )->toArray());
+    }
+
     /** J. Seleccionar metodo de pago (los ofrecidos se resuelven una vez). */
     public function pago(int $borrador, PagoNuevaVentaRequest $request): JsonResponse
     {
@@ -156,7 +312,73 @@ class NuevaVentaController extends Controller
             $borrador,
             $this->actor(),
             (float) $request->input('total_esperado'),
+            // R2: «Vender para» (solo con `pedidos.assign`; sin valor = regla automatica de siempre).
+            seleccion: app(VenderPara::class)->seleccion($this->actor(), $request->input('vender_para')),
+            tipoOperacion: $request->input('tipo_operacion'),
         )->toArray());
+    }
+
+    /**
+     * R2: advertencia de rentabilidad del borrador (se pide tras cada cambio del estado y al cambiar «Vender para»). Al
+     * asesor solo le dice QUE referencia no alcanza su minimo; el detalle numerico solo con `rentabilidad.view`. La
+     * confirmacion vuelve a evaluar en el servidor.
+     */
+    public function rentabilidad(int $borrador, Request $request): JsonResponse
+    {
+        return Respuesta::envolver(function () use ($borrador, $request) {
+            $actor = $this->actor();
+            $fila = BorradorVenta::query()->find($borrador);
+
+            if ($fila === null || $fila->propietario_admin_id !== (int) $actor->id || $fila->cart_id === null) {
+                return ['resultado' => 'no_aplica', 'bloqueo_activo' => false, 'referencias' => [], 'configuracion_pendiente' => false, 'costos_pedido' => false];
+            }
+
+            $vender = app(VenderPara::class);
+            [$propiedad, $asesorId] = $vender->propietario($actor, $vender->seleccion($actor, $request->query('vender_para')));
+            $tipo = TipoOperacionPedido::tryFrom((string) $request->query('tipo_operacion')) ?? TipoOperacionPedido::VENTA_NORMAL;
+            $servicio = app(RentabilidadVentaService::class);
+            $r = $servicio->deCarrito((int) $fila->cart_id, $propiedad, $asesorId, $tipo);
+
+            $salida = $servicio->paraAsesor($r);
+
+            if (app(AutorizacionVentasAsesor::class)->tienePermiso($actor, AutorizacionVentasAsesor::PERMISO_RENTABILIDAD_VER)) {
+                $salida['detalle'] = array_map(fn ($l) => [
+                    'producto' => $l['producto'], 'resultado' => $l['resultado'], 'precio' => $l['precio_neto'],
+                    'minimo' => $l['precio_minimo'], 'faltante' => $l['faltante'],
+                ], $r['lineas']);
+            }
+
+            return $salida;
+        });
+    }
+
+    /**
+     * GRP-01: grupo comercial TEMPORAL de la venta. Aplica el override, recalcula todo el carrito en una transaccion
+     * (GrupoVentaService) y devuelve el estado completo ya recalculado. Nunca modifica al cliente.
+     */
+    public function cambiarGrupo(int $borrador, CambiarGrupoNuevaVentaRequest $request): JsonResponse
+    {
+        return Respuesta::envolver(function () use ($borrador, $request) {
+            $this->grupos->cambiar($borrador, (int) $request->integer('grupo_id'), (string) $request->input('motivo', ''), $this->actor());
+
+            return $this->nuevaVenta->estado($borrador)->toArray();
+        });
+    }
+
+    /** GRP-01: vuelve al grupo habitual del cliente (motivo obligatorio) y recalcula todo el carrito. */
+    public function restaurarGrupo(int $borrador, RestaurarGrupoNuevaVentaRequest $request): JsonResponse
+    {
+        return Respuesta::envolver(function () use ($borrador, $request) {
+            $this->grupos->restaurar($borrador, (string) $request->input('motivo', ''), $this->actor());
+
+            return $this->nuevaVenta->estado($borrador)->toArray();
+        });
+    }
+
+    /** GRP-01: historial de grupo de la venta (solo lectura). */
+    public function historialGrupo(int $borrador): JsonResponse
+    {
+        return Respuesta::envolver(fn () => ['historial' => $this->grupos->historial($borrador, $this->actor())]);
     }
 
     protected function actor(): Admin

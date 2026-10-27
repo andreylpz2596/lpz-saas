@@ -2,22 +2,40 @@
 
 namespace ByLopez\VentasAsesor\Providers;
 
+use Bagisto\Pickup\Listeners\Shipment as PickupShipmentListener;
+use ByLopez\Logistica\Contracts\AccesoGuiaPedido;
+use ByLopez\Logistica\Contracts\DomiciliarioElegidoEnCarrito;
+use ByLopez\Logistica\Contracts\PagosPendientesDeConfirmar;
+use ByLopez\Logistica\Contracts\ResuelveMunicipio;
+use ByLopez\Logistica\Contracts\SugiereRecaudo;
+use ByLopez\VentasAsesor\Console\Commands\DiagnosticoCostosVentaCommand;
+use ByLopez\VentasAsesor\Console\Commands\EvaluarComisionesCommand;
+use ByLopez\VentasAsesor\Console\Commands\GeoImportarDivipolaCommand;
 use ByLopez\VentasAsesor\Console\Commands\IndexarTelefonosClientesCommand;
+use ByLopez\VentasAsesor\Console\Commands\ProgramarReglaComisionCommand;
 use ByLopez\VentasAsesor\Console\Commands\ReconciliarAtribucionesCommand;
 use ByLopez\VentasAsesor\Contracts\CalendarioLaboral;
 use ByLopez\VentasAsesor\Contracts\NormalizadorTelefono;
 use ByLopez\VentasAsesor\Listeners\Correo\CustomerConDestinatarioVerificado;
 use ByLopez\VentasAsesor\Listeners\Correo\InvoiceConDestinatarioVerificado;
 use ByLopez\VentasAsesor\Listeners\Correo\OrderConDestinatarioVerificado;
+use ByLopez\VentasAsesor\Listeners\Correo\PickupShipmentConDestinatarioVerificado;
 use ByLopez\VentasAsesor\Listeners\Correo\RefundConDestinatarioVerificado;
 use ByLopez\VentasAsesor\Listeners\Correo\ShipmentConDestinatarioVerificado;
+use ByLopez\VentasAsesor\Services\Comisiones\ReevaluacionComisionesService;
 use ByLopez\VentasAsesor\Support\Calendario\CalendarioLaboralConfigurable;
 use ByLopez\VentasAsesor\Support\ClasificadorOrigenPedido;
 use ByLopez\VentasAsesor\Support\ContextoComercialDePeticion;
 use ByLopez\VentasAsesor\Support\ContextoPrecioComercial;
 use ByLopez\VentasAsesor\Support\CustomerRepositoryConContextoComercial;
+use ByLopez\VentasAsesor\Support\Logistica\AccesoGuiaDelAsesor;
+use ByLopez\VentasAsesor\Support\Logistica\DomiciliarioDesdeBorrador;
+use ByLopez\VentasAsesor\Support\Logistica\MunicipioDesdeCatalogo;
+use ByLopez\VentasAsesor\Support\Logistica\PagosPendientesDesdeCartera;
+use ByLopez\VentasAsesor\Support\Logistica\SugiereRecaudoDesdeCartera;
 use ByLopez\VentasAsesor\Support\Telefono\NormalizadorTelefonoBasico;
 use ByLopez\VentasAsesor\Support\Venta\ConfirmacionEnCurso;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Webkul\Core\Http\Middleware\PreventRequestsDuringMaintenance;
@@ -57,6 +75,10 @@ class VentasAsesorServiceProvider extends ServiceProvider
          */
         $this->app->scoped(ContextoPrecioComercial::class);
 
+        // Doc. 23 §10.2: bandeja de reevaluacion de comisiones. Guarda los pedidos marcados en la peticion (o job) para
+        // despacharlos tras el commit: scoped, por el mismo motivo.
+        $this->app->scoped(ReevaluacionComisionesService::class);
+
         $this->app->bind(CustomerRepository::class, CustomerRepositoryConContextoComercial::class);
 
         /*
@@ -69,6 +91,19 @@ class VentasAsesorServiceProvider extends ServiceProvider
 
         // Fase 03B. Calendario laboral por configuracion (sin festivos en el codigo).
         $this->app->bind(CalendarioLaboral::class, CalendarioLaboralConfigurable::class);
+
+        // Despacho V1. Logistica define los contratos con una implementacion por defecto; aqui se reemplazan por las que
+        // conocen Cartera (recaudo sugerido) y la propiedad comercial (el asesor ve la guia de SUS pedidos).
+        $this->app->bind(SugiereRecaudo::class, SugiereRecaudoDesdeCartera::class);
+        $this->app->bind(AccesoGuiaPedido::class, AccesoGuiaDelAsesor::class);
+
+        // Domicilios locales F1: municipio del pedido con el catalogo DIVIPOLA (coincidencia exacta) y pagos sin confirmar
+        // desde Cartera (bloquean el despacho «pagado» hasta que Cartera los confirme o rechace). Solo lectura.
+        $this->app->bind(ResuelveMunicipio::class, MunicipioDesdeCatalogo::class);
+        $this->app->bind(PagosPendientesDeConfirmar::class, PagosPendientesDesdeCartera::class);
+
+        // Cierre F1: el carrier de domicilio local lee el domiciliario elegido en la venta (el borrador dueno del carrito).
+        $this->app->bind(DomiciliarioElegidoEnCarrito::class, DomiciliarioDesdeBorrador::class);
 
         $this->registrarGuardDeCorreosAlCliente();
     }
@@ -87,6 +122,7 @@ class VentasAsesorServiceProvider extends ServiceProvider
         $this->app->bind(ShopOrderListener::class, OrderConDestinatarioVerificado::class);
         $this->app->bind(ShopInvoiceListener::class, InvoiceConDestinatarioVerificado::class);
         $this->app->bind(ShopShipmentListener::class, ShipmentConDestinatarioVerificado::class);
+        $this->app->bind(PickupShipmentListener::class, PickupShipmentConDestinatarioVerificado::class);
         $this->app->bind(ShopRefundListener::class, RefundConDestinatarioVerificado::class);
         $this->app->bind(ShopCustomerListener::class, CustomerConDestinatarioVerificado::class);
     }
@@ -96,7 +132,11 @@ class VentasAsesorServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 ReconciliarAtribucionesCommand::class,
+                DiagnosticoCostosVentaCommand::class,
+                ProgramarReglaComisionCommand::class,
                 IndexarTelefonosClientesCommand::class,
+                GeoImportarDivipolaCommand::class,
+                EvaluarComisionesCommand::class,
             ]);
         }
     }
@@ -112,5 +152,12 @@ class VentasAsesorServiceProvider extends ServiceProvider
         $this->loadViewsFrom(__DIR__.'/../Resources/views', 'ventasasesor');
 
         $this->comandos();
+
+        // Doc. 23 §10.2: reintentos de la bandeja de comisiones. Solo corre si el servidor ejecuta `schedule:run` (cron).
+        if ((bool) config('ventasasesor.comisiones.reevaluacion.programar', true)) {
+            $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
+                $schedule->command('ventas-asesor:comisiones:evaluar --bandeja')->everyFiveMinutes()->withoutOverlapping(30);
+            });
+        }
     }
 }

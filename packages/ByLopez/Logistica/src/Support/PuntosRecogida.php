@@ -13,10 +13,29 @@ use Webkul\Inventory\Contracts\InventorySource;
  *
  * En la recogida, la direccion de envio de Bagisto es el LUGAR DE ENTREGA (la bodega)
  * con los datos de quien recibe, igual que cualquier direccion de envio (lugar +
- * destinatario). El metodo `recogida_bodega` la distingue de un domicilio.
+ * destinatario). El metodo de recogida es el carrier `pickup` de la extension de
+ * Bagisto `bagisto-eu/pickup` (reemplazo de nuestro antiguo `recogida_bodega`).
  */
 class PuntosRecogida
 {
+    /** Codigo del carrier de recogida de la extension bagisto-eu/pickup. */
+    public const METODO = 'pickup';
+
+    /**
+     * D-41: recogida ⇔ envio a una bodega real, en los dos sentidos.
+     *  - `pickup` solo vale si la direccion de envio es una bodega (la extension lo ofrece con
+     *    CUALQUIER direccion y no lo valida).
+     *  - Con una bodega como destino solo vale `pickup`: Bagisto tambien calcula para ella
+     *    carriers como `flatrate` o `free`, y «envio por pagar a la bodega» seria un estado
+     *    hibrido sin sentido (03G-D, 2026-10-05).
+     */
+    public function metodoPermitido(string $metodo, ?CartAddress $direccion): bool
+    {
+        $esBodega = $this->correspondiente($direccion) !== null;
+
+        return $metodo === self::METODO ? $esBodega : ! $esBodega;
+    }
+
     /** @return Collection<int, InventorySource> */
     public function disponibles(): Collection
     {

@@ -12,9 +12,11 @@ use ByLopez\VentasAsesor\DataObjects\VarianteVenta;
 use ByLopez\VentasAsesor\Exceptions\DatosClienteComercialInvalidosException;
 use ByLopez\VentasAsesor\Exceptions\NuevaVentaInvalidaException;
 use ByLopez\VentasAsesor\Exceptions\VarianteInvalidaException as Invalida;
+use ByLopez\VentasAsesor\Models\BorradorVenta;
 use ByLopez\VentasAsesor\Support\Clientes\ValidadorGrupoComercial;
 use ByLopez\VentasAsesor\Support\ContextoPrecioComercial;
 use ByLopez\VentasAsesor\Support\Venta\LoteCatalogo;
+use Closure;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -90,7 +92,7 @@ class CatalogoVentaService
      *
      * @return list<VarianteVenta>
      */
-    public function variantes(int $productoId, int $customerId, int $cantidad = 1): array
+    public function variantes(int $productoId, int $customerId, int $cantidad = 1, ?int $cartId = null): array
     {
         $this->exigirCantidad($cantidad);
         $producto = $this->productoVendible($productoId);
@@ -99,21 +101,21 @@ class CatalogoVentaService
         $hijos = $this->hijosPrecargados($producto);
         $atributos = $this->superAtributos($producto);
 
-        return $this->contexto->duranteCreacionDeCarrito($customerId, fn () => $hijos
+        return $this->conPrecioDeVenta($customerId, $cartId, fn () => $hijos
             ->map(fn (Product $hijo) => $this->aVariante($producto, $hijo, $atributos, $cantidad))
             ->values()
             ->all());
     }
 
     /** Una variante concreta, VERIFICADA contra su padre. Lanza si no le pertenece. */
-    public function variante(int $productoId, int $varianteId, int $customerId, int $cantidad = 1): VarianteVenta
+    public function variante(int $productoId, int $varianteId, int $customerId, int $cantidad = 1, ?int $cartId = null): VarianteVenta
     {
         $this->exigirCantidad($cantidad);
         $producto = $this->productoVendible($productoId);
         $hijo = $this->hijoVerificado($producto, $varianteId);
         $this->exigirClienteApto($customerId);
 
-        return $this->contexto->duranteCreacionDeCarrito($customerId,
+        return $this->conPrecioDeVenta($customerId, $cartId,
             fn () => $this->aVariante($producto, $hijo, $this->superAtributos($producto), $cantidad));
     }
 
@@ -122,7 +124,7 @@ class CatalogoVentaService
      * orden y con las mismas excepciones; producto, hijos precargados, super atributos y
      * cliente apto se leen una vez por lote. Precio y stock salen de Bagisto en cada llamada.
      */
-    public function varianteEnLote(LoteCatalogo $lote, int $productoId, int $varianteId, int $customerId, int $cantidad = 1): VarianteVenta
+    public function varianteEnLote(LoteCatalogo $lote, int $productoId, int $varianteId, int $customerId, int $cantidad = 1, ?int $cartId = null): VarianteVenta
     {
         $this->exigirCantidad($cantidad);
         $producto = $this->productoVendibleEnLote($lote, $productoId);
@@ -134,7 +136,7 @@ class CatalogoVentaService
         });
         $atributos = $lote->recordar("super_atributos:{$producto->id}", fn () => $this->superAtributos($producto));
 
-        return $this->contexto->duranteCreacionDeCarrito($customerId,
+        return $this->conPrecioDeVenta($customerId, $cartId,
             fn () => $this->aVariante($producto, $hijo, $atributos, $cantidad, $lote));
     }
 
@@ -157,12 +159,12 @@ class CatalogoVentaService
      *
      * @param  array<string, int>  $opciones
      */
-    public function resolverVariante(int $productoId, array $opciones, int $customerId, int $cantidad = 1): VarianteVenta
+    public function resolverVariante(int $productoId, array $opciones, int $customerId, int $cantidad = 1, ?int $cartId = null): VarianteVenta
     {
         $producto = $this->productoVendible($productoId);
 
         if ($producto->type !== 'configurable') {
-            return $this->variante($productoId, $productoId, $customerId, $cantidad);
+            return $this->variante($productoId, $productoId, $customerId, $cantidad, $cartId);
         }
 
         $atributos = $this->superAtributos($producto);
@@ -185,7 +187,7 @@ class CatalogoVentaService
             throw new Invalida(Invalida::VARIANTE_AMBIGUA);
         }
 
-        return $this->variante($productoId, (int) $coincidencias->first()->id, $customerId, $cantidad);
+        return $this->variante($productoId, (int) $coincidencias->first()->id, $customerId, $cantidad, $cartId);
     }
 
     /**
@@ -262,7 +264,19 @@ class CatalogoVentaService
             ->map(fn ($f) => new ColorDeLinea(
                 (int) $f->product_id, (string) $f->type, (string) $f->sku, (string) $f->name,
                 $colores[(int) $f->product_id]['option_id'] ?? null, $colores[(int) $f->product_id]['etiqueta'] ?? null,
+                $colores[(int) $f->product_id]['swatch'] ?? null,
             ))
+            // Catalogo con deuda conocida (Doc catalogo_variantes: colisiones familia+color+talla):
+            // ademas del configurable real (matriz completa de tallas), existen productos "simple"
+            // sueltos por cada talla del MISMO color. Para el selector de color de Nueva Venta solo
+            // tiene sentido UNO por color: si ese color ya tiene un configurable, se descartan aqui
+            // los simples sueltos (siguen existiendo en Bagisto, esto no borra ni modifica catalogo).
+            ->groupBy(fn (ColorDeLinea $c) => $c->colorOptionId ?? $c->colorEtiqueta ?? $c->nombre)
+            ->flatMap(function (Collection $grupo) {
+                $conMatriz = $grupo->where('tipo', 'configurable');
+
+                return $conMatriz->isNotEmpty() ? $conMatriz : $grupo;
+            })
             ->filter(function (ColorDeLinea $c) use ($palabras) {
                 $pajar = mb_strtolower($c->nombre.' '.$c->sku.' '.$c->colorEtiqueta);
 
@@ -270,7 +284,11 @@ class CatalogoVentaService
             })
             ->take(max(1, min($limite, self::LIMITE_MAXIMO)))
             ->values()
-            ->all();
+            ->pipe(function (Collection $colores) {
+                $disponibilidad = $this->disponibilidadDe($colores->pluck('productId')->all());
+
+                return $colores->map(fn (ColorDeLinea $c) => $c->conDisponibilidad($disponibilidad[$c->productId]))->all();
+            });
     }
 
     /** Variante por SKU EXACTO (hijo o simple), verificada contra su padre. */
@@ -299,13 +317,16 @@ class CatalogoVentaService
         $producto = $this->productoVendible($productoId);
         $this->exigirClienteApto($customerId);
 
+        // GRP-01: con borrador, el precio mostrado sale del grupo EFECTIVO de ESA venta (el mismo del carrito).
+        $cartId = $borradorId === null ? null : BorradorVenta::query()->whereKey($borradorId)->value('cart_id');
+
         $lote = new LoteCatalogo;
         $atributos = $this->superAtributos($producto);
-        $codigoTalla = (string) config('ventasasesor.nueva_venta.atributos.talla', 'size');
+        $codigoTalla =(string) config('ventasasesor.nueva_venta.atributos.talla', 'size');
         $codigoColor = (string) config('ventasasesor.nueva_venta.atributos.color', 'color');
         $ordenTalla = $atributos->firstWhere('code', $codigoTalla)?->options->pluck('sort_order', 'id') ?? collect();
 
-        $variantes = $this->contexto->duranteCreacionDeCarrito($customerId, fn () => $this->hijosPrecargados($producto)
+        $variantes = $this->conPrecioDeVenta($customerId, $cartId, fn () => $this->hijosPrecargados($producto)
             ->map(fn (Product $hijo) => $this->aVariante($producto, $hijo, $atributos, $cantidad, $lote))
             ->values());
 
@@ -385,11 +406,109 @@ class CatalogoVentaService
             throw new Invalida(Invalida::PRODUCTO_INEXISTENTE);
         }
 
-        if ($producto->parent_id !== null || ! in_array($producto->type, ['configurable', 'simple'], true) || ! $producto->status) {
+        if (! $this->productoEsVendible($producto)) {
             throw new Invalida(Invalida::PRODUCTO_NO_VENDIBLE);
         }
 
         return $producto;
+    }
+
+    /** Regla de «producto de primer nivel vendible»: sin padre, configurable o simple, y activo (atributo `status`). */
+    public function productoEsVendible(Product $producto): bool
+    {
+        return $producto->parent_id === null && in_array($producto->type, ['configurable', 'simple'], true) && (bool) $producto->status;
+    }
+
+    /** Regla de «talla vendible»: variante activa y con stock. Es la que habilita una fila en la modal de tallas. */
+    public function varianteEsVendible(Product $variante): bool
+    {
+        return (bool) $variante->status && (int) $variante->getTypeInstance()->totalQuantity() > 0;
+    }
+
+    /**
+     * Disponibilidad por producto (linea x color), con las MISMAS reglas que la matriz (productoEsVendible y
+     * varianteEsVendible), en pocas consultas y sin precios ni senales. Un id que no existe o no es vendible cuenta como
+     * no vendible; nunca lanza: es una consulta para anticipar y para decidir que combinaciones se muestran.
+     *
+     * @param  list<int>  $productoIds
+     * @return array<int, array{vendible: bool, tallas_total: int, tallas_con_stock: int}>
+     */
+    public function disponibilidadDe(array $productoIds): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $productoIds)));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $productos = ProductProxy::modelClass()::query()->whereIn('id', $ids)->with('attribute_values')->get()->keyBy('id');
+        $hijos = ProductProxy::modelClass()::query()->whereIn('parent_id', $ids)->with(['attribute_values', 'inventory_indices'])->get()->groupBy('parent_id');
+        $resultado = [];
+
+        foreach ($ids as $id) {
+            $producto = $productos->get($id);
+
+            if (! $producto || ! $this->productoEsVendible($producto)) {
+                $resultado[$id] = ['vendible' => false, 'tallas_total' => 0, 'tallas_con_stock' => 0];
+
+                continue;
+            }
+
+            $variantes = $producto->type === 'configurable' ? ($hijos->get($id) ?? collect()) : collect([$producto->loadMissing('inventory_indices')]);
+
+            $resultado[$id] = [
+                'vendible' => true,
+                'tallas_total' => $variantes->count(),
+                'tallas_con_stock' => $variantes->filter(fn (Product $h) => $this->varianteEsVendible($h))->count(),
+            ];
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * Matrices de VARIOS productos (linea x color) en una consulta, cada una INDEPENDIENTE: la que no se puede vender se
+     * excluye con su motivo (`no_disponible`: inactivo o inexistente; `sin_stock`: ninguna talla activa con stock) y NUNCA
+     * impide que las demas se devuelvan. `$soloVendibles = false` no excluye por falta de stock (para editar lo que ya esta
+     * en la venta). Errores de fondo (cliente no apto, cantidad) siguen lanzando: no son de una combinacion.
+     *
+     * @param  list<int>  $productoIds
+     * @return array{matrices: array<int, array<string, mixed>>, excluidas: list<array{producto_id: int, motivo: string}>}
+     */
+    public function matrices(array $productoIds, int $customerId, Admin $actor, ?int $borradorId = null, bool $soloVendibles = true): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $productoIds)));
+        $disponibilidad = $this->disponibilidadDe($ids);
+        $matrices = [];
+        $excluidas = [];
+
+        foreach ($ids as $id) {
+            $d = $disponibilidad[$id];
+
+            if (! $d['vendible']) {
+                $excluidas[] = ['producto_id' => $id, 'motivo' => 'no_disponible'];
+
+                continue;
+            }
+
+            if ($soloVendibles && $d['tallas_con_stock'] === 0) {
+                $excluidas[] = ['producto_id' => $id, 'motivo' => 'sin_stock'];
+
+                continue;
+            }
+
+            try {
+                $matrices[$id] = $this->matriz($id, $customerId, $actor, 1, $borradorId)->toArray();
+            } catch (Invalida $e) {
+                if (! in_array($e->codigo, [Invalida::PRODUCTO_NO_VENDIBLE, Invalida::PRODUCTO_INEXISTENTE], true)) {
+                    throw $e;
+                }
+
+                $excluidas[] = ['producto_id' => $id, 'motivo' => 'no_disponible'];
+            }
+        }
+
+        return ['matrices' => $matrices, 'excluidas' => $excluidas];
     }
 
     /** Hijos con sus relaciones de stock, precio y atributos cargadas en lote (sin N+1). */
@@ -435,7 +554,13 @@ class CatalogoVentaService
             }
 
             $opcion = $atributo->options->firstWhere('id', (int) $optionId);
-            $resultado[$id] = ['option_id' => (int) $optionId, 'etiqueta' => $opcion ? (string) ($opcion->label ?: $opcion->admin_name) : null];
+            $resultado[$id] = [
+                'option_id' => (int) $optionId,
+                'etiqueta' => $opcion ? (string) ($opcion->label ?: $opcion->admin_name) : null,
+                // Swatch REAL del atributo color de Bagisto (swatch_type=color); null si la
+                // opcion no tiene uno configurado. Nunca se inventa un hex a partir del nombre.
+                'swatch' => $opcion ? $opcion->swatch_value : null,
+            ];
         }
 
         return $resultado;
@@ -486,6 +611,18 @@ class CatalogoVentaService
     private function superAtributos(Product $producto): Collection
     {
         return $producto->type === 'configurable' ? $producto->super_attributes()->with('options')->get() : collect();
+    }
+
+    /**
+     * Contexto de precio del catalogo. Con carrito (venta en curso) usa el MISMO contexto que el carrito
+     * (ContextoPrecioComercial::durante), asi catalogo y carrito comparten el grupo efectivo de la venta; sin carrito,
+     * el contexto de creacion con el grupo actual del cliente, como siempre.
+     */
+    private function conPrecioDeVenta(int $customerId, ?int $cartId, Closure $operacion): mixed
+    {
+        return $cartId === null
+            ? $this->contexto->duranteCreacionDeCarrito($customerId, $operacion)
+            : $this->contexto->durante((int) $cartId, $customerId, $operacion);
     }
 
     /** El precio comercial solo existe para un cliente con grupo apto (invitado excluido). */

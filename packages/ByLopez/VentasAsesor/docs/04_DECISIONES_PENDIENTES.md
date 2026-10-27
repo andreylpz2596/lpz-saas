@@ -2,7 +2,14 @@
 
 Decisiones de negocio del módulo `ByLopez\VentasAsesor`.
 
-**Última actualización:** 2026-09-15 (Fase 02A) · **2026-09-26 (Fase 03, Camilo Gaitán):** decididas **D-18** y **D-19** (03B) y **D-35 a D-38** (cierre 03B; la nota de numeración está antes del resumen). D-38 queda bloqueada por la fuente de costo. **D-39** (03C) decidida e implementada. **D-40 a D-47** (03D): D-43 aprobada, D-42 y D-44 diferidas, resto pendiente.
+**Última actualización:** **2026-10-09:** **DESP-D-01…08 (Despacho V1) DECIDIDAS** por Camilo Gaitán e implementadas en desarrollo
+(drawer «Despachar», guía y PDF, flete y recaudo). · **2026-10-08 (tercera ronda):** **LOG-D-01…04 y COM-D-15 DECIDIDAS** por Camilo Gaitán e
+implementadas en desarrollo (LOG-01 y G-11). COM-04 queda a la espera de la validación manual. · **2026-10-08 (segunda ronda):** **D-COST-01…07 DECIDIDAS** (el `cost` de Bagisto es el costo
+comisionable oficial; supera la precisión anterior de COM-D-02); nuevas decisiones abiertas **COM-D-15** (G-11) y
+**LOG-D-01…04** (entrega), que bloquean COM-04. Sección «D-COST» antes de «COM-D». · **2026-10-08 (COM-01/02/03):** Camilo Gaitán **decidió COM-D-01 y COM-D-03 a COM-D-14**
+(COM-D-10 = **quincenal**) y **precisó COM-D-02** (el `cost` de Bagisto se captura como referencia **sin autoridad de
+comisión**; la fuente autoritativa sigue pendiente). Tabla de decisiones al inicio de la sección «COM-D». · **2026-10-07 (COM-00):** añadidas **COM-D-01 a COM-D-14** (comisiones; sección «COM-D» antes del
+resumen) y ASESOR-02 validada (nota en D-60). · 2026-09-15 (Fase 02A) · **2026-09-26 (Fase 03, Camilo Gaitán):** decididas **D-18** y **D-19** (03B) y **D-35 a D-38** (cierre 03B; la nota de numeración está antes del resumen). D-38 queda bloqueada por la fuente de costo. **D-39** (03C) decidida e implementada. **D-40 a D-47** (03D): D-43 aprobada, D-42 y D-44 diferidas, resto pendiente.
 
 **Estado global:** 6 decididas (D-01, D-02, D-05, D-06, **D-16**, **D-27**) ·
 **27 pendientes** · 1 retirada (D-23). La Fase 01 añadió **D-27**. La Fase 01B
@@ -175,6 +182,10 @@ cambia de nombre o queda inactivo.
 introducir una tabla de perfiles. **Desbloquea las Fases 01 y 02** en lo que
 respecta a este punto.
 
+> **Precisión (COM-00, 2026-10-07).** La frase «no se crea tabla de perfiles» quedó **superada por D-60**
+> (`bylopez_va_asesores`, ASESOR-01). Lo esencial de D-06 sigue vigente: el asesor se identifica por ACL y su identidad
+> comercial es `admins.id`. Ver `15_MAPA_DOMINIO_ASESORES.md` §2.
+
 **Precondición operativa (no se corrige en fase documental):** el administrador
 ASESOR_PRUEBA apunta a `role_id = 3`, que no existe; con un rol nulo,
 `Bouncer::hasPermission()` y `Admin::hasPermission()` producen un error fatal de
@@ -280,7 +291,10 @@ casos puntuales. La asignación masiva por defecto falsearía KPIs y comisiones.
 
 ## D-13 · Visibilidad entre asesores
 
-**Estado:** pendiente. **Bloquea la Fase 05.**
+**Estado:** **decidida (2026-10-04, Camilo Gaitán): cada asesor ve solo lo suyo.** Implementada
+en «Mis ventas / Pedidos» con la semántica existente de `AutorizacionVentasAsesor` (view_own =
+`advisor_id` propio; view_all = todo; sin atribución válida y sin view_all = denegado). El
+ranking agregado no se implementa todavía.
 
 **Alternativas.** Cada asesor ve solo lo suyo · ve el ranking agregado sin
 detalle ajeno · ve todo.
@@ -812,6 +826,11 @@ transporte interno, empaque, estampado, costos de recaudo u otros.
 **Por qué importa.** La comisión propuesta es un porcentaje de la utilidad bruta
 positiva por unidad entregada y no devuelta; sin costo definido no hay utilidad.
 
+> **COM-00 (2026-10-07):** auditado. **No existe snapshot de costo (gap crítico)**; el atributo `cost` de Bagisto es actual,
+> editable y sin historial. Continúa en **COM-D-02** (`16_AUDITORIA_COMISIONES.md` §4).
+> **2026-10-08:** COM-D-02 precisada: desde COM-01 se captura `cost` como **referencia** (`autoridad_comision = false`); qué
+> integra el costo autoritativo sigue **pendiente**.
+
 ---
 
 ## D-32 · Porcentaje inicial de comisión
@@ -821,6 +840,10 @@ positiva por unidad entregada y no devuelta; sin costo definido no hay utilidad.
 **Propuesta registrada:** 20 % de la utilidad bruta positiva, solo sobre unidades
 entregadas y no devueltas. No es política definitiva hasta validar márgenes reales.
 Una venta de empresa (`company`) no genera comisión (D-27).
+
+> **COM-00 (2026-10-07):** estado real verificado = **PROPUESTA** (no hay porcentaje en código ni configuración). Continúa en
+> **COM-D-03**. **2026-10-08: DECIDIDA** por Camilo (COM-D-03): 20 % configurable con vigencia; regla #1 `COM-GLOBAL-INICIAL`
+> creada en desarrollo.
 
 ---
 
@@ -1132,10 +1155,32 @@ controles.
 - **Límites:** sin segundo catálogo, sin stock ni precio duplicados y sin implementar hasta cerrar
   03E y 03F.
 
-## D-53 · Registro seguro de pagos: idempotencia y concurrencia — **DECIDIDA (arquitectura)**
+## D-53 · Registro seguro de pagos: idempotencia y concurrencia — **DECIDIDA (arquitectura) · REVISADA por D-59 (PAG-A, 2026-10-05)**
 
 **Estado:** ✅ **DECIDIDA** (2026-09-27, Camilo Gaitán: persistencia propia con UNIQUE real, no
 solo `order_transactions.data`). Diseño en el Doc. 05 §35. **Sin migración ni código todavía.**
+
+> **Revisión PAG-A (2026-10-05, D-59 / P-01).** El texto original de abajo **se conserva como historial**; lo
+> que sigue vigente y lo sustituido es:
+>
+> - **Sustituido:** «registrar un pago = crear de inmediato la `order_transaction`». **Nueva regla:** registrar
+>   ≠ crear Transaction. Registrar crea el ingreso ByLopez + sus aplicaciones (el saldo comercial baja de
+>   inmediato) y el pago queda `sin_revisar`; la Transaction nativa nace **solo al confirmar**.
+> - **Sustituido:** la tabla mínima `bylopez_va_registros_pago` (**nunca se creó**). Su clave de idempotencia
+>   pasa a `bylopez_va_pagos` y su `order_transaction_id` a `bylopez_va_aplicaciones_pago`, que nace NULL y se
+>   llena al confirmar (Doc. 05 §42.2).
+> - **Sustituido:** «lo pagado = SUM de las transacciones». El saldo comercial pasa a una fórmula derivada
+>   que suma las aplicaciones ByLopez activas y las Transactions ajenas a ByLopez, sin doble conteo (Doc. 05 §42.3).
+> - **Vigente:** idempotencia por `(mecanismo, clave)` con huella (la huella ahora cubre cliente, monto, medio,
+>   referencia, fecha y la distribución normalizada); una sola transacción de base de datos; recalcular bajo
+>   bloqueo; composición de primitivas nativas al confirmar (`OrderTransactionRepository::create`,
+>   `InvoiceRepository::updateState('paid')` y `OrderRepository::updateOrderStatus($order)` **sin estado**);
+>   rechazo de pedidos con Refund; medios de cobro por código configurable; asesores fuera de
+>   `sales.transactions` (ahora P-12).
+> - **Vigente y ampliado:** el abono general multipedido de §36.4 (FIFO como **propuesta editable**, P-07; nunca
+>   más que el dinero recibido, P-06) es **una sola operación atómica**.
+> - **Orden de bloqueos actualizado:** antes «registro → pedido → factura»; ahora **pago → pedidos (id asc.) →
+>   facturas (id asc.)** (Doc. 05 §42.5).
 
 **Decisión:**
 
@@ -1308,6 +1353,706 @@ también devuelve la reserva a 0. La prueba es `order_items` (todo hijo de confi
 
 Camilo aprobó (2026-09-28): facturación de recogida = dirección REAL del cliente, sin dirección se pide una mínima real y no se usa la bodega (D-30); accesos rápidos por config (slug/nombre, sin ids); canales `tienda_fisica` y `whatsapp`, explícitos por venta; lote todo o nada sin parciales; solicitud ≠ carrito (D-39/I-13); tras editar líneas se reaplica el mismo método de entrega solo si sigue disponible (nunca otro; si no, revisión); pago resuelto una vez por operación sin caché; cliente inactivo/suspendido con borrador y confirmación bloqueada por 03F (P-09 intacta). Detalle: Doc. 05 §41.
 
+## D-56 · Separación Pedido / Pago / Despacho — **APROBADA por Camilo Gaitán (arquitectura, 2026-10-05; sin estados propios todavía)**
+
+**Decisión (Camilo Gaitán).** El estado del pedido, el estado del pago y el estado del despacho
+son **tres ciclos distintos** y nunca se fusionan en un único estado. «Mis ventas / Pedidos» los
+muestra en columnas separadas.
+
+| Ciclo | Autoridad hoy | Cómo se lee hoy | Dominio futuro |
+|---|---|---|---|
+| **Pedido** | Bagisto `orders.status` | Directo: `pending`, `pending_payment`, `processing`, `completed`, `canceled`, `closed`, `fraud` (etiquetas del admin de Bagisto) | Sigue siendo Bagisto |
+| **Pago** | Bagisto `invoices` + `order_transactions` | **Lectura derivada** `Support/Pedidos/EstadoPagoPedido` (Doc. 05 §34.6) | **Cartera** |
+| **Despacho** | Bagisto `shipments` / `shipment_items` (reflejado en `order_items.qty_shipped`) | **Señal derivada** en `ConsultaPedidosAsesorService::estadoDespacho()` | **Logística** |
+
+**Reglas.**
+
+1. **Bagisto sigue siendo la autoridad del Order.** No se crea un segundo sistema de estados que
+   compita con `orders.status`, pero tampoco se fuerza la operación comercial dentro de él.
+   ByLopez podrá tener, en fases posteriores, estados operativos propios para lo que Bagisto no
+   representa (diseñados con evidencia).
+2. Cuando haya que cambiar el estado oficial de un pedido se hará **solo** con los mecanismos
+   públicos de Bagisto (repositorios como `OrderRepository::updateOrderStatus`, `InvoiceRepository`,
+   `ShipmentRepository`, `RefundRepository`, y sus eventos). **Nunca** modificando
+   `packages/Webkul` ni con `UPDATE` directo sobre `orders.status`. No se implementa todavía.
+3. **`EstadoPagoPedido` es una lectura derivada, no Cartera.** Sirve para el listado, el detalle,
+   los KPIs y la información operativa. No registra, valida, aplica ni concilia pagos. Cartera
+   (diseño previo: D-50, D-51, D-53, Doc. 05 §35–§36) deberá representar cuánto se debía, cuánto
+   se pagó, qué pago fue validado, a qué pedido se aplicó y cuánto saldo queda; **solo después**
+   se decide qué efecto tiene eso sobre el pedido.
+4. **Prohibida la regla global «pedido no pagado = no se puede despachar».** La contra entrega
+   (D-50) está pendiente de pago y es válido despacharla; la transferencia (D-48) pasa por
+   «pendiente de validación → pago confirmado → saldo». Cada medio necesitará su propio flujo,
+   que se diseñará en Cartera/Logística.
+5. **Despacho hoy = solo la señal básica de Shipment.** No existen todavía «alistando»,
+   «empacado», «guía generada», «entregado», «novedad» ni «devolución» (D-07, D-14, D-42, D-44;
+   Fase 06). No se inventan.
+6. Sin columnas, tablas ni estados nuevos en esta decisión.
+
+**Derivación actual del despacho (auditada en Bagisto 2.4.9).** `qty_shipped` de cada línea
+solo lo escribe `ShipmentRepository::create()` (suma la cantidad enviada) y
+`OrderItemRepository::collectTotals()` (la recalcula como Σ `shipment_items.qty`), así que
+refleja fielmente los Shipments registrados. Sobre las líneas padre del pedido:
+
+| Señal | Condición |
+|---|---|
+| No aplica | Pedido `canceled`, `closed` o `fraud`, o sin unidades objetivo |
+| **Sin despachar** | Pedido vigente con unidades objetivo (`qty_ordered − qty_canceled > 0`) y **ninguna unidad enviada** (Σ `qty_shipped` = 0) ⇔ ningún Shipment con unidades para ese pedido |
+| Despacho parcial | 0 < enviadas < objetivo |
+| Despachado | enviadas ≥ objetivo. Significa **«salió de bodega» (Shipment registrado), no «entregado»** |
+
+Limitaciones conocidas: un producto no inventariable (virtual/descargable) nunca contaría como
+enviado (el catálogo de ByLopez es físico); un Shipment no prueba entrega.
+
+**KPI «Por despachar» (corregido y aprobado 2026-10-05).** Es un KPI **operacional basado en
+unidades físicas pendientes de despacho, NO en `orders.status`**. Responde: «¿todavía existen
+unidades físicas pendientes de despachar?». Cuenta los pedidos visibles (mismo alcance que el
+listado: view_own = solo los propios; view_all = todos) cuya señal de despacho es **Sin despachar**
+o **Despacho parcial**; excluye **Despachado** y **No aplica**. Usa la misma fuente que la columna
+Despacho (`ConsultaPedidosAsesorService::agregadoDespacho()`: por pedido, líneas padre, objetivo =
+Σ(`qty_ordered − qty_canceled`), enviadas = Σ `qty_shipped`): pedido no `canceled`/`closed`/`fraud`,
+objetivo > 0 y enviadas < objetivo. Un pedido parcialmente despachado **sigue siendo trabajo
+pendiente**.
+
+Regla anterior (corregida): excluía además `orders.status = completed` y miraba línea a línea.
+Hallazgo que motivó el cambio: en Bagisto 2.4.9 `TransactionController` marca el pedido `completed`
+cuando el pago cubre la factura y existe **cualquier** Shipment, aunque sea parcial; ese pedido
+desaparecía del KPI teniendo unidades por enviar. Prueba: `Fase05aMisVentasTest` («KPI por
+despachar (D-56)…», casos 1–7 más `completed` con 5 de 10 unidades enviadas → cuenta).
+
+**Caso operativo futuro: «Pagado + Sin despachar».** Venta que avanzó comercialmente pero
+todavía no salió físicamente (riesgo: cliente esperando un pedido que nadie alistó). Con los
+datos actuales **se puede detectar sin semántica nueva**: es el cruce de `EstadoPagoPedido` =
+`pagado` y despacho = `sin_despachar`, ambos ya calculados por fila en el listado. En Bagisto
+2.4.9 un pedido sin ningún Shipment no puede quedar `completed` (`isInCompletedState` exige lo
+enviado y `TransactionController` deja `processing` si no hay Shipment), así que el caso aparece
+como `processing` o `pending_payment`; con despacho parcial puede aparecer incluso como
+`completed`. KPI/alerta «Pagados pendientes de despacho» (Pago = Pagado + Despacho = Sin despachar
+/ Parcial) **no implementado**: Camilo lo decidirá al avanzar formalmente con Operación Asesor /
+Cartera / Logística, incluido si «Revisar» (factura pagada sin transacción, D-48) y «Parcial»
+(de pago) deben entrar.
+
+**Deuda técnica explícita.** La regla de pago está duplicada con la misma semántica en
+`ConfirmarVentaService::estadoPago()` (03F). No se unifica ahora para no reabrir 03F; al
+reabrirla: test unitario de los 5 estados de `EstadoPagoPedido` y luego delegar en él.
+
+## D-57 · Nueva venta: Entrega → Dirección → Pago sin doble decisión — **IMPLEMENTADA (2026-10-05, sin commit; pendiente de revisión manual de Camilo)**
+
+**Contexto.** Auditoría de 03G-D (Doc. 05 §41.10): «Recogida en bodega» (opción de UI) y
+«Recogida en tienda» (ShippingRate real del carrier `pickup` de `bagisto-eu/pickup`) eran la
+**misma decisión** preguntada dos veces, y con destino bodega Bagisto también ofrecía
+`flatrate` («Envío por pagar») y `free` («Envío gratuito»): estado híbrido posible.
+
+**Decisiones aplicadas.**
+
+1. **Recogida ⇔ bodega (bicondicional).** `PuntosRecogida::metodoPermitido()`: `pickup` solo con
+   destino bodega real y, con destino bodega, solo `pickup`. Aplica a los rates ofrecidos, a la
+   selección (422 `metodo_entrega_no_disponible`) y a la revalidación de 03F. Bagisto sigue
+   recibiendo el `shipping_method` real (`pickup`).
+2. **Sin doble decisión en la UI.** Una sola opción «Recogida en tienda» (título/descripción del
+   carrier en `core_config`); al elegirla se aplica `pickup` y se muestra como información. No se
+   pide dirección de envío del cliente; la facturación sigue D-30 (dirección real; nunca la bodega).
+3. **Domicilio:** Dirección (CustomerAddress) → Método de envío (rates reales de Bagisto para ESA
+   dirección) → Pago. El método va después de la dirección porque Bagisto calcula los rates para un
+   destino.
+4. **Predeterminada:** `default_address` de Bagisto. Preselección solo visual: predeterminada; si no
+   hay y existe una sola dirección, esa; con varias sin predeterminada, elige el asesor.
+5. **Agregar dirección en MODAL** (desde 2026-10-05; antes inline): guardada = RT-04 (`GuardarDireccionClienteComercialService`, cliente
+   del borrador, propietario exigido, email opcional, primera = predeterminada); o puntual solo para
+   esta venta (CartAddress). CustomerAddress → CartAddress → OrderAddress sin modificar silenciosamente
+   la dirección del cliente.
+6. **Pago** solo visible y Confirmar solo habilitado cuando la entrega aplicada al carrito coincide
+   con la elegida y está completa.
+
+**Resueltos el 2026-10-05 (aprobados por Camilo).**
+
+- **Código postal en direcciones guardadas → IMPLEMENTADO (D-58; catálogo DIVIPOLA y autocomplete también implementados, ver D-58).** RT-04 deja de exigirlo fijo:
+  `GuardarDireccionClienteComercialService` usa `core()->isPostCodeRequired()`
+  (`customer.address.requirements.postcode`, la misma configuración del checkout de Bagisto). En
+  `lpz_saas` vale **0** → opcional. La dirección puntual del borrador sigue opcional (D-46).
+- **PDF de factura en desarrollo → APLICADO por configuración (sin código).** Fila `core_config`
+  id 8, `emails.general.notifications.emails.general.notifications.new_invoice`, **global
+  (`channel_code` NULL; el informe anterior decía canal `default`: corregido)**. Antes **1**, ahora
+  **0** (2026-10-05 ~14:38). Deja de ejecutarse solo el correo de factura AL CLIENTE
+  (`Webkul\Shop\Listeners\Invoice::afterCreated`, que construye `InvoicedNotification` con el PDF).
+  **Sin tocar:** `sales.payment_methods.moneytransfer.generate_invoice` = 1,
+  `moneytransfer.invoice_status` = paid, `cashondelivery.generate_invoice` = 1,
+  `new_invoice_mail_to_admin` = 0. La Invoice se sigue creando (verificado: pedido 41 → factura
+  `FAC-BYL-00000025-2025`, `paid`, `email_sent = 0`). Causas evitadas: logo por HTTP en `serve` y
+  memoria de `ar-php` (128M). **Restaurar:** Configuración → Correos → Notificaciones → «Nueva
+  factura» = Sí, o `UPDATE core_config SET value = '1' WHERE id = 8` + `php artisan
+  optimize:clear`. Producción (no ahora): cola `database` + `after_commit = true` + worker y revisar
+  `memory_limit`.
+
+**Pendiente (configuración que debe corregir Camilo).**
+
+- **Datos de la bodega en `lpz_saas`:** `inventory_sources` BODEGA1 tiene `state = MI` y
+  `postcode = 48127` (parecen datos de ejemplo; MI no es un departamento de Colombia). Se copian tal
+  cual al OrderAddress de las recogidas (confirmado en el pedido 41). Corregir desde Bagisto
+  (Inventario → Fuentes) con la dirección real; no se corrigió inventando valores.
+- **Pendiente de aclaración con Camilo: «NIF 1000».** Apareció en una instrucción dictada; no se
+  implementó nada relacionado.
+
+## D-58 · Geografía de Colombia (DIVIPOLA) y código postal — **APROBADO · IMPLEMENTADO (2026-10-05, sin commit; pendiente de prueba manual en celular)**
+
+Camilo aprobó el diseño completo el 2026-10-05: catálogo local DANE/DIVIPOLA, equivalencia
+estructurada municipio → departamento → `country_states`, autocomplete único con el formato
+«Departamento — Municipio», Bogotá, D.C. como entidad propia (nunca Cundinamarca), y código postal
+sin inventar ni inferir por municipio.
+
+**Estado por parte.**
+
+| Parte | Estado |
+|---|---|
+| Auditoría de Bagisto (state / city / postcode) y de la fuente DANE | AUDITADO |
+| Catálogo local: 2 tablas, 2 migraciones, 2 modelos | **IMPLEMENTADO** (aplicado en `lpz_saas` y `lpz_saas_testing`) |
+| Equivalencia DIVIPOLA → `country_states` y estado `BOG` (Bogotá, D.C.) | **IMPLEMENTADO** |
+| Importador `ventas-asesor:geo-importar-divipola` (dry-run por defecto, idempotente, falla cerrado) | **IMPLEMENTADO** (catálogo real importado en `lpz_saas`) |
+| Endpoint `GET admin/ventas-asesor/ubicaciones?q=` | **IMPLEMENTADO** |
+| Autocomplete único en la modal «Agregar dirección» | **IMPLEMENTADO** (probado en backend y en HTML; la prueba con el celular real la hace Camilo) |
+| Selección estructurada: el backend resuelve ciudad / estado / país por código | **IMPLEMENTADO** |
+| Código postal según `core()->isPostCodeRequired()` | **IMPLEMENTADO** |
+| Resolución automática del código postal | NO IMPLEMENTADA (no recomendada: ver más abajo) |
+| Migración de direcciones históricas (backfill) | NO (decidido: las históricas se muestran con sus valores) |
+
+**Auditoría de Bagisto 2.4.9.**
+
+- `addresses.country` = ISO-2 (`CO`); `addresses.state` = **código** de `country_states` (`CUN`,
+  `BOY`, …); `addresses.city` = texto libre (Bagisto no tiene catálogo de ciudades);
+  `addresses.postcode` = texto validado con la regla `PostCode`.
+- `core()->isPostCodeRequired()` = `(bool) getConfigData('customer.address.requirements.postcode')`,
+  por canal, valor por defecto **1** (`Admin/Config/system.php`). Lo usan `Shop\…\AddressRequest` y
+  `CartAddressRequest`; el formulario de direcciones del **admin** lo exige siempre. En `lpz_saas`:
+  postcode = **0**, state = 1, country = 1.
+- `country_states` CO traía **32 departamentos** con códigos de 3 letras (AMA … VID) y **no incluía
+  Bogotá, D.C.** (DIVIPOLA 11, entidad aparte). `country_states.code` no tiene índice único.
+- Datos reales de `lpz_saas` mezclados: `state` = `CUNDINAMARCA` (71), `CUN` (32), `Bogotá` (3),
+  `MI` (2)…; postcode `1111` (65), `11111` (13), `111` (6)… (códigos forzados, no reales).
+
+**Fuente oficial y esquema real (verificado al descargar, 2026-10-05).** DANE — DIVIPOLA, dataset
+«DIVIPOLA- Códigos municipios» en datos.gov.co (`gdxc-w37w`; «Actualización a corte 30 diciembre
+2024»; licencia CC BY-SA 4.0; descarga CSV
+`https://www.datos.gov.co/api/views/gdxc-w37w/rows.csv?accessType=DOWNLOAD`). CSV UTF-8 sin BOM,
+**1.122 filas**, 7 columnas: `Código Departamento` (2), `Nombre Departamento`, `Código Municipio`
+(5), `Nombre Municipio`, `Tipo: Municipio / Isla / Área no municipalizada`, `longitud`, `Latitud`
+(coordenadas con coma decimal). **33 departamentos**; tipos: Municipio 1.103 · Isla 1 · Área no
+municipalizada 18. **Los nombres vienen en MAYÚSCULAS** («BOYACÁ», «PESCA»). El archivo importado
+queda en `storage/app/geo/divipola.csv` (no versionado); SHA-256
+`159b4b84595a11be5bf623fdf25c6fd5c9ac8c3ed898cf7928b2b3f321b9b492`.
+
+**Tablas (migración `2026_10_05_000009_create_bylopez_geo_tables`).**
+
+- `bylopez_geo_departamentos`: `codigo_divipola` CHAR(2) PK · `nombre_oficial` · `nombre_busqueda` ·
+  `country_state_id` (FK RESTRICT a `country_states`, **UNIQUE**) · timestamps. 33 filas.
+- `bylopez_geo_municipios`: `codigo_divipola` CHAR(5) PK · `nombre_oficial` · `nombre_busqueda`
+  (índice) · `departamento_codigo` (FK RESTRICT) · `tipo` · `activo` · `fuente` · `version_fuente` ·
+  `checksum_fuente` (SHA-256 del archivo importado) · timestamps. 1.122 filas, todas activas.
+- Los códigos son **cadenas** (CHAR): se preserva el cero inicial (`05001`). Sin coordenadas: la
+  fuente las trae pero hoy nada las usa (se pueden agregar después desde el mismo archivo).
+- Modelos `GeoDepartamento` y `GeoMunicipio`. Nombres: `nombre_oficial` se guarda en formato de
+  presentación («Boyacá», «Pesca», «Bogotá, D.C.», «Valle del Cauca») con una conversión
+  determinista desde el MAYÚSCULAS de DANE (`Support\Geo\NombresGeograficos`); `nombre_busqueda` es
+  minúsculas sin tildes ni signos («boyaca», «bogota d c»).
+
+**Equivalencia DIVIPOLA → Bagisto (única, resuelta al importar).** `Support\Geo\EquivalenciaDepartamentos`
+(tabla explícita de 33 pares, p. ej. 05→ANT, 15→BOY, 25→CUN, 68→SAN, 11→BOG) validada por el
+importador contra `country_states`; queda en `bylopez_geo_departamentos.country_state_id`. En la
+venta **nunca** se comparan nombres. Una advertencia informativa: el departamento 88 («Archipiélago
+de San Andrés, Providencia y Santa Catalina») ↔ Bagisto `SAP` («San Andrés y Providencia»): la
+equivalencia es por código y los nombres difieren.
+
+**Bogotá, D.C. — resuelto.** DIVIPOLA 11 es entidad propia y **no** se mapea a Cundinamarca.
+Migración de **datos** `2026_10_05_000010_agregar_estado_bogota_dc_a_country_states`: inserta en
+`country_states` el estado `country_code = CO`, **`code = BOG`**, `default_name = Bogotá, D.C.`
+(id 619 en `lpz_saas`). Convención verificada: 3 letras mayúsculas; sin ninguna colisión de `BOG`
+en ningún país. Idempotente (no inserta si ya existe), no cambia ni borra ningún estado existente
+(`BOY`, `CUN`, … y sus ids intactos) y no toca Webkul. `down()` solo lo elimina si nadie lo usa
+(catálogo ni direcciones). Municipio `11001` → departamento «Bogotá, D.C.» → `BOG`.
+
+**Importador.** `php artisan ventas-asesor:geo-importar-divipola --archivo=RUTA.csv [--persistir]
+[--corte=2024-12-30]` (`--dry-run` y `--persistir` son excluyentes; sin `--archivo` el comando
+indica la URL de descarga). Dry-run por defecto: calcula el mismo informe sin escribir. **Falla
+cerrado** (no escribe nada, ni con `--persistir`) si: el encabezado cambió (la fuente cambió de
+esquema), un código no tiene 2 / 5 dígitos o el municipio no pertenece a su departamento, hay
+duplicados o nombres vacíos, un departamento DIVIPOLA no tiene equivalencia, o su estado de Bagisto
+no existe / está duplicado. Idempotente (upsert por código; una 2.ª corrida: 0 altas, 0 cambios,
+**ni un INSERT/UPDATE**); **no borra**: un municipio ausente de la fuente se **inactiva** y uno que
+reaparece se reactiva; una sola transacción. Registra `fuente`, `version_fuente` (`--corte`) y
+`checksum_fuente`. Resultado en `lpz_saas`: dry-run 33 + 1.122 altas sin escribir; persistir 33 +
+1.122; segunda importación 0 / 0 / 0 y 1.122 «sin cambios».
+
+**Endpoint de autocomplete.** `GET admin/ventas-asesor/ubicaciones?q=…`
+(`admin.ventas_asesor.ubicaciones.buscar`, `UbicacionesController` + `BuscarUbicacionRequest` +
+`Services\Geo\CatalogoUbicaciones`). ACL: la clave existente `ventas_asesor.pedidos.create` (la misma
+de todas las rutas de Nueva venta; Bouncer real: sin sesión → login, sin la clave → 401). Mínimo 2
+caracteres, **máximo 15** resultados, solo municipios **activos**; respuesta reducida
+`[{municipio_codigo, municipio, departamento_codigo, departamento, etiqueta}]` con
+**etiqueta = «Departamento — Municipio»**. Búsqueda en minúsculas y sin tildes: cada palabra
+escrita debe coincidir con el **inicio de una palabra** del municipio o de su departamento
+(`Boy Pe` → Boyacá — Pesca); primero las coincidencias por municipio y luego las que solo lo son por
+departamento, luego alfabético. ~13 ms con el catálogo completo. Resultados reales en `lpz_saas`:
+«Pes» → **Boyacá — Pesca** · «Tun» → Boyacá — Tunja, Boyacá — Tununguá, Cauca — Piendamó - Tunía ·
+«Buc» → Santander — Bucaramanga, Norte de Santander — Bucarasica · «Chí» → **Cundinamarca — Chía**,
+Antioquia — Chigorodó, … · «Bog» → **Bogotá, D.C. — Bogotá, D.C.** (jamás «Cundinamarca — Bogotá»)
+· «Boy» → los municipios de Boyacá (el tope de 15 corta la lista alfabética: «Boyacá — Boyacá»,
+«Boyacá — Puerto Boyacá», «Boyacá — Almeida», …; escribir «Boy Tun» afina).
+
+**Selección estructurada (la UI no es autoridad).**
+
+- La modal tiene **un solo input** «Ciudad / municipio» (debounce de 300 ms, sin librerías; la lista
+  va en flujo, con scroll propio, para que el teclado del celular no la tape; flechas y Enter
+  también funcionan). Tras elegir, muestra «Departamento: Boyacá» solo como información. **Se
+  eliminó el select de departamento.** Escribir invalida la selección anterior.
+- Guardar exige haber elegido de la lista («Selecciona una ciudad o municipio de la lista.»). La
+  petición envía **`municipio_codigo`** (5 dígitos) y no ciudad ni departamento.
+- Backend: `AgregarDireccionNuevaVentaRequest` y `EntregaNuevaVentaRequest` exigen `municipio_codigo`
+  para direcciones de CO (422). `ValidadorDireccionComercial` (compartido por RT-04 y 03D) resuelve el
+  código con `CatalogoUbicaciones::resolver()` y **ignora** `ciudad`, `departamento` y `pais`
+  enviados: `country = CO`, `state = country_states.code`, `city = nombre_oficial`. Código
+  inexistente, inactivo o mal formado → `datos_cliente_invalidos` (`errores.municipio_codigo`). Si
+  llega el código de Pesca con ciudad «Medellín» y estado «ANT», se persiste Pesca / BOY.
+- `DireccionComercial` gana el campo opcional `municipioCodigo` (+ `comoPredeterminada()`); sin él
+  (llamadores programáticos y direcciones históricas) se usan los textos recibidos, como antes.
+
+**CustomerAddress → CartAddress → OrderAddress** (sin cambios de arquitectura): guardada = RT-04
+(`GuardarDireccionClienteComercialService`, ahora con la ubicación estructurada) y luego se copia al
+CartAddress; sin guardar = solo CartAddress; Bagisto copia al OrderAddress al confirmar (probado:
+`city = Pesca`, `state = BOY`, `country = CO`). Una CustomerAddress existente no se modifica al
+usarla.
+
+**Código postal (auditado; implementado solo lo seguro).** 6 dígitos (2 = departamento DANE, 2 =
+zona postal, 2 = distrito postal), administrado por 4-72, ~3.681 códigos; **un municipio puede tener
+varios** (p. ej. Bogotá por localidades; municipios pequeños a veces urbano + rural). Depende de la
+**ubicación exacta**, no del municipio: una tabla `municipio → código` sería incorrecta y no se creó.
+Automatizarlo exigiría los polígonos oficiales de zonas postales (código, municipio, vigencia,
+geometría) + geocodificar la dirección y asignar por punto-en-polígono, o un servicio oficial de
+4-72 por dirección; lo que exigirá cada transportadora está por verificar. **Implementado:**
+`GuardarDireccionClienteComercialService` exige el código postal solo si
+`core()->isPostCodeRequired()` lo exige (en `lpz_saas`: 0 → opcional); la dirección puntual del
+borrador sigue opcional (D-46); nunca se inventa ni se infiere.
+
+**Límites y pendientes.**
+
+- Prueba en un navegador real / celular (teclado, scroll de la modal, lista): pendiente de Camilo.
+- Direcciones históricas (`state` = `CUNDINAMARCA` / `Bogotá` / `MI`, ciudades en mayúsculas): sin
+  backfill; se muestran con sus valores. Las nuevas usan el catálogo.
+- La exigencia de `municipio_codigo` está en la frontera HTTP de Nueva venta; los llamadores de
+  servicios (n8n, API futura) deberán pasar `municipioCodigo` para usar el catálogo.
+- El catálogo se actualiza reimportando un CSV nuevo del DANE (dry-run primero).
+- `Boy` lista 15 municipios alfabéticos; si Camilo prefiere ver primero las capitales o subir el
+  tope, es un ajuste de ordenamiento sin cambios de modelo.
+- `lpz_saas_testing` tiene las migraciones 000009 y 000010 aplicadas; los tests cargan su propio
+  fixture con el importador real y no dependen del catálogo completo.
+- BODEGA1 (`state = MI`, `postcode = 48127`) sigue con datos de ejemplo; **no** se tocó (D-57).
+
+## D-59 · Pagos / Cartera: arquitectura PAG-A — **APROBADA (arquitectura; sin implementación ni migraciones)**
+
+> **Riesgo de Sales nativo CERRADO (2026-10-07, decisión de Camilo):** el rol `#2 ASESOR VENTAS` ya no tiene ninguna clave `sales.*`
+> (se retiraron las 12 restantes); conserva solo las 9 claves del módulo y `catalog`, `catalog.products`. El asesor trabaja
+> exclusivamente desde Ventas Asesor; Ventas Asesor no depende de ACL nativas de Sales (verificado en código). 0 usuarios; Administrador
+> `all` sin cambios. Detalle en Doc. 05 §42.24.
+>
+> **PAG-F CERRADA EN DESARROLLO (2026-10-07, sin commit) — decisiones de Camilo:** (1) **corte definitivo inicial `2026-10-06`**
+> (opción A): pedido 45 dentro con sus pagos reales; pedido 46 dentro como **excepción de transición** (`requiere_revision`, factura
+> `paid` sin evidencia; no se toca); 41/42/44 históricos; sin excepciones por id. (2) **Rol operativo inicial `#2 ASESOR VENTAS`**: se le
+> agregaron `ventas_asesor`, `operar_como_asesor`, `pedidos`, `pedidos.create`, `pedidos.view_own`, `cartera`, `cartera.view_own`,
+> `cartera.registrar` y `cartera.abono_general`; tras auditar rutas reales se le **retiraron** `sales.transactions` y
+> `sales.transactions.view` (crean Transactions y pagan facturas: P-12), `sales.invoices.create` (factura manual nace `paid` y puede crear
+> Transaction) y `sales.refunds.create` (Refund ≠ reverso); 0 usuarios asignados. (3) **Supervisión** por el rol Administrador `all`, sin
+> rol Supervisor. (4) Nadie tiene `cartera.reversar` (PAG-I). (5) **Producción pendiente** de autorización tras la prueba manual de PAG-E.
+> El riesgo de los permisos nativos de solo lectura (`sales.orders.view`, etc.) quedó **cerrado** el mismo día (ver nota anterior y
+> Doc. 05 §42.24). Detalle en Doc. 05 §42.23.
+>
+> **PAG-F parcial (2026-10-07, sin commit).** Configuración objetivo de `moneytransfer` (§42.9) **aplicada en desarrollo** tras auditar
+> Bagisto (sin contradicción con PAG-E: es la misma que ya usaba contra entrega). **Decisiones abiertas para Camilo:** (1) **fecha de corte
+> definitiva**: opción A (recomendada) mantener `2026-10-06` (incluye el pedido 45 con sus pagos reales; el 46, transferencia creada con la
+> configuración antigua, queda «a revisar»); opción B `2026-10-07 08:20:34` o posterior (cumple §42.8 literal, pero saca de Cartera al
+> 45 y a sus pagos); (2) **rol de asesor**: «ASESOR VENTAS» no tiene usuarios ni claves del módulo y conserva `sales.transactions`
+> (P-12); propuesta exacta de permisos en Doc. 05 §42.22; supervisión inicial con el rol «all»; (3) qué hacer con el pedido 46.
+> Ningún corte ni rol se cambió. Detalle en Doc. 05 §42.22.
+>
+> **PAG-E implementada (2026-10-07, sin commit).** Tras auditar el código real de Bagisto 2.4.9: `order_transactions.invoice_id` es NOT NULL
+> (sin factura utilizable **no se confirma** y no se crean facturas) y una Transaction pertenece a un solo pedido, así que un pago
+> multipedido genera **una Transaction por aplicación**, enlazada en `aplicaciones.order_transaction_id`, sobre la factura abierta de menor
+> id con capacidad para TODA la aplicación (nunca se parte). **Refinamiento de D-50/§42.7 (decisión a confirmar por Camilo):**
+> `payment_method` lleva el método de pago DEL PEDIDO (el accesor `payment_title` de Bagisto revienta con códigos ajenos como
+> `transferencia`) y el medio de cobro real va en `type` y `data`. `ConfirmarPagoService`: `sin_revisar → confirmado`, idempotente, locks
+> pago→aplicaciones→pedidos→facturas, **no vuelve a bajar la deuda** (solo sin revisar → verificado); si la factura queda cubierta pasa a
+> `paid` y el pedido recalcula su estado por cantidades. `RechazarPagoService`: solo `sin_revisar → rechazado`, motivo (categoría simple + detalle)
+> obligatorio, anulación lógica de aplicaciones, la deuda vuelve por derivación; un confirmado no se rechaza (reverso = PAG-I). ACL:
+> `cartera.revisar` + alcance (`view_own` exige que TODOS los pedidos del pago sean suyos). Entrada de menú «Cartera / Pagos». Detalle en
+> Doc. 05 §42.21. Pendiente PAG-F: `moneytransfer`, fecha de corte definitiva y roles.
+>
+> **PAG-D implementada (2026-10-06, sin commit); PAG-C validada manualmente por Camilo** (dos abonos reales sobre
+> `#BYL-00000045-CO`: transferencia + efectivo; saldo y «sin revisar» correctos). `RegistrarAbonoClienteService` (extiende, sin
+> modificar, `RegistrarPagoService`): un Pago `sin_revisar` con N aplicaciones, distribución explícita (la propuesta FIFO es editable
+> y solo una ayuda), suma exacta = monto, cada línea ≤ saldo real recalculado bajo bloqueo de los pedidos en orden de id ascendente,
+> idempotencia por huella (cliente, medio, fecha, referencia, monto y distribución), rollback total, sin Transactions ni saldo a favor.
+> ACL: `cartera.abono_general` + alcance `view_own|view_all` aplicado a **cada pedido** (decisión: poder ver al cliente no basta). La
+> agrupadora `ventas_asesor.cartera` apunta ahora a `cartera.index` (`?cliente=ID`). Accesos contextuales (detalle del pedido y hook
+> `bagisto.admin.customers.customers.view.card.orders.before`), sin menú global ni tocar Webkul. Detalle en Doc. 05 §42.20.
+>
+> **PAG-C implementada (2026-10-06, sin commit).** `RegistrarPagoService`: autoriza con `cartera.registrar` + alcance
+> `view_own|view_all`; falla cerrado sin fecha de corte; idempotente (`mecanismo` + `idempotency_key` + huella: misma
+> solicitud devuelve el pago existente, otra solicitud con la misma clave → 409); bloquea pedido (`FOR UPDATE`) tras reservar
+> el pago y **recalcula el saldo real** con `CarteraConsultaService`; crea Pago `sin_revisar` + `AplicacionPago` + evento
+> `registrado` en una sola transacción; el saldo baja de inmediato; **no** crea Transactions ni toca Invoice/Order; no
+> sobreaplica ni crea saldo a favor. Estado de pago de Mis ventas: para pedidos en Cartera la fuente es Cartera (sin revisar
+> ≠ verificado); fuera de Cartera rige D-56. **Bloqueo por diseño para pagos reales:** fecha de corte inactiva y tablas
+> sin migrar en desarrollo (decisión y autorización de Camilo; no se inventó fecha). Ningún rol recibió `cartera.*`.
+> Decisión abierta: «Nueva venta» es hoy de tercer nivel en el menú (no existe clave ACL hermana); pasarla a segundo nivel
+> exige una clave ACL nueva. **Corrección 03G (2026-10-06):** «Ver pedido» daba 404 por una URL inexistente
+> (`sales/orders/{id}`) y ahora abre el detalle del módulo; validación manual de Camilo con el pedido `#BYL-00000045-CO`.
+> Detalle en Doc. 05 §42.17–§42.18.
+>
+> **PAG-B implementada (2026-10-06, sin commit).** Persistencia (3 tablas aditivas, solo en `lpz_saas_testing`), modelos
+> `Pago`/`AplicacionPago`/`PagoEvento`, enums `EstadoPago`/`TipoEventoPago`, fuente única `Support\Cartera\MediosCobro`
+> (`transferencia` con referencia requerida, `efectivo`, `contraentrega_recaudo`), ACL `ventas_asesor.cartera.*` (sin asignar a
+> roles; P-12 sigue como despliegue), `FechaCorteCartera` **inactiva** (valor y almacenamiento pendientes de aprobación) y
+> `CarteraConsultaService` de solo lectura con la fórmula de §42.3 (sin doble conteo vía `order_transaction_id`). Sin
+> registrar/confirmar/rechazar, sin evidencias. Diferencias con §42.2 y detalle en Doc. 05 §42.16.
+
+**Estado:** ✅ **APROBADA por Camilo Gaitán (2026-10-05).** Solo documentación: **sin** migraciones, modelos,
+servicios, controladores, vistas, API, tests ni cambios de configuración. Diseño técnico completo en el
+**Doc. 05 §42**. **Revisa y sustituye en parte D-53** (ver su nota de revisión). La auditoría de
+Pagos/Cartera ya estaba hecha y no se repite.
+
+**Base aceptada.** `Order` no representa el dinero cobrado. `Invoice paid` representa facturación y **no**
+demuestra ingreso. `Transaction` es lo más cercano al dinero **verificado** nativo. Bagisto no ofrece pago
+reportado sin revisar, aplicación multipedido, revisión, rechazo, reversión auditable, actor, evidencia,
+saldo comercial, cartera de cliente ni idempotencia suficiente → **dominio propio ByLopez** que
+complementa a Bagisto. Se mantiene D-56: **Pedido ≠ Pago ≠ Despacho**.
+
+### Decisiones aprobadas (P-01 … P-12)
+
+| ID | Decisión | Estado |
+|---|---|---|
+| **P-01** | **Registrar un pago ≠ crear una `order_transaction`.** Registrar = ingreso comercial ByLopez + aplicación a pedidos; el saldo comercial baja de inmediato; el pago nace `sin_revisar`. La Transaction nativa se crea **solo al confirmar** (evita una Transaction irreversible sobre dinero que resulte falso). Modifica D-53 | ✅ Aprobada |
+| **P-02** | Modelo mínimo: `bylopez_va_pagos`, `bylopez_va_aplicaciones_pago`, `bylopez_va_pagos_eventos`; evidencias después (`bylopez_va_pago_evidencias`). **Sin migraciones en PAG-A** | ✅ Aprobada |
+| **P-03** | **No** se guarda `customer.deuda` ni columnas equivalentes. Saldo del pedido y cartera del cliente son **derivados** y deben poder explicar de dónde sale cada peso | ✅ Aprobada |
+| **P-04** | Estados `sin_revisar`, `confirmado`, `rechazado`, `reversado`. Transiciones: `sin_revisar → confirmado`, `sin_revisar → rechazado`, `confirmado → reversado`. Registrar + aplicar es atómico; no hay estado «registrado» | ✅ Aprobada (semántica estricta) |
+| **P-05** | **Rechazar ≠ reversar.** Rechazar: solo desde `sin_revisar`, anula exactamente sus aplicaciones, **no** crea Transaction. Reversar: pago ya confirmado, operación excepcional y de mayor privilegio. **La Transaction negativa compensatoria propuesta por la auditoría NO se implementa ni se aprueba** hasta una microauditoría al inicio de PAG-I | ✅ Aprobada; mecánica de reversión **abierta** |
+| **P-06** | **Sin sobreaplicación** (MVP): lo aplicado = lo registrado; si no hay deuda aplicable suficiente se rechaza con motivo claro. Sin wallet ni saldo a favor | ✅ Aprobada |
+| **P-07** | **FIFO es propuesta, no regla.** El usuario autorizado puede cambiar la distribución; el backend revalida todo | ✅ Aprobada |
+| **P-08** | ACL de cartera con claves equivalentes a `view_own`, `view_all`, `registrar`, `abono_general`, `revisar`, `reversar`; el **servicio siempre valida** permisos. Los nombres propuestos siguen la convención de `acl.php` y se conservaron tal cual | ✅ Aprobada; nombres propuestos en Doc. 05 §42.6 |
+| **P-09** | **Sin ficha paralela de Customer.** Customer de Bagisto sigue siendo la autoridad. «Cartera del cliente» propia con ACL propia + tarjeta/enlace mediante hook limpio en la ficha nativa. Sin override de Webkul | ✅ Aprobada |
+| **P-10** | Pedidos con Refund: no se les aplican pagos nuevos sin revisión; resultado `revisar`. Refund de mercancía ≠ reversión de un pago | ✅ Aprobada |
+| **P-11** | No existe «saldo pendiente ⇒ prohibido despachar». Contraentrega: pendiente de pago → preparación → despacho → cobro → registro → revisión | ✅ Aprobada |
+| **P-12** | Los asesores **no** usan el flujo nativo `sales.transactions` para registrar pagos; el dominio de pagos pasa por ByLopez. **No se cambian roles en PAG-A**; la revisión de permisos va en el checklist de despliegue | ✅ Aprobada como **política** (sin ejecutar) |
+
+### Decisiones complementarias de PAG-A (C-1 … C-4)
+
+| ID | Decisión | Estado |
+|---|---|---|
+| **C-1** | **Referencia por medio de cobro**, no universal y no dispersa en controladores. Transferencia: referencia **requerida** (preferida). Si aparecen casos legítimos sin referencia, se reporta antes de imponerla | ✅ Aprobada; política configurable (Doc. 05 §42.7) |
+| **C-2** | **Medio de cobro ≠ método de pago del pedido.** Código `medio_cobro` desde **una fuente configurable y centralizada** (propuesta `ventasasesor.pagos.medios_cobro`), sin lista rígida repartida. Conceptualmente: `transferencia`, `efectivo`, `contraentrega_recaudo`. Sin integraciones con Nequi, Daviplata, bancos ni pasarelas | ✅ Aprobada; lista final por confirmar |
+| **C-3** | **Histórico:** no crear pagos heredados, no reconciliar automáticamente, no convertir `Invoice paid` en pago. Cartera con **fecha de corte**. Mecanismo (almacenamiento en `core_config`, falla cerrado sin fecha, histórico sin saldo, incorporación puntual auditada) **propuesto** en Doc. 05 §42.8 | ✅ Principio aprobado · 🟡 mecanismo **propuesto, pendiente de aprobación** |
+| **C-4** | **Configuración objetivo de `moneytransfer`:** `generate_invoice = 1`, `invoice_status = pending`, `order_status = pending_payment` (hoy: `paid` y `processing`). Diseñada, **no aplicada**; el cambio real va en PAG-F, con autorización y antes de fijar la fecha de corte | ✅ Diseño aprobado · ⏳ aplicación pendiente |
+
+### Reglas centrales (resumen; detalle y fórmulas en Doc. 05 §42)
+
+- **Saldo del pedido** = `total − aplicaciones ByLopez activas − Transactions nativas ajenas a ByLopez`. Sin doble
+  conteo: la Transaction que nace al confirmar queda **vinculada** a su aplicación y se excluye del término
+  «ajenas». **Confirmar no cambia el saldo; rechazar lo devuelve.**
+- **Cartera del cliente** = suma de saldos de sus pedidos en alcance (no `canceled`/`closed`/`fraud`, sin Refund,
+  posteriores a la fecha de corte), con detalle Total · Aplicado · Verificado · Sin revisar · Saldo.
+- **Registrar ≠ confirmar:** todo pago nace `sin_revisar`; confirmar es una **segunda acción explícita** y puede
+  hacerla otro usuario (supervisora, administrador u otro rol con permiso; nada de nombres o personas
+  hardcodeados). Si una misma persona tiene ambos permisos puede hacer las dos, pero registrar jamás confirma.
+- **Concurrencia e idempotencia** (diseñadas, no implementadas): orden de bloqueos `pago → pedidos (id asc.) →
+  facturas (id asc.)`; el doble clic o el reintento no duplican; dos usuarios no sobreaplican; confirmar o
+  rechazar dos veces no duplican efectos.
+- **Evidencias:** bloque posterior. Comprobante ≠ dinero confirmado; no confirma solo.
+- **Canales automatizados (futuro):** misma capa de servicios; la IA **no confirma dinero** y n8n **no escribe
+  tablas directamente**; todo pago registrado por un canal nace `sin_revisar`.
+- **Tres entradas de usuario:** (A) desde el pedido, (B) desde la cartera del cliente, (C) bandeja central
+  Pagos/Cartera.
+
+### Decisiones que permanecen abiertas
+
+1. **Mecánica técnica de la reversión confirmada** (Transaction negativa vs. alternativas): microauditoría al inicio de PAG-I.
+2. **Fecha de corte:** valor, almacenamiento (propuesto `core_config`) y mecanismo de incorporación puntual de históricos.
+3. **Pedido sin factura o con varias facturas al confirmar** (la Transaction exige `invoice_id`): microauditoría puntual en PAG-E; relacionada con C-4.
+4. **Visibilidad `view_own` de un pago multipedido** (abono con pedidos de varios asesores). Propuesta: se ve si lo registró el propio asesor o alguna aplicación recae en un pedido propio, ocultando los importes ajenos.
+5. **Autoconfirmación:** hoy se permite a quien tiene ambos permisos (queda el actor en el evento); una política opcional de separación de funciones queda como mejora posible.
+6. **Pedidos con Refund** en la cifra total de cartera: propuesta de mostrarlos aparte («por revisar»), fuera de la propuesta FIFO.
+7. **Duplicados de referencia** (aviso, no bloqueo): por definir en PAG-C.
+8. **Saldo a favor / sobreaplicación y conciliación:** PAG-H (hoy fuera de alcance).
+
+### Hoja de ruta (propuesta; el orden definitivo lo fija Camilo)
+
+**03G** validación manual de Camilo → **PAG-A** ✅ arquitectura → **PAG-B** modelo persistente + consulta de cartera → **PAG-C**
+registrar pago desde el pedido + estado de pago de Mis ventas sobre el dominio nuevo → **PAG-D** cartera del cliente + abono
+general → **PAG-E** bandeja central + confirmar/rechazar → **PAG-F** configuración objetivo `moneytransfer` + fecha de corte
++ roles + activación (**no activar en producción antes de PAG-E y PAG-F**) → **PAG-G** evidencias → **PAG-H** conciliación y
+saldo a favor → **PAG-I** reversión (con microauditoría previa) → posterior: canales automatizados.
+
+### Hechos de referencia (sin modificar)
+
+- **Pedido 41 (`BYL-00000025-CO`):** `Invoice paid` + 0 Transactions; es evidencia del problema. No se modifica, no recibe Pago
+  ni Transaction y no se usa para pruebas con escritura.
+- **Configuración temporal de desarrollo:** `emails…new_invoice = 0` se mantiene; no se tocan `generate_invoice`, `invoice_status`
+  ni los métodos de pago. El problema de PDF/correo sigue siendo deuda aparte.
+- **BODEGA1** (`state = MI`, `postcode = 48127`, datos de ejemplo) sigue pendiente de que Camilo la corrija; no se mezcla con PAG.
+- **03G** queda pendiente solo de la validación manual de Camilo y de su cierre documental.
+
+## D-60 · Identidad del asesor: perfil propio asociado 1:1 al usuario de Bagisto (ASESOR-01) — **IMPLEMENTADA EN DESARROLLO (2026-10-07, sin commit)**
+
+**Contexto.** La identidad comercial era el usuario de Bagisto (`admins.id`) con la clave ACL `ventas_asesor.operar_como_asesor`; la
+atribución guarda ese id en `advisor_id`. No había nombre comercial, teléfono, estado activo/inactivo ni bloqueo para un usuario que vende
+como asesor sin perfil.
+
+**Decisión.**
+- Perfil mínimo `bylopez_va_asesores` (`admin_id` **único e inmutable**, nombre, teléfono, activo). **No** se crea una segunda identidad:
+  `advisor_id` sigue siendo el id del usuario y no se reescriben pedidos; como el perfil no cambia de usuario, la atribución histórica
+  apunta siempre al mismo asesor. Nunca se borra un asesor: se inactiva.
+- `AsesorActualService` es la fuente única «usuario en sesión → asesor». Quien vende como asesor (rol `custom` + `operar_como_asesor`)
+  **sin perfil activo falla cerrado** (`asesor_sin_asociacion`); nunca se degrada a «sin asignar» ni a «empresa». El administrador `all`
+  no requiere perfil (D-27 vigente).
+- `view_own` no cambia (compara `advisor_id` con el usuario; equivalente al asesor por la inmutabilidad 1:1). Sin backfill de históricos.
+- ACL nueva `ventas_asesor.asesores` (`view_own`, `view_all`, `manage`); el rol `#2 ASESOR VENTAS` recibe solo `asesores` +
+  `asesores.view_own` (ve su ficha). Gestión por el Administrador `all`.
+- Elegibilidad por ACL (`operar_como_asesor`), sin nombres de rol. La pantalla asocia usuarios; no crea usuarios ni contraseñas.
+
+**Pendiente.** Asignar usuarios reales al rol y crear sus perfiles (Camilo); producción. Detalle en Doc. 05 §43.
+
+> **ASESOR-02 (2026-10-07): VALIDADA MANUALMENTE por Camilo Gaitán en desarrollo.** Usuario de prueba 12177
+> «Asesor Prueba» (rol `#2 ASESOR VENTAS`, perfil #1 activo, sin teléfono): creó una venta con `advisor_id` correcto, visible en
+> Mis ventas, en su ficha y en sus KPI; cliente «atendido»; cartera propia; Sales nativo y revisión financiera bloqueados.
+> Producción: rollout **bloqueado** (ver `00_STATUS.md`).
+
+---
+
+## D-COST · Costos: comisionable, productivo y utilidad real — **DECIDIDAS por Camilo Gaitán (2026-10-08, segunda ronda)**
+
+> **Superan la precisión anterior de COM-D-02** (que dejaba el `cost` de Bagisto sin autoridad): el `cost` de Bagisto pasa a
+> ser el **COSTO COMISIONABLE OFICIAL**. Detalle técnico en `19_CONTROL_COSTOS_Y_RENTABILIDAD.md`.
+
+**Vocabulario oficial (no mezclar):**
+
+| Término | Qué es | Fuente | Uso |
+|---|---|---|---|
+| **Costo comisionable** | Valor **fijado por la empresa** para calcular la comisión | Atributo `cost` de Bagisto de la variante vendida, congelado al vender | Comisión |
+| **Margen comisionable** | `precio neto unitario − costo comisionable congelado`, llevado a `max(0, …)` por unidad | Calculado (COM-02) | Base de la comisión. **No** es «margen neto» ni utilidad contable |
+| **Costo productivo** | Lo que cuesta producir la prenda (tela, corte, confección, transporte productivo…) | CorteConfeccion (hoy **parcial: solo tela**) | Referencia administrativa: comparar y alertar |
+| **Utilidad real de la empresa** | Resultado tras devoluciones, transporte, nómina, empaques, plataformas, pérdidas, servicios, arriendo, comisiones… | Futuro módulo de rentabilidad | Fuera del cálculo de la comisión |
+
+| Id | Decisión |
+|---|---|
+| **D-COST-01** | Se separan **costo comisionable**, **costo productivo real** y **utilidad real de la empresa**. El costo de la comisión **no** pretende representar la utilidad contable final; ese análisis pertenece a un futuro módulo administrativo/financiero |
+| **D-COST-02** | El `cost` de Bagisto es el **COSTO COMISIONABLE OFICIAL**, fijado por la empresa. Ejemplo: precio 8.500 − costo 5.000 = margen comisionable 3.500 → comisión 20 % = 700 |
+| **D-COST-03** | Si producir cuesta **menos** que el costo comisionable (4.700 vs 5.000), la comisión **no** aumenta: la eficiencia productiva (tela, producción, proveedores) es de la empresa |
+| **D-COST-04** | Si el costo productivo promedio **supera** el costo comisionable (5.200 vs 5.000), **no** se cambia Bagisto automáticamente: el sistema **advierte** y Camilo decide |
+| **D-COST-05** | Existe una herramienta administrativa de **actualización masiva** del costo Bagisto: selección → vista previa → confirmación → actualización → auditoría. **Nunca automática** |
+| **D-COST-06** | Las ventas antiguas **no cambian**: el snapshot conserva el costo del momento de la venta; las nuevas ventas usan el costo nuevo. Nunca recalcular históricos con el costo actual |
+| **D-COST-07** | CorteConfeccion es el **COSTO PRODUCTIVO DE REFERENCIA**, no la fuente de la comisión. El administrador compara costo comisionable vs costo productivo promedio |
+
+**Implementado en desarrollo (2026-10-08, sin commit):** COM-01b (autoridad del costo comisionable), pantalla «Control de
+costos» (comparación con el costo productivo parcial de CorteConfeccion y alertas), actualización masiva con vista previa
+obligatoria y bitácora `bylopez_va_costo_comisionable_cambios`. Detalle en el Doc. 19.
+
+### DESP-D · Despacho V1 — **DECIDIDAS por Camilo Gaitán (2026-10-09)** e implementadas en desarrollo
+
+| Id | Decisión vigente | Implementación |
+|---|---|---|
+| **DESP-D-01** | BODEGA trabaja en **Logística › Despachos** (sin `view_all` de Mis ventas). El Administrador despacha desde el listado de **Pedidos**. Ambos reutilizan **exactamente el mismo componente/modal y los mismos servicios**. La bandeja de BODEGA es operativa: sin margen, costos, comisión, utilidad ni datos comerciales; sí el **valor a recaudar** | `admin/despachos/componente.blade.php`, `DespachoService`, `ContextoDespachoService` |
+| **DESP-D-02** | Rol existente **BODEGA (#4)** con **ACL específica** de Logística; sin permisos comerciales; la autorización se valida **también en el backend** | `logistica.despachos`, `.despachos.despachar`, `logistica.guias(.ver/.archivo)`; rol #4 30 → 39 permisos incl. `logistica.guias.corregir` (solo desarrollo) |
+| **DESP-D-03** | Flete **estructurado**: valor real + **quién lo paga** (cliente al recibir · ByLopez · incluido en la venta · otro), para que Finanzas pueda medir el gasto real | `valor_flete`, `flete_pagador`; si paga ByLopez el valor es obligatorio |
+| **DESP-D-04** | Contraentrega: se registra el **recaudo esperado** («la transportadora debe cobrar $X»), **NO** un pago recibido en Cartera; queda preparado para conciliar recaudos | `recaudo_esperado`, `recaudo_estado = pendiente_liquidar` (reservado `liquidado`) |
+| **DESP-D-05** | Recogida en bodega con **flujo propio** («Entregar en bodega»): sin transportadora, guía ni PDF; sin envío ficticio; entrega con las reglas existentes | Shipment real + entrega `recogida_bodega` |
+| **DESP-D-06** | Despachos **parciales permitidos**. Por defecto **todas las unidades pendientes** («Productos a despachar: N unidades» + «Ajustar cantidades»); el pedido pasa a parcial y luego «Completar despacho» | Cantidades solo si se abre el ajuste |
+| **DESP-D-07** | PDF máx. **5 MB**, solo PDF validado por contenido, almacenamiento **privado**, ver/descargar solo por endpoint autenticado y autorizado, versionado y reemplazo auditado | `bylopez_lg_guia_archivos` |
+| **DESP-D-08** | El **asesor** ve transportadora, guía, tracking y PDF **solo de sus propios pedidos** (atribución comercial); no modifica, reemplaza ni borra | Ruta `admin.ventas_asesor.pedidos.guia` |
+| **DESP-D-09** | **Corregir guía** (2026-10-09): una guía mal digitada se corrige con una acción explícita y auditada que **no anula el Shipment** (el despacho y el número de guía son conceptos distintos). Motivo obligatorio; historial con anterior/nuevo (número y transportadora), usuario y fecha; `shipments.track_number` / `carrier_code` se sincronizan con la guía vigente; no crea Shipment, no descuenta inventario, no cambia cantidades, no toca Cartera | `CorregirGuiaService`, `bylopez_lg_guia_correcciones` (migración 100005), clave `logistica.guias.corregir` |
+| **DESP-D-10** | **BODEGA puede adjuntar y reemplazar el PDF** (con motivo obligatorio, versiones conservadas, privado, máx. 5 MB). No se modifica `php.ini` todavía; si PHP bloquea el archivo, el mensaje nombra el **límite vigente del servidor** | `logistica.guias.archivo`; `archivo_limite_servidor` |
+| **DESP-D-11** | **PICAP** y cualquier otra transportadora nueva **no se programan**: se agregan por Logística › Transportadoras como las demás | Catálogo `bylopez_lg_transportadoras` |
+| **DESP-D-19** | **Guía interna = `GI-000001`** (reemplaza la propuesta «BL»): consecutivo global solo entre transportadoras con guía interna, mínimo 6 dígitos, sin reinicio, inmutable, único, huecos permitidos, solo para guías internas (sin identificador para todos los envíos) | `Logistica/docs/MAPA_DOMINIO_LOGISTICA.md` §13 · `bylopez_lg_consecutivos` · `bylopez_lg_guias.consecutivo_interno` |
+| **DESP-D-20** | **El modo de guía lo elige cada transportadora** (externa o interna, excluyente, independiente del tipo y del nombre) reutilizando `genera_guia_interna`; cambiarlo afecta solo despachos nuevos y cada guía conserva su origen. «Corregir guía» no cambia el número GI ni convierte el tipo de guía | `Transportadora`, `Guia`, `CorregirGuiaService` |
+| **DESP-D-21** | **PDF / etiqueta de la guía interna: pendiente de definir su formato.** No bloquea el consecutivo ni se muestran botones de PDF para GI | — |
+| **DESP-D-22** | **Cuenta corriente = libro de movimientos con importe firmado** (+ transportadora debe a ByLopez / − ByLopez debe), saldo derivado, sin saldo mutable; participa por la capacidad `liquida_cuenta_corriente`, nunca por nombre. Separada de Cartera: es custodia, no ingreso | `Logistica/docs/CUENTAS_TRANSPORTADORAS.md` §1–§4 |
+| **DESP-D-23** | **El dinero nace de la ENTREGA:** recaudo con el envío completamente entregado (uno por envío), servicio con la primera unidad entregada y solo si lo paga ByLopez; por pagar sin servicio; despachar no genera nada; el «flete recibido por ByLopez» es el mismo servicio (no se duplica) | `ReglaCuentaEnvio` · §5 |
+| **DESP-D-24** | **Sin proporciones inventadas:** entrega parcial con devolución y recaudo, pagador «otro» o sin costo → «Requiere revisión» y el Admin confirma el valor real; la devolución por sí sola no mueve dinero y el costo de devolución existe solo por registro explícito | §5, §8 |
+| **DESP-D-25** | **Liquidación inmutable que suma 0:** pago + diferencia trasladada (cierre −D / apertura +D) con observación obligatoria; las correcciones posteriores son ajustes en la cuenta siguiente; LIQ-000001 con contador bloqueado y UNIQUE | `LiquidarCuentaService` · §7 |
+| **DESP-D-26** | **Permisos:** BODEGA ve (`logistica.cuentas`); solo ADMIN liquida (`.liquidar`) y ajusta (`.ajustar`). **Pendiente:** adjunto privado del comprobante, indicador del cobro en Cartera, liquidación por rango y backfill histórico (comando listo, sin aplicar) | §9, §16 |
+| **DESP-D-12** | **Cantidad a enviar** (2026-10-09): el drawer precarga la cantidad pendiente real por despachar (semántica de Bagisto `qty_to_ship`), nunca 0 si hay unidades y stock. Máximo = `min(pendiente, stock permitido por Bagisto)`; con stock insuficiente se despacha lo que haya como despacho parcial; con stock 0 la línea queda bloqueada con «Sin stock disponible». «Ajustar cantidades» queda para excepciones. El backend revalida siempre (sobre-despacho, concurrencia, manipulación del request) | `UnidadesDespachables::plan()/maximoEnBodega()`; `lineas[].pendientes/disponibles/maximo` |
+| **DESP-D-13** | **Quién paga el flete** (2026-10-09): valor inicial siempre «Cliente, al recibir»; la operaria puede cambiarlo a ByLopez, Incluido en la venta u Otro **solo para ese despacho**. No se recuerda la última selección del pagador (sí transportadora y origen), para que una excepción no contamine el siguiente pedido | `PagadorFlete::porDefecto()`; el drawer ya no guarda `logistica.pagador` |
+| **DESP-D-14** | **Stock del sistema insuficiente pero la prenda está en bodega** (2026-10-09, aprobada por Camilo): nunca se despacha sin stock (ni el Administrador). Flujo: stock insuficiente → BODEGA solicita autorización con conteo físico → Administrador revisa → regularización auditada → el drawer recalcula → despacho normal. Integrado en Logística › Despachos (pestaña «Incidencias de stock»), sin módulo nuevo | `bylopez_lg_incidencias_stock(_lineas)`, `IncidenciasStockService`, Doc. Logística §11.14 |
+| **DESP-D-15** | **Una sola lógica de stock**: Logística reutiliza `InventarioMovimientoService` de CorteConfeccion mediante el contrato `AjustaInventario` / adaptador `AjusteViaCorteConfeccion`, sin modificar CorteConfeccion | Libro `bylopez_cc_inventario_movimientos` |
+| **DESP-D-16** | **Solo incrementos** hacia el conteo físico para esta excepción; bajar stock es otro control de inventario. Si el stock cambió entre la solicitud y la resolución, el resultado es exactamente el conteo confirmado | `conteo_menor_al_sistema`, `sin_diferencia` |
+| **DESP-D-17** | **Solo el Administrador regulariza o rechaza; BODEGA únicamente solicita.** El Administrador puede solicitar y resolver en una misma operación manteniendo la auditoría (solicitante y resolutor) | `logistica.stock.solicitar` / `.regularizar`; compuerta de CorteConfeccion |
+| **DESP-D-18** | **Sin umbral numérico** por ahora. Toda regularización requiere conteo físico, motivo y confirmación expresa; si las prendas no existen físicamente se rechaza y el pedido sigue pendiente | `confirmacion_requerida`, `motivo_requerido` |
+
+**DECISIÓN PENDIENTE para una fase posterior (no implementada):**
+- **Anulación de un despacho (Shipment).** Tiene implicaciones de inventario (reingreso de stock), de estado del pedido y de operación (guía, PDF, recaudo esperado) distintas de corregir una guía. Decidir quién, cuándo y con qué consecuencias; y si el retorno de transportadora de LOG-01 debe reingresar inventario.
+
+**Operativo (no es una decisión de negocio):** ampliar `upload_max_filesize` / `post_max_size` de PHP en cada entorno para admitir los 5 MB aprobados.
+
+### LOG-D y COM-D-15 — **DECIDIDAS por Camilo Gaitán (2026-10-08, tercera ronda)** e implementadas en desarrollo
+
+| Id | Decisión vigente | Implementación (desarrollo, sin commit) |
+|---|---|---|
+| **COM-D-15** (G-11) | Clasificación estructurada **POR PEDIDO**: `venta_normal` · `muestra` · `reposicion` · `garantia`. Nunca texto libre ni inferida de precio, cliente o comentario. Regla operativa: reposiciones y garantías normalmente a precio 0, pero el marcador es **obligatorio** (el precio 0 no demuestra el motivo). Solo `venta_normal` es comisionable. Clasificación por línea solo si aparecen pedidos mixtos reales (**no ahora**) | `bylopez_va_clasificaciones_pedido` (000018), listener `ClasificarOperacionPedido`, `TipoOperacionPedidoService`. Asesor: solo `venta_normal`; quien tenga `ventas_asesor.pedidos.tipo_operacion` (admin `all`): los cuatro. Históricos sin fila (no se rellenan). Que Bodega u otro rol cree reposiciones queda como **evolución futura** |
+| **LOG-D-01** (= D-44) | Evento propio de ENTREGA en `ByLopez/Logistica`; VentasAsesor es consumidor de solo lectura. Por **shipment + unidades**. Nunca inferido de `orders.status`, Shipment, Invoice ni tracking | `bylopez_lg_entregas` / `_items`, `RegistrarEntregaService`, `ConsultaEntregaService::unidadesEntregadas()` |
+| **LOG-D-02** (D-14 / COM-D-11) | Confirman **BODEGA** y **ADMIN / SUPERVISIÓN**; el asesor **no**. Evidencia **opcional** al inicio; siempre se auditan actor, fecha real, fecha de registro, shipment, pedido, transportadora, guía si existe y fuente | ACL `logistica.entregas.registrar` (Bodega y admin) y `.anular` (admin / supervisión); snapshots en el evento |
+| **LOG-D-03** (D-07) | Sin tracking completo. Estados mínimos: `despachado` (= Shipment de Bagisto, **no se duplica**), `entregado` y `retornado_transportadora`. El dominio propio empieza en entrega y retorno | Entrega y retorno como eventos separados; estado del pedido derivado (sin columna mutable) |
+| **LOG-D-04** (D-42) | Catálogo estructurado: BYLOPEZ, 99ENVIOS, INTER_RAPIDISIMO, DOMICILIARIO, RECOGIDA_BODEGA, OTRA. Auditar antes los valores reales; **no** convertir históricos; domiciliario = código genérico, sin módulo de personas | `bylopez_lg_transportadoras`; históricos con `carrier_code` NULL; despachos nuevos con código solo por coincidencia **exacta** con el catálogo |
+
+**Pendientes derivados (no bloquean la prueba manual):**
+- PICAP aparece en los datos reales y no está en el catálogo aprobado. Se registra como OTRA, o Camilo lo agrega desde «Transportadoras».
+- El reingreso físico a inventario de un retorno de transportadora no se decidió (LOG-01 no toca inventario).
+- Los pedidos creados fuera de Nueva venta (tienda, panel nativo) no tienen clasificación. Falta definir si requieren un flujo de clasificación auditado antes de COM-04.
+
+<details><summary>Planteamiento original (2026-10-08, segunda ronda)</summary>
+
+| Id | Pregunta | Opciones | Recomendación técnica | Impacto |
+|---|---|---|---|---|
+| **COM-D-15** (G-11) | ¿Cómo se marcan muestras, reposiciones y garantías? | A. clasificación por pedido · B. por línea · C. solo precio 0 · (D. texto libre, descartada) | A + C como regla operativa (Doc. 17 §15) | Sin esto COM-04 no puede excluirlas |
+| **LOG-D-01** (= D-44) | ¿Se aprueba el evento propio de entrega (y su anulación auditada) por envío y por unidad? ¿En el paquete `ByLopez/Logistica`? | Sí en Logística · Sí en VentasAsesor · otra | Sí, en Logística (afecta también a la tienda; D-45) | Sin entrega no hay causación (D-01) |
+| **LOG-D-02** (D-14 / COM-D-11) | ¿Qué rol y qué usuarios registran la entrega? ¿Se exige evidencia (D-09)? | Bodega · supervisor · ambos; con o sin evidencia | Bodega y supervisor, con referencia opcional al inicio | Confiabilidad del hecho generador |
+| **LOG-D-03** (D-07) | ¿Hay estados intermedios (preparando, en tránsito, entrega fallida, retornado) o solo «entregado» al inicio? | Solo entregado + retornado · flujo completo | Empezar con `entregado` y `retornado_transportadora`; tránsito después | Alcance de la Fase 06 |
+| **LOG-D-04** (D-42) | ¿Catálogo de transportadoras con código estable en `shipments.carrier_code` (BYLOPEZ, 99envíos, Inter Rapidísimo, domiciliario…)? ¿Cómo registrar a los domiciliarios (datos personales)? | Catálogo · texto libre | Catálogo; domiciliario como código genérico | Reportes logísticos y de devoluciones |
+
+</details>
+
+**Efecto sobre COM-D-02:** desde COM-01b, un snapshot con `cost` válido (> 0) nace `fuente = cost_bagisto_comisionable`,
+`autoridad_comision = true`. Sin valor: `NULL` / `sin_costo` / `autoridad_comision = false`. Los snapshots previos con la
+fuente de referencia (si existieran) **no** se convierten: al aplicar el cambio había **0** snapshots en desarrollo.
+
+---
+
+## COM-D · Decisiones de Comisiones (COM-00, 2026-10-07) — **DECIDIDAS por Camilo Gaitán el 2026-10-08** (COM-D-02 con precisión)
+
+> **2026-10-15 — APROBADAS por Camilo Gaitán (A-01…A-07, detalle en `22_PRECIO_MINIMO_RENTABILIDAD_Y_COMISIONES.md` §0):**
+> A-01 % de comisión **por asesor** con vigencias e historial, sin valores quemados (**reemplaza COM-D-03 y COM-D-06**) ·
+> A-02 % vigente **al confirmar la venta** · A-03 cálculo visible por referencia y total del pedido · A-04 habilitar con
+> **todo el pedido validado + cobro confirmado + dinero recibido por ByLopez** · A-05 **abonos** de comisión y saldo pendiente ·
+> A-06 **no** vender con precios incorrectos o sin la ganancia mínima definida · A-07 $5.000 / $1.500 son solo ejemplos.
+> Preguntas abiertas para aprobar la regla de precio mínimo: Doc. 22 §11 (P1–P12).
+>
+> **2026-10-19 — APROBADAS por Camilo Gaitán:** base **A** (comisión = % × (precio neto − costo); costos directos fuera de la base,
+> descontados después en la contribución) · ganancia mínima **después** de comisión y costos variables, por línea, sin excepción ·
+> **umbral mensual por asesor** (primeras N unidades del mes sin comisión, desde la N+1 sí, no retroactivo, reinicia cada mes en
+> America/Bogota, N configurable con vigencia, sin carga masiva de 1.000). Pendientes D1–D12 (D10–D12 nuevas: devoluciones/reembolsos, costo provisional, recaudo compensado) en `23_IMPLEMENTACION_RENTABILIDAD_COMISIONES_UMBRAL.md` §7.
+>
+> **2026-10-14:** la auditoría E2E (`21_AUDITORIA_FLUJO_COMISIONES_E2E.md` §9) pide **reconfirmar** estas decisiones (P2) y
+> abre **P1, P3–P13** (recaudo contra entrega, habilitación por envío, fecha de la regla, ventas creadas por administrador,
+> flete de ByLopez, quincena de imputación, pedidos sin clasificar, costo 0, devoluciones sin RMA, pago al asesor, fecha de
+> inicio, cobro de un solo actor). Las preguntas viven solo en el Doc. 21.
+
+### Decisiones de Camilo (2026-10-08) — vigentes; mandan sobre las recomendaciones de abajo
+
+| Id | Decisión | Diferencia con la recomendación técnica |
+|---|---|---|
+| COM-D-01 | Base = `precio_neto_unitario − costo_unitario_congelado`; sin IVA, sin envío; **nunca** `orders.grand_total` | Igual (A) |
+| **COM-D-02** | **PRECISIÓN:** el atributo `cost` de Bagisto **NO es costo autoritativo** (mutable, sin historial, incompleto, no probado como costo real). Desde ya se **captura** su valor como referencia: `fuente = atributo_cost_bagisto_referencia`, **`autoridad_comision = false`**. Sin valor: `costo_unitario = NULL`, `fuente = sin_costo` (nunca 0). COM-02 puede calcular utilidad **diagnóstica**, marcada como no liquidable. **Prohibido causar o pagar comisión con un costo no autorizado.** La fuente autoritativa queda **pendiente** de una decisión posterior | Más estricta: se captura pero sin autoridad |
+| COM-D-03 | 20 % de la utilidad positiva, **configurable y con vigencia**; nunca `0.20` en el código | Igual |
+| COM-D-04 | Se causa solo cuando coinciden **entrega confirmada** y **pedido totalmente pagado/verificado** | Igual (F) |
+| COM-D-05 | Pago parcial **no** causa comisión proporcional; hasta pago completo verificado = no causada | Igual |
+| COM-D-06 | Regla inicial **global**, preparada para vigencia y alcances futuros; muestras, reposiciones y garantías **no comisionables** | Igual |
+| COM-D-07 | `max(0, utilidad)` **por unidad**; sin netear pérdidas entre productos ni pedidos | Igual |
+| COM-D-08 | Refund sin devolución: **no** descontar automáticamente; queda para revisión futura | Igual |
+| COM-D-09 | Beneficiario = asesor vigente en la atribución **al causar**; después de causar, corrección = ajuste auditado; tras liquidación pagada, la línea original no se reescribe | Igual |
+| COM-D-10 | Liquidación inicial **QUINCENAL**; el diseño debe permitir cambiar la frecuencia sin alterar comisiones históricas | **Distinta** (se recomendaba mensual) |
+| COM-D-11 | El asesor **no** confirma su propia entrega; el evento vendrá de Bodega / supervisión / logística confiable | Igual |
+| COM-D-12 | El asesor **no** ve costo, utilidad ni margen; **sí** ve venta, unidades, comisión y estado | Igual |
+| COM-D-13 | No comisionar históricos reconstruidos; solo pedidos posteriores a la activación oficial del snapshot / corte de comisiones | Igual |
+| COM-D-14 | Ajuste negativo sin liquidaciones futuras: saldo a cargo **trazable**; con liquidaciones futuras puede compensarse según regla futura; el ajuste **nunca** se borra | Igual, con compensación futura permitida |
+
+**Aplicación (2026-10-08, desarrollo, sin commit):** COM-01 (snapshot de costo), COM-02 (utilidad) y COM-03 (reglas con
+vigencia + comisión potencial diagnóstica) implementadas; detalle en `16_AUDITORIA_COMISIONES.md` §11,
+`17_DISENO_FUNCIONAL_COMISIONES.md` §13 y `18_ROADMAP_COMISIONES.md`. **No existe comisión causada ni pagable.**
+
+### Planteamiento original (COM-00, 2026-10-07) — se conserva como historia
+
+**Origen:** auditoría COM-00 (`16_AUDITORIA_COMISIONES.md`) y diseño (`17_DISENO_FUNCIONAL_COMISIONES.md`). Roadmap en
+`18_ROADMAP_COMISIONES.md`. Las COM-D **no reabren** D-01, D-02, D-05 ni D-27 (decididas); concretan lo abierto y absorben
+D-03, D-04, D-10, D-14, D-15, D-24, D-31 y D-32, que siguen existiendo con su historia y ahora remiten aquí. Las recomendaciones
+son **técnicas**, no aprobaciones. Ejemplo de referencia: precio 6.900, costo 5.500, 20 %.
+
+### COM-D-01 · Base de la utilidad comisionable
+**Opciones:** A. `precio neto − costo congelado` · B. A − costos variables comerciales (recaudo COD, pasarela, empaque) ·
+C1. % sobre venta neta (sin costo) · C2. valor fijo por prenda.
+**Recomendación:** A (es la dirección ya documentada; auditable; el descuento ya reduce la comisión). B solo si existe un costo
+variable claro y medible por unidad. Precio neto = `order_items.base_price` − descuento unitario, **sin IVA y sin envío**.
+**Impacto:** define el motor de utilidad (COM-02). Con A: 6.900 − 5.500 = 1.400 de utilidad por unidad.
+
+### COM-D-02 · Fuente del costo que se congela (absorbe D-31)
+**Hecho:** no existe snapshot de costo (**gap crítico**); el único costo es el atributo `cost` de Bagisto (solo variantes simples,
+valores de referencia 3.900–5.500, editable y sin historial). CorteConfeccion solo tiene costo de tela por rollo.
+**Opciones:** 1. Congelar `cost` de Bagisto etiquetado como fuente provisional · 2. Esperar un costo de producción real
+(tela + corte + confección…) antes de congelar nada · 3. Tabla propia de costos por variante con vigencias, mantenida por la empresa.
+**Recomendación:** 1 de inmediato (COM-01), etiquetado; migrar a 3 cuando Camilo defina qué integra el costo. Esperar (2) pierde para
+siempre el costo de cada venta mientras tanto.
+**Impacto:** sin esta decisión no hay COM-01 y cada venta nueva queda sin costo verificable.
+
+### COM-D-03 · ¿Se aprueba el 20 %? (absorbe D-32)
+**Estado real:** **PROPUESTA** (dirección aceptada; «no es política definitiva hasta validar márgenes reales»).
+**Opciones:** aprobar 20 % · otro porcentaje · aprobar 20 % solo como regla inicial con vigencia y revisión tras N meses.
+**Recomendación:** la tercera (la regla con vigencia permite cambiarlo sin tocar comisiones pasadas).
+**Impacto:** 20 % = 280 por unidad a 6.900 (4,1 % del precio) y 600 a 8.500 (7,1 %).
+
+### COM-D-04 · Condición de pago para causar (ambigüedad «conciliadas»)
+**Hecho:** D-01 (entrega) está decidida. `ACTUALIZACION` §7 añade «conciliadas», sin definir.
+**Opciones:** E. Solo entrega (D-01 literal) · F. Entrega **y** pago verificado del pedido (Cartera, sin `sin_revisar`).
+**Recomendación:** F: no se paga comisión sobre dinero no cobrado (contra entrega y crédito). Estado intermedio `pendiente_pago`.
+**Impacto:** con E la empresa asume el riesgo de cartera en la comisión; con F la comisión espera al recaudo.
+
+### COM-D-05 · Pago parcial
+**Caso:** venta 500.000 · utilidad 100.000 · comisión 20.000 · pagado 250.000.
+**Opciones:** 0 hasta pago total (20.000 al completar) · proporcional (10.000 hoy) · total (20.000 hoy) · umbral (p. ej. ≥ 90 %).
+**Recomendación:** 0 hasta pago total verificado (simple; sin imputar pagos de pedido a unidades; sin ajustes por cobro).
+**Impacto:** el proporcional exige reglas de imputación (¿envío primero?) y ajustes ante pagos rechazados o reversados.
+
+### COM-D-06 · Alcance de reglas y exclusiones (absorbe D-03)
+**Opciones:** regla global · por asesor · por producto/categoría · combinación con prioridad. Exclusiones: muestras, reposiciones,
+garantías (ya excluidas por D-01), productos marcados no comisionables.
+**Recomendación:** una regla global con vigencia; el modelo admite alcance y prioridad para no migrar después.
+**Impacto:** estructura de `bylopez_va_comision_reglas` (COM-03).
+
+### COM-D-07 · Unidad con utilidad negativa
+**Opciones:** 0 por unidad, sin compensar (dirección documentada) · netear dentro del pedido · netear dentro del periodo.
+**Recomendación:** 0 por unidad (el asesor no paga pérdidas; una venta con pérdida no se premia).
+**Impacto:** con neteo, una prenda vendida bajo costo reduce la comisión de las demás del mismo pedido.
+
+### COM-D-08 · Reembolso sin devolución (D-24)
+**Opciones:** descontar siempre · nunca · solo si es atribuible al asesor · caso a caso con supervisor.
+**Recomendación:** no descontar automáticamente; marcar incidencia para revisión (`comisiones.manage`).
+**Impacto:** alcance de los ajustes negativos (COM-08).
+
+### COM-D-09 · Reasignación y comisión (absorbe D-04)
+**Opciones:** R1 asesor vigente al causar · R2 asesor original · R3 reasignación con tipo (corrección vs traspaso).
+**Recomendación:** R1 con bloqueos: libre antes de causar; tras causar solo con `comisiones.manage` (anula y recausa); **bloqueada**
+tras liquidación pagada.
+**Impacto:** quién cobra cuando un admin corrige la atribución.
+
+### COM-D-10 · Frecuencia de liquidación (absorbe D-15)
+**Opciones:** semanal · quincenal · mensual · manual.
+**Recomendación:** mensual por fecha de entrega, con entregas tardías en el periodo en que se registran.
+**Impacto:** carga administrativa y frecuencia de ajustes.
+
+### COM-D-11 · Quién confirma la entrega (absorbe D-14)
+**Opciones:** solo bodega · bodega y supervisor · también el asesor (con auditoría).
+**Recomendación:** bodega o supervisor; el asesor no, porque la entrega causa su propia comisión (conflicto de interés).
+**Impacto:** confiabilidad del hecho generador (Fase 06 / COM-04).
+
+### COM-D-12 · ¿El asesor ve costo y utilidad? (absorbe D-10)
+**Opciones:** solo venta y comisión · también utilidad y % · nada monetario.
+**Recomendación:** venta, comisión y estado; sin costo ni utilidad (deducirían márgenes de la empresa).
+**Impacto:** columnas de «Mis comisiones» (COM-05).
+
+### COM-D-13 · Desde cuándo se comisiona
+**Hecho:** ningún pedido actual tiene costo congelado; los históricos no lo tendrán nunca.
+**Opciones:** solo pedidos con snapshot (desde COM-01) · también anteriores usando el costo actual etiquetado como «reconstruido» ·
+fecha de inicio explícita decidida por Camilo.
+**Recomendación:** solo pedidos confirmados después de activar COM-01 en producción; anteriores sin comisión automática.
+**Impacto:** evita comisionar con costos reconstruidos no verificables.
+
+### COM-D-14 · Ajuste negativo sin liquidaciones futuras
+**Caso:** el asesor se retiró y después se devuelve una prenda ya pagada.
+**Opciones:** saldo a cargo informado y gestionado fuera del sistema · descontar de otros pagos al asesor · condonar por debajo de un monto.
+**Recomendación:** registrar el saldo a cargo y dejar visible; la política de cobro la define Camilo.
+**Impacto:** trazabilidad de D-02 cuando no hay «siguiente liquidación».
+
 ## Resumen
 
 | # | Decisión | Fase bloqueada | Recomendación técnica | Estado |
@@ -1324,7 +2069,7 @@ Camilo aprobó (2026-09-28): facturación de recogida = dirección REAL del clie
 | D-10 | Visibilidad de costos | 10 | Sin costos ni márgenes | pendiente |
 | D-11 | Metas | 10 | Mensual, en prendas, informativa | pendiente |
 | D-12 | Histórico existente | 05, 13 | Fecha de corte + casos puntuales | pendiente |
-| D-13 | Visibilidad entre asesores | 05 | Solo lo propio | pendiente |
+| D-13 | Visibilidad entre asesores | 05 | Solo lo propio | **decidida 2026-10-04** |
 | D-14 | Quién confirma la entrega | 06 | Bodega; asesor solo si queda auditado | pendiente |
 | D-15 | Periodo de corte | 09 | Mensual por fecha de entrega | pendiente |
 | D-16 | Cuándo nace el pedido | — | Carrito/borrador; pedido al confirmar | ✅ **DECIDIDA** (01B) |
@@ -1365,9 +2110,28 @@ Camilo aprobó (2026-09-28): facturación de recogida = dirección REAL del clie
 | D-50 | Cobro de contra entrega y medios de cobro | 03E / cobros | Transacción nativa + medio con códigos configurables (Doc. 05 §34.9) | ✅ **DECIDIDA 2026-09-27** (con D-53) |
 | D-51 | Comprobante de transferencia | Cobros | Comprobante ≠ pago; sin soporte nativo | ✅ **DECIDIDA 2026-09-27** como principio; mecanismo de archivo diferido |
 | D-52 | Principio de venta rápida de bodega | 03E, 03F, UI, cartera | Interfaz simple sobre servicios sobre Bagisto; confirmar ≠ registrar pago; tiempo comercial ≠ tiempo operativo (E-01 a E-10); navegación POS sobre categorías y atributos reales (P-01 a P-07) (Doc. 05 §33) | ✅ **DECIDIDA 2026-09-27** (requisito transversal; sin implementar) |
-| D-53 | Registro seguro de pagos: idempotencia y concurrencia | 03E / cobros | Tabla mínima con UNIQUE(mecanismo, clave), bloqueo pedido → factura, primitivas nativas (Doc. 05 §35–§36.4) | ✅ **DECIDIDA 2026-09-27** (arquitectura; sin migración; abono general FIFO/manual documentado como requisito futuro, Doc. 05 §36.4) |
+| D-53 | Registro seguro de pagos: idempotencia y concurrencia | 03E / cobros | Tabla mínima con UNIQUE(mecanismo, clave), bloqueo pedido → factura, primitivas nativas (Doc. 05 §35–§36.4) | ✅ **DECIDIDA 2026-09-27** (arquitectura; sin migración; abono general FIFO/manual documentado como requisito futuro, Doc. 05 §36.4) · 🔁 **REVISADA por D-59 (PAG-A, 2026-10-05)**: registrar ≠ crear Transaction; tabla `registros_pago` sustituida por `pagos` + `aplicaciones_pago` + `pagos_eventos` |
 | D-54 | Protección concurrente de inventario | 03F | Cerco en `checkout.order.save.before`: `FOR UPDATE` de `products` en orden ascendente y revalidación con la semántica de Bagisto; no reserva (Doc. 05 §38.3, §39.3) | ✅ **APROBADA e IMPLEMENTADA 2026-09-27**; redactada de nuevo: serialización y revalidación con la semántica nativa, efectiva donde Bagisto reserva; en configurables, **limitación conocida aceptada** (sin corregir) |
 | D-55 | Confirmación idempotente | 03F | `confirmation_token` + `confirmacion_iniciada_en` (000008), lease configurable, fencing en el cerco y enlace condicionado (Doc. 05 §38.6, §39.2) | ✅ **APROBADA e IMPLEMENTADA 2026-09-27** (000008 solo en `lpz_saas_testing`) |
+| D-56 | Separación Pedido / Pago / Despacho | 05, Cartera, 06 | Tres ciclos: Order (Bagisto), pago derivado de Invoice/Transaction (futuro Cartera), despacho derivado de Shipment (futuro Logística); sin bloqueo global de despacho por falta de pago; KPI «Por despachar» = unidades físicas pendientes (sin despachar + parcial), no `orders.status` | ✅ **APROBADA 2026-10-05** (arquitectura; sin estados ni tablas nuevas) |
+| D-57 | Nueva venta: Entrega → Dirección → Pago | 03G-D | Recogida ⇔ bodega (bicondicional); una sola opción de recogida; domicilio = dirección → rates reales → pago; alta de dirección por RT-04; Pago/Confirmar solo con entrega aplicada | ✅ **IMPLEMENTADA 2026-10-05** (sin commit); modal de dirección; postcode según Bagisto (D-58); notificación «Nueva factura» desactivada en desarrollo; primer Order real 41 |
+| D-58 | Geografía CO (DIVIPOLA) y código postal | 03G-D, Logística | Catálogo local DIVIPOLA + equivalencia única con `country_states` + autocomplete «Departamento — Municipio»; postcode por `isPostCodeRequired()`, sin tabla municipio→código | ✅ **APROBADA e IMPLEMENTADA 2026-10-05** (sin commit): catálogo DIVIPOLA (33 + 1.122), importador, endpoint, autocomplete único, Bogotá, D.C. = `BOG`, postcode dinámico; pendiente la prueba manual en celular |
+| D-59 | Pagos / Cartera: arquitectura PAG-A (PAG-B a PAG-E implementadas 2026-10-06/07; PAG-F cerrada en desarrollo, producción pendiente) | Pagos / Cartera (PAG-B…I) | Registrar ≠ crear Transaction: pago `sin_revisar` aplicado a pedidos (saldo baja de inmediato); Transaction nativa solo al confirmar; saldo y cartera derivados (sin deuda mutable); rechazar ≠ reversar; sin sobreaplicación; FIFO propuesta editable; ACL `ventas_asesor.cartera.*`; medio de cobro ≠ método del pedido; fecha de corte, sin backfill; configuración objetivo de `moneytransfer` (Doc. 05 §42) | ✅ **APROBADA 2026-10-05** (P-01…P-12 y C-1…C-4; arquitectura sin implementar). Abiertas: mecánica de reversión (PAG-I), fecha de corte, pedido sin/multi factura |
+| D-60 | Identidad del asesor (ASESOR-01) | Ventas Asesor / Asesores | Perfil `bylopez_va_asesores` 1:1 e inmutable con el usuario de Bagisto (`advisor_id` sigue siendo `admins.id`); `AsesorActualService` única fuente; asesor sin perfil activo falla cerrado (`asesor_sin_asociacion`); `all` sin perfil (D-27); ACL `ventas_asesor.asesores` (view_own/view_all/manage) | ✅ **IMPLEMENTADA EN DESARROLLO 2026-10-07** (sin commit; producción pendiente) · **ASESOR-02 VALIDADA manualmente** por Camilo (2026-10-07) |
+| COM-D-01 | Base de la utilidad comisionable | COM-02 | A: precio neto − costo congelado (sin IVA ni envío) | ✅ **DECIDIDA 2026-10-08** · aplicada en COM-02 |
+| COM-D-02 | Fuente del costo que se congela (D-31) | COM-01 | `cost` de Bagisto etiquetado como provisional; tabla propia con vigencias después | ◐ **PRECISADA 2026-10-08**: se captura `cost` como referencia con `autoridad_comision = false`; la fuente **autoritativa** sigue pendiente |
+| COM-D-03 | ¿20 %? (D-32) | COM-03 | Regla inicial con vigencia y revisión | ✅ **DECIDIDA 2026-10-08**: 20 % configurable con vigencia (regla #1 en desarrollo) |
+| COM-D-04 | Condición de pago además de la entrega (D-01) | COM-04 | Entrega + pago verificado (F) | ✅ **DECIDIDA 2026-10-08** (F) |
+| COM-D-05 | Pago parcial | COM-04 | 0 hasta pago total verificado | ✅ **DECIDIDA 2026-10-08** |
+| COM-D-06 | Alcance de reglas y exclusiones (D-03) | COM-03 | Global con vigencia; modelo preparado para alcance | ✅ **DECIDIDA 2026-10-08** |
+| COM-D-07 | Unidad con utilidad negativa | COM-02 | 0 por unidad, sin neteo | ✅ **DECIDIDA 2026-10-08** · aplicada en COM-02 |
+| COM-D-08 | Reembolso sin devolución (D-24) | COM-08 | No automático; incidencia | ✅ **DECIDIDA 2026-10-08** |
+| COM-D-09 | Reasignación y comisión (D-04) | COM-04/08 | Asesor vigente al causar + bloqueos por estado | ✅ **DECIDIDA 2026-10-08** |
+| COM-D-10 | Frecuencia de liquidación (D-15) | COM-07 | Mensual por fecha de entrega | ✅ **DECIDIDA 2026-10-08: QUINCENAL** (frecuencia cambiable sin alterar historia) |
+| COM-D-11 | Quién confirma la entrega (D-14) | COM-04 | Bodega/supervisor, no el asesor | ✅ **DECIDIDA 2026-10-08** |
+| COM-D-12 | ¿Asesor ve costo y utilidad? (D-10) | COM-05 | No | ✅ **DECIDIDA 2026-10-08**: no ve costo/utilidad/margen; sí venta, unidades, comisión y estado |
+| COM-D-13 | Desde cuándo se comisiona | COM-10 | Solo pedidos con snapshot (desde COM-01 en producción) | ✅ **DECIDIDA 2026-10-08** |
+| COM-D-14 | Ajuste negativo sin liquidaciones futuras | COM-08 | Saldo a cargo visible; política de Camilo | ✅ **DECIDIDA 2026-10-08**: saldo a cargo trazable; compensable en liquidaciones futuras; nunca se borra |
 
 ### Requisitos técnicos obligatorios (no son decisiones de negocio)
 

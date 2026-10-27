@@ -18,15 +18,18 @@ class OrdenCorteDetalle extends Model implements OrdenCorteDetalleContract
         'producto_sku',
         'producto_nombre',
         'genero_linea',
+        'color',
         'talla',
         'cantidad_proyectada',
         'cantidad_real_cortada',
+        'es_adicional',
         'observacion',
     ];
 
     protected $casts = [
-        'cantidad_proyectada'    => 'integer',
-        'cantidad_real_cortada'  => 'integer',
+        'cantidad_proyectada' => 'integer',
+        'cantidad_real_cortada' => 'integer',
+        'es_adicional' => 'boolean',
     ];
 
     public function ordenCorte(): BelongsTo

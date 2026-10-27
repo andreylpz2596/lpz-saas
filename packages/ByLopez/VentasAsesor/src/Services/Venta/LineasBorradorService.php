@@ -106,8 +106,8 @@ class LineasBorradorService
 
             // I-5 y grupo comercial apto del cliente: los valida el catalogo.
             $variante = $lote === null
-                ? $this->catalogo->variante($productoId, $varianteId, $customerId, $cantidad)
-                : $this->catalogo->varianteEnLote($lote, $productoId, $varianteId, $customerId, $cantidad);
+                ? $this->catalogo->variante($productoId, $varianteId, $customerId, $cantidad, (int) $carrito->id)
+                : $this->catalogo->varianteEnLote($lote, $productoId, $varianteId, $customerId, $cantidad, (int) $carrito->id);
 
             if (! $variante->activa) {
                 throw new VarianteInvalida(VarianteInvalida::PRODUCTO_NO_VENDIBLE);

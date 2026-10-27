@@ -12,6 +12,7 @@ use Webkul\Sales\Models\Order;
 use Webkul\User\Models\Admin;
 
 require_once __DIR__.'/../helpersFase03f.php';
+require_once __DIR__.'/../helpersGeo.php';
 
 uses(TestCase::class);
 
@@ -24,6 +25,7 @@ uses(TestCase::class);
 beforeEach(function () {
     Mail::fake();
     f03f_configurarBase();
+    geo_cargar();   // D-58: municipios de CO por codigo DIVIPOLA (la UI ya no manda ciudad/departamento)
 
     $this->grupo = f03b_grupo('G');
     $this->cliente = f03b_cliente($this->grupo, ['first_name' => 'Rita', 'last_name' => 'Compradora', 'phone' => '3'.random_int(100000000, 199999999)]);
@@ -62,7 +64,7 @@ function f03gc_direccion(): array
 {
     return [
         'nombre' => 'Ana', 'apellido' => 'Prueba', 'lineas' => ['Calle 1 # 2-3'],
-        'ciudad' => 'Bogotá', 'departamento' => 'DC', 'pais' => 'co', 'telefono' => '3001234567',
+        'municipio_codigo' => '11001', 'pais' => 'co', 'telefono' => '3001234567',
     ];
 }
 
@@ -135,21 +137,21 @@ test('E2E cliente existente: iniciar -> acceso rapido -> color -> matriz -> M6/L
         ->postJson(route('admin.ventas_asesor.nueva_venta.entrega', ['borrador' => $borradorId]), [
             'envio' => ['tipo' => 'punto_recogida'],
             'facturacion' => ['tipo' => 'puntual', 'direccion' => f03gc_direccion()],
-            'metodo' => 'recogida_bodega',
+            'metodo' => 'pickup',
         ])
         ->assertOk()
         ->json();
 
-    expect($estado['entrega']['metodo_seleccionado']['codigo'])->toBe('recogida_bodega')
+    expect($estado['entrega']['metodo_seleccionado']['codigo'])->toBe('pickup')
         ->and($estado['entrega']['entrega_completa'])->toBeTrue();
 
     // J. Pago.
     $estado = $this->actingAs($asesor, 'admin')
-        ->postJson(route('admin.ventas_asesor.nueva_venta.pago', ['borrador' => $borradorId]), ['metodo' => 'cashondelivery'])
+        ->postJson(route('admin.ventas_asesor.nueva_venta.pago', ['borrador' => $borradorId]), ['metodo' => 'moneytransfer'])
         ->assertOk()
         ->json();
 
-    expect($estado['pago']['metodo_seleccionado']['codigo'])->toBe('cashondelivery')
+    expect($estado['pago']['metodo_seleccionado']['codigo'])->toBe('moneytransfer')
         ->and($estado['confirmable'])->toBeTrue();
 
     // K. Estado/resumen.

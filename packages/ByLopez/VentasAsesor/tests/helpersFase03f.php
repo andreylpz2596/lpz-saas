@@ -1,5 +1,6 @@
 <?php
 
+use ByLopez\Logistica\Support\PuntosRecogida;
 use ByLopez\VentasAsesor\DataObjects\DireccionComercial;
 use ByLopez\VentasAsesor\DataObjects\OrigenDireccion;
 use ByLopez\VentasAsesor\Enums\CanalVenta;
@@ -55,7 +56,7 @@ if (! function_exists('f03f_activarCarriers')) {
     function f03f_activarCarriers(?string $tarifaDomicilio = '8000'): void
     {
         config([
-            'carriers.recogida_bodega.active' => true,
+            'carriers.'.PuntosRecogida::METODO.'.active' => true,
             'carriers.domicilio_local.active' => true,
             'carriers.domicilio_local.default_rate' => $tarifaDomicilio,
             'carriers.envio_nacional.active' => true,
@@ -102,10 +103,14 @@ if (! function_exists('f03f_borradorListo')) {
      *
      * @param  list<array{0: Product, 1: Product, 2: int, 3?: int}>  $lineas
      *                                                                        [configurable, variante, cantidad en carrito, cantidad solicitada]
-     * @param  string  $entrega  recogida_bodega | domicilio_local | envio_nacional
+     * @param  string  $entrega  pickup (recogida, bagisto-eu/pickup) | domicilio_local | envio_nacional
+     * @param  ?string  $pago  null = el permitido por defecto: con recogida la extension quita
+     *                         cashondelivery, asi que queda moneytransfer (decision de Camilo)
      */
-    function f03f_borradorListo(int $customerId, $asesor, array $lineas, string $entrega = 'recogida_bodega', string $pago = 'cashondelivery'): BorradorVenta
+    function f03f_borradorListo(int $customerId, $asesor, array $lineas, string $entrega = PuntosRecogida::METODO, ?string $pago = null): BorradorVenta
     {
+        $pago ??= $entrega === PuntosRecogida::METODO ? 'moneytransfer' : 'cashondelivery';
+
         $borrador = app(BorradorVentaService::class)->crear($customerId, $asesor, CanalVenta::WHATSAPP);
 
         foreach ($lineas as $l) {
@@ -115,7 +120,7 @@ if (! function_exists('f03f_borradorListo')) {
 
         $entregas = app(EntregaBorradorService::class);
         $entregas->establecerFacturacion($borrador->id, OrigenDireccion::puntual(f03f_direccion()), $asesor);
-        $entregas->establecerEnvio($borrador->id, $entrega === 'recogida_bodega'
+        $entregas->establecerEnvio($borrador->id, $entrega === PuntosRecogida::METODO
             ? OrigenDireccion::puntoRecogida()
             : OrigenDireccion::puntual(f03f_direccion(['lineas' => ['Carrera 9 # 8-7']])), $asesor);
         $entregas->seleccionarMetodo($borrador->id, $entrega, $asesor);

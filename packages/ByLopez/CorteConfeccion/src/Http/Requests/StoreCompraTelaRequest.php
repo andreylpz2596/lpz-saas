@@ -33,28 +33,28 @@ class StoreCompraTelaRequest extends FormRequest
             ->value('id');
 
         return [
-            'codigo'                 => ['required', 'string', 'max:255', 'unique:bylopez_cc_compras_tela,codigo'],
-            'proveedor_id'           => ['required', 'exists:bylopez_cc_proveedores_tela,id'],
-            'numero_factura'         => ['nullable', 'string', 'max:255'],
-            'fecha_compra'           => ['required', 'date'],
-            'descuento'              => ['nullable', 'numeric', 'gte:0'],
-            'impuesto'               => ['nullable', 'numeric', 'gte:0'],
-            'observacion'            => ['nullable', 'string'],
-            'rollos'                 => ['required', 'array', 'min:1'],
-            'rollos.*.codigo'        => ['nullable', 'string', 'max:255', 'distinct', 'unique:bylopez_cc_rollos,codigo'],
-            'rollos.*.tipo_tela_id'  => [
+            'codigo' => ['required', 'string', 'max:255', 'unique:bylopez_cc_compras_tela,codigo'],
+            'proveedor_id' => ['required', 'exists:bylopez_cc_proveedores_tela,id'],
+            'numero_factura' => ['nullable', 'string', 'max:255'],
+            'fecha_compra' => ['required', 'date'],
+            'descuento' => ['nullable', 'numeric', 'gte:0'],
+            'impuesto' => ['nullable', 'numeric', 'gte:0'],
+            'observacion' => ['nullable', 'string'],
+            'rollos' => ['required', 'array', 'min:1'],
+            'rollos.*.codigo' => ['nullable', 'string', 'max:255', 'distinct', 'unique:bylopez_cc_rollos,codigo'],
+            'rollos.*.tipo_tela_id' => [
                 'required',
                 'integer',
                 Rule::exists('attribute_options', 'id')->where(fn ($query) => $query->where('attribute_id', $tipoTelaAttributeId ?: 0)),
             ],
             'rollos.*.referencia_tela_id' => ['required', 'integer', 'exists:bylopez_cc_proveedor_tela_referencias,id'],
-            'rollos.*.color'         => ['required', 'string', 'max:255'],
-            'rollos.*.referencia'    => ['required', 'string', 'max:255'],
-            'rollos.*.tipo_tela'     => ['required', 'string', 'max:255'],
-            'rollos.*.gramaje'       => ['required', 'string', 'max:255'],
-            'rollos.*.peso_inicial'  => ['required', 'numeric', 'gt:0'],
-            'rollos.*.valor_kilo'    => ['required', 'numeric', 'gt:0'],
-            'rollos.*.observacion'   => ['nullable', 'string'],
+            'rollos.*.color' => ['required', 'string', 'max:255'],
+            'rollos.*.referencia' => ['required', 'string', 'max:255'],
+            'rollos.*.tipo_tela' => ['required', 'string', 'max:255'],
+            'rollos.*.gramaje' => ['required', 'string', 'max:255'],
+            'rollos.*.peso_inicial' => ['required', 'numeric', 'gt:0'],
+            'rollos.*.valor_kilo' => ['required', 'numeric', 'gt:0'],
+            'rollos.*.observacion' => ['nullable', 'string'],
         ];
     }
 
@@ -95,6 +95,10 @@ class StoreCompraTelaRequest extends FormRequest
 
             if ($tipoTelaId && (int) $referencia->tipo_tela_id !== $tipoTelaId) {
                 $validator->errors()->add("rollos.$index.referencia_tela_id", 'La referencia no pertenece al tipo de tela seleccionado.');
+            }
+
+            if (empty($referencia->color_option_id)) {
+                $validator->errors()->add("rollos.$index.referencia_tela_id", trans('corteconfeccion::app.errors.referencia-color-sin-vincular'));
             }
 
             if (! empty($rollo['color']) && $referencia->color !== $rollo['color']) {

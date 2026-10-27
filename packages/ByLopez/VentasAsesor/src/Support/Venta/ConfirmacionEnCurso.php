@@ -2,6 +2,7 @@
 
 namespace ByLopez\VentasAsesor\Support\Venta;
 
+use ByLopez\VentasAsesor\Enums\TipoOperacionPedido;
 use Closure;
 use InvalidArgumentException;
 
@@ -19,11 +20,21 @@ use InvalidArgumentException;
  */
 class ConfirmacionEnCurso
 {
-    /** @var array<int, array{borrador_id: int, token: string}> */
+    /** @var array<int, array{borrador_id: int, token: string, tipo_operacion: TipoOperacionPedido, actor_id: ?int}> */
     protected array $intentos = [];
 
-    public function durante(int $cartId, int $borradorId, string $token, Closure $operacion): mixed
-    {
+    /**
+     * G-11: `tipo_operacion` (ya autorizado por ConfirmarVentaService) y `actor_id` viajan con el intento hasta
+     * ClasificarOperacionPedido, que escribe la clasificacion dentro de la transaccion del pedido.
+     */
+    public function durante(
+        int $cartId,
+        int $borradorId,
+        string $token,
+        Closure $operacion,
+        TipoOperacionPedido $tipoOperacion = TipoOperacionPedido::VENTA_NORMAL,
+        ?int $actorId = null,
+    ): mixed {
         if ($cartId <= 0 || $borradorId <= 0 || $token === '') {
             throw new InvalidArgumentException('Intento de confirmacion sin carrito, borrador o token.');
         }
@@ -32,7 +43,9 @@ class ConfirmacionEnCurso
             throw new InvalidArgumentException("El carrito {$cartId} ya tiene un intento de confirmacion en curso.");
         }
 
-        $this->intentos[$cartId] = ['borrador_id' => $borradorId, 'token' => $token];
+        $this->intentos[$cartId] = [
+            'borrador_id' => $borradorId, 'token' => $token, 'tipo_operacion' => $tipoOperacion, 'actor_id' => $actorId,
+        ];
 
         try {
             return $operacion();
@@ -41,7 +54,7 @@ class ConfirmacionEnCurso
         }
     }
 
-    /** @return array{borrador_id: int, token: string}|null */
+    /** @return array{borrador_id: int, token: string, tipo_operacion: TipoOperacionPedido, actor_id: ?int}|null */
     public function para(int $cartId): ?array
     {
         return $this->intentos[$cartId] ?? null;

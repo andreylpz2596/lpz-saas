@@ -29,6 +29,11 @@ class BorradorVenta extends Model implements BorradorVentaContract
         'external_reference',
         'asignado_hasta',
         'order_id',
+        'grupo_original_id',
+        'grupo_efectivo_id',
+        'grupo_override',
+        'grupo_override_customer_id',
+        'grupo_eventos',
     ];
 
     protected $casts = [
@@ -41,6 +46,12 @@ class BorradorVenta extends Model implements BorradorVentaContract
         'asignado_hasta' => 'datetime',
         'order_id' => 'integer',
         'confirmacion_iniciada_en' => 'datetime',
+        'transportadora_id' => 'integer',
+        'grupo_original_id' => 'integer',
+        'grupo_efectivo_id' => 'integer',
+        'grupo_override' => 'boolean',
+        'grupo_override_customer_id' => 'integer',
+        'grupo_eventos' => 'integer',
     ];
 
     /**

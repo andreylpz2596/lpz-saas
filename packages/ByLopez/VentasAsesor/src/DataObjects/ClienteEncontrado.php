@@ -23,13 +23,15 @@ final class ClienteEncontrado
         public readonly bool $activo = true,
         public readonly bool $suspendido = false,
         public readonly bool $grupoApto = false,
+        /** Antecedentes de envios reportados por el proveedor (solo conteos; informativo). null si no hay o no se consulto. */
+        public readonly ?array $antecedentes = null,
     ) {}
 
     /**
      * Espera el Customer con la relacion `group` ya cargada (sin N+1). `grupoApto` = tiene grupo
      * y no es el invitado (`$invitadoId`); es solo informativo: la regla la aplica el validador.
      */
-    public static function desde(Customer $cliente, string $via, ?int $invitadoId = null): self
+    public static function desde(Customer $cliente, string $via, ?int $invitadoId = null, ?array $antecedentes = null): self
     {
         $grupoId = $cliente->customer_group_id === null ? null : (int) $cliente->customer_group_id;
 
@@ -45,6 +47,7 @@ final class ClienteEncontrado
             (bool) $cliente->status,
             (bool) $cliente->is_suspended,
             $grupoId !== null && $grupoId > 0 && $invitadoId !== null && $grupoId !== $invitadoId,
+            $antecedentes,
         );
     }
 

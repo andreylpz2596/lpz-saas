@@ -31,6 +31,7 @@ class BuscarClienteComercialService
     public function __construct(
         protected NormalizadorTelefono $normalizador,
         protected LocalizadorTitularTelefono $localizador,
+        protected AntecedentesEnviosClienteService $antecedentes,
     ) {}
 
     public function buscar(ConsultaClienteComercial $consulta): Resultado
@@ -125,7 +126,10 @@ class BuscarClienteComercialService
 
     protected function encontrado(int $customerId, string $via): ClienteEncontrado
     {
-        return ClienteEncontrado::desde(CustomerProxy::modelClass()::query()->with('group')->findOrFail($customerId), $via, $this->invitadoId());
+        // Identificacion fiable (telefono/email): se adjuntan los antecedentes reportados (solo conteos) para verlos ANTES de crear un duplicado.
+        $resumen = $this->antecedentes->resumenes([$customerId])[$customerId];
+
+        return ClienteEncontrado::desde(CustomerProxy::modelClass()::query()->with('group')->findOrFail($customerId), $via, $this->invitadoId(), $resumen['total'] > 0 || $resumen['direcciones_pendientes'] > 0 || $resumen['datos_pendientes'] > 0 ? $resumen : null);
     }
 
     private function invitadoId(): ?int

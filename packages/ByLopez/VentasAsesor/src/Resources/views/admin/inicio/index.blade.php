@@ -9,6 +9,25 @@
         </p>
     </div>
 
+    @include('ventasasesor::admin.asesores.aviso-sin-asociacion')
+
+    @if ($alcance->value !== 'ninguno' || bouncer()->hasPermission('ventas_asesor.pedidos.create'))
+        <div class="mt-3.5 flex flex-wrap gap-2.5">
+            @if ($alcance->value !== 'ninguno' && bouncer()->hasPermission('ventas_asesor.pedidos'))
+                <a href="{{ route('admin.ventas_asesor.pedidos.index') }}" class="secondary-button">
+                    <span class="icon-orders text-2xl"></span>
+                    {{ $alcance->value === 'todos' ? trans('ventasasesor::app.inicio.accesos.pedidos') : trans('ventasasesor::app.inicio.accesos.mis-ventas') }}
+                </a>
+            @endif
+
+            @if (bouncer()->hasPermission('ventas_asesor.pedidos.create'))
+                <a href="{{ route('admin.ventas_asesor.nueva_venta.pantalla') }}" class="primary-button">
+                    + @lang('ventasasesor::app.inicio.accesos.nueva-venta')
+                </a>
+            @endif
+        </div>
+    @endif
+
     <div class="box-shadow mt-3.5 rounded bg-white p-4 dark:bg-gray-900">
         <p class="text-base font-semibold text-gray-800 dark:text-white">
             @lang('ventasasesor::app.inicio.perfil.title')

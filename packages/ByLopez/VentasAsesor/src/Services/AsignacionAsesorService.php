@@ -7,6 +7,7 @@ use ByLopez\VentasAsesor\Enums\OrigenPropiedadComercial;
 use ByLopez\VentasAsesor\Enums\TipoPropiedadComercial;
 use ByLopez\VentasAsesor\Exceptions\AtribucionInvalidaException;
 use ByLopez\VentasAsesor\Models\AtribucionPedido;
+use ByLopez\VentasAsesor\Models\ComisionLinea;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use Illuminate\Support\Facades\DB;
 use Webkul\User\Contracts\Admin as AdminContract;
@@ -106,6 +107,12 @@ class AsignacionAsesorService
             }
 
             $this->exigirPermiso($actor, $propiedadAnterior);
+
+            // Doc. 23 (R2/R3): con una comision ya HABILITADA (o liquidada) el beneficiario no cambia por una reasignacion:
+            // se corrige con un ajuste auditado en Comisiones. Las lineas solo estimadas se reasignan con historial.
+            if (ComisionLinea::query()->where('order_id', $vigente->order_id)->where('estado', ComisionLinea::HABILITADA)->exists()) {
+                throw new AtribucionInvalidaException('El pedido ya tiene comision habilitada: el cambio de asesor se corrige con un ajuste en Comisiones.');
+            }
 
             $vigente->forceFill([
                 'commercial_owner_type' => $propiedad,

@@ -27,12 +27,18 @@ abstract class EntregaADestino extends MetodoEntrega
             return false;
         }
 
-        $valor = $this->getConfigData('default_rate');
+        $valor = $this->valorTarifa();
 
         if ($valor === null || $valor === '' || ! is_numeric($valor) || (float) $valor < 0) {
             return false;
         }
 
         return $this->tarifa((float) $valor);
+    }
+
+    /** Valor por pedido del metodo. Por defecto el configurado en el panel; un metodo puede fijarlo de otra forma. */
+    protected function valorTarifa(): mixed
+    {
+        return $this->getConfigData('default_rate');
     }
 }

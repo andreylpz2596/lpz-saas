@@ -25,13 +25,34 @@ class ProductLookupService
             ->get();
     }
 
+    public function search(string $query): Collection
+    {
+        return DB::table('products')
+            ->leftJoin('product_flat', 'products.id', '=', 'product_flat.product_id')
+            ->where(function ($builder) use ($query) {
+                $builder->where('products.sku', 'like', '%'.$query.'%')
+                    ->orWhere('product_flat.name', 'like', '%'.$query.'%');
+            })
+            ->select(
+                'products.id',
+                'products.sku',
+                DB::raw('COALESCE(MAX(product_flat.name), products.sku) as name'),
+                DB::raw('COALESCE(MAX(product_flat.name), products.sku) as label'),
+                DB::raw('products.sku as sublabel')
+            )
+            ->groupBy('products.id', 'products.sku')
+            ->orderBy('products.sku')
+            ->limit(20)
+            ->get();
+    }
+
     public function snapshot(?int $productId): array
     {
         if (! $productId) {
             return [
-                'product_id'       => null,
-                'producto_sku'     => null,
-                'producto_nombre'  => null,
+                'product_id' => null,
+                'producto_sku' => null,
+                'producto_nombre' => null,
             ];
         }
 
@@ -45,8 +66,8 @@ class ProductLookupService
             ->first();
 
         return [
-            'product_id'      => $product?->id,
-            'producto_sku'    => $product?->sku,
+            'product_id' => $product?->id,
+            'producto_sku' => $product?->sku,
             'producto_nombre' => $product?->name,
         ];
     }

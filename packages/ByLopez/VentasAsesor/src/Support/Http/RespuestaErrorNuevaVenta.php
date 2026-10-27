@@ -9,6 +9,7 @@ use ByLopez\VentasAsesor\Exceptions\ContextoPrecioComercialInvalidoException;
 use ByLopez\VentasAsesor\Exceptions\DatosClienteComercialInvalidosException;
 use ByLopez\VentasAsesor\Exceptions\EntregaBorradorInvalidaException;
 use ByLopez\VentasAsesor\Exceptions\GrupoComercialInvalidoException;
+use ByLopez\VentasAsesor\Exceptions\GrupoVentaInvalidoException;
 use ByLopez\VentasAsesor\Exceptions\LineaBorradorInvalidaException;
 use ByLopez\VentasAsesor\Exceptions\NuevaVentaInvalidaException;
 use ByLopez\VentasAsesor\Exceptions\OperacionTelefonoInvalidaException;
@@ -95,6 +96,7 @@ final class RespuestaErrorNuevaVenta
 
             $e instanceof BorradorVentaInvalidoException
                 || $e instanceof GrupoComercialInvalidoException
+                || $e instanceof GrupoVentaInvalidoException
                 || $e instanceof VarianteInvalidaException
                 || $e instanceof SolicitudBorradorInvalidaException
                 || $e instanceof PagoBorradorInvalidoException

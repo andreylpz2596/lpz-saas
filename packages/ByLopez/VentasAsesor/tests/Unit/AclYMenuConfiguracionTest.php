@@ -13,7 +13,7 @@ uses(TestCase::class);
 test('la ACL del paquete se fusiona sin reemplazar la de Bagisto ni la de otros paquetes', function () {
     $claves = collect(config('acl'))->pluck('key')->all();
 
-    expect(va01_clavesAcl())->toHaveCount(23)
+    expect(va01_clavesAcl())->toHaveCount(38)
         ->and($claves)->toContain('dashboard')
         ->and($claves)->toContain('sales.orders.view')
         ->and($claves)->toContain('corte_confeccion');
@@ -29,6 +29,8 @@ test('el arbol ACL del modulo es exactamente el definido para VentasAsesor', fun
         'ventas_asesor.pedidos.view_all',
         'ventas_asesor.pedidos.assign',
         'ventas_asesor.pedidos.reassign',
+        'ventas_asesor.pedidos.tipo_operacion',
+        'ventas_asesor.pedidos.cambiar_grupo_temporal',
         'ventas_asesor.logistica',
         'ventas_asesor.logistica.view',
         'ventas_asesor.logistica.manage',
@@ -44,6 +46,22 @@ test('el arbol ACL del modulo es exactamente el definido para VentasAsesor', fun
         'ventas_asesor.kpis',
         'ventas_asesor.kpis.view_own',
         'ventas_asesor.kpis.view_all',
+        // PAG-B (D-59 / P-08): rama de Cartera.
+        'ventas_asesor.cartera',
+        'ventas_asesor.cartera.view_own',
+        'ventas_asesor.cartera.view_all',
+        'ventas_asesor.cartera.registrar',
+        'ventas_asesor.cartera.abono_general',
+        'ventas_asesor.cartera.revisar',
+        'ventas_asesor.cartera.reversar',
+        // ASESOR-01: ficha de asesores.
+        'ventas_asesor.asesores',
+        'ventas_asesor.asesores.view_own',
+        'ventas_asesor.asesores.view_all',
+        'ventas_asesor.asesores.manage',
+        // D-COST-04/05: Control de costos (solo administracion).
+        'ventas_asesor.costos',
+        'ventas_asesor.costos.actualizar',
     ]);
 });
 
@@ -54,6 +72,14 @@ test('la ruta de inicio la autoriza unicamente la clave raiz', function () {
 
     expect($entradasRaiz)->toHaveCount(1)
         ->and(Arr::wrap($entradasRaiz->first()['route']))->toBe([va01_rutaInicio()]);
+});
+
+test('"Mis ventas / Pedidos": su ruta la autoriza la clave agrupadora pedidos, como string', function () {
+    expect(acl()->getRoles()->get('admin.ventas_asesor.pedidos.index'))->toBe('ventas_asesor.pedidos');
+
+    // String y no arreglo: puede ser la primera clave con punto de un rol (regla 3 de acl.php).
+    expect(collect(config('acl'))->firstWhere('key', 'ventas_asesor.pedidos')['route'])
+        ->toBe('admin.ventas_asesor.pedidos.index');
 });
 
 test('toda ruta del paquete exige el middleware admin y esta mapeada en la ACL', function () {
@@ -82,14 +108,42 @@ test('toda clave ACL del modulo apunta a una ruta GET existente y sin parametros
     }
 });
 
-test('el menu del paquete tiene un unico nodo y su clave existe identica en la ACL', function () {
+test('el menu del paquete tiene un nodo raiz y solo hijos con clave ACL existente y ruta GET real, sin enlaces muertos', function () {
     $menu = collect(config('menu.admin'))
         ->filter(fn ($item) => str_starts_with($item['key'], 'ventas_asesor'));
 
-    expect($menu->pluck('key')->all())->toBe(['ventas_asesor'])
-        ->and(va01_clavesAcl())->toContain('ventas_asesor')
+    expect($menu->pluck('key')->all())->toBe([
+        'ventas_asesor',
+        'ventas_asesor.operar_como_asesor',
+        'ventas_asesor.pedidos',
+        'ventas_asesor.cartera',
+        'ventas_asesor.asesores',
+        'ventas_asesor.costos',
+        'ventas_asesor.pedidos.create',
+    ])
         ->and($menu->first()['route'])->toBe(va01_rutaInicio())
         ->and(collect(config('menu.admin'))->pluck('key')->all())->toContain('dashboard');
+
+    foreach ($menu as $item) {
+        $ruta = Route::getRoutes()->getByName($item['route']);
+
+        expect(va01_clavesAcl())->toContain($item['key'])
+            ->and($ruta)->not->toBeNull($item['key'])
+            ->and($ruta->methods())->toContain('GET')
+            ->and($ruta->parameterNames())->toBe([])
+            ->and(trans($item['name']))->not->toBe($item['name']);
+    }
+
+    // PAG-E: Cartera / Pagos ya tiene su bandeja; la entrada de menu abre la agrupadora (una ruta real, sin parametros).
+    expect($menu->firstWhere('key', 'ventas_asesor.cartera')['route'])->toBe('admin.ventas_asesor.cartera.index');
+});
+
+test('"Ver pedido" de la venta creada va al detalle del modulo y no a una ruta nativa inexistente o ajena a su ACL', function () {
+    $vista = file_get_contents(__DIR__.'/../../src/Resources/views/admin/nueva-venta/index.blade.php');
+
+    expect($vista)->toContain("route('admin.ventas_asesor.pedidos.index')")
+        ->and($vista)->toContain('?pedido=')
+        ->and($vista)->not->toContain("/sales/orders') }}/'");
 });
 
 test('el arbol ACL se construye completo para la pantalla de roles de Bagisto', function () {
@@ -103,6 +157,9 @@ test('el arbol ACL se construye completo para la pantalla de roles de Bagisto', 
             'ventas_asesor.evidencias',
             'ventas_asesor.comisiones',
             'ventas_asesor.kpis',
+            'ventas_asesor.cartera',
+            'ventas_asesor.asesores',
+            'ventas_asesor.costos',
         ]);
 
     $pedidos = $raiz->children->first(fn ($item) => $item->key === 'ventas_asesor.pedidos');
@@ -113,6 +170,8 @@ test('el arbol ACL se construye completo para la pantalla de roles de Bagisto', 
         'ventas_asesor.pedidos.view_all',
         'ventas_asesor.pedidos.assign',
         'ventas_asesor.pedidos.reassign',
+        'ventas_asesor.pedidos.tipo_operacion',
+        'ventas_asesor.pedidos.cambiar_grupo_temporal',
     ]);
 });
 
@@ -132,12 +191,18 @@ test('03G-C: la API de "nueva venta rapida" la autoriza el mismo permiso que Bor
         'admin.ventas_asesor.nueva_venta.entrega',
         'admin.ventas_asesor.nueva_venta.pago',
         'admin.ventas_asesor.nueva_venta.confirmar',
+        'admin.ventas_asesor.nueva_venta.pantalla',
+        'admin.ventas_asesor.nueva_venta.en_curso',
+        'admin.ventas_asesor.nueva_venta.clientes.direcciones',
+        'admin.ventas_asesor.nueva_venta.eliminar',
+        'admin.ventas_asesor.nueva_venta.direcciones.agregar',
+        'admin.ventas_asesor.ubicaciones.buscar',
     ] as $nombre) {
         expect($roles->get($nombre))->toBe(BorradorVentaService::PERMISO, $nombre);
     }
 
     // No se duplico ninguna clave del modulo para lograrlo (las pruebas de conteo/arbol arriba lo exigen).
-    expect(va01_clavesAcl())->toHaveCount(23);
+    expect(va01_clavesAcl())->toHaveCount(38);
 });
 
 test('las claves del servicio existen en la ACL y ninguna clave usa guiones', function () {

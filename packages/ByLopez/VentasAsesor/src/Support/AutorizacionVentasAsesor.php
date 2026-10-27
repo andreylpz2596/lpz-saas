@@ -27,6 +27,66 @@ class AutorizacionVentasAsesor
 
     public const PERMISO_PEDIDOS_REASIGNAR = 'ventas_asesor.pedidos.reassign';
 
+    /* G-11 / COM-D-15: elegir muestra / reposicion / garantia en Nueva venta. Sin ella, solo `venta_normal`. */
+    public const PERMISO_PEDIDOS_TIPO_OPERACION = 'ventas_asesor.pedidos.tipo_operacion';
+
+    /* GRP-01: aplicar a UNA venta un grupo comercial temporal distinto del habitual del cliente (y restaurarlo). */
+    public const PERMISO_PEDIDOS_CAMBIAR_GRUPO_TEMPORAL = 'ventas_asesor.pedidos.cambiar_grupo_temporal';
+
+    /* ASESOR-01: ficha de asesores. `view_own` = solo la propia; `view_all` = todas; `manage` = crear, editar, activar. */
+    public const PERMISO_ASESORES_VER_PROPIO = 'ventas_asesor.asesores.view_own';
+
+    public const PERMISO_ASESORES_VER_TODOS = 'ventas_asesor.asesores.view_all';
+
+    public const PERMISO_ASESORES_GESTIONAR = 'ventas_asesor.asesores.manage';
+
+    /*
+     * PAG-B (D-59 / P-08): ACL de Cartera. Registrar y revisar son capacidades DISTINTAS; el servicio siempre
+     * valida (I-10). `ventas_asesor.cartera` es solo agrupadora y no autoriza nada.
+     */
+    public const PERMISO_CARTERA_VER_PROPIA = 'ventas_asesor.cartera.view_own';
+
+    public const PERMISO_CARTERA_VER_TODA = 'ventas_asesor.cartera.view_all';
+
+    public const PERMISO_CARTERA_REGISTRAR = 'ventas_asesor.cartera.registrar';
+
+    public const PERMISO_CARTERA_ABONO_GENERAL = 'ventas_asesor.cartera.abono_general';
+
+    public const PERMISO_CARTERA_REVISAR = 'ventas_asesor.cartera.revisar';
+
+    public const PERMISO_CARTERA_REVERSAR = 'ventas_asesor.cartera.reversar';
+
+    /* D-COST-04/05: «Control de costos». Ver = pantalla de comparacion; actualizar = vista previa y confirmacion. */
+    public const PERMISO_COSTOS = 'ventas_asesor.costos';
+
+    public const PERMISO_COSTOS_ACTUALIZAR = 'ventas_asesor.costos.actualizar';
+
+    /*
+     * Doc. 23 (R1–R4): comisiones y rentabilidad. Capacidades SEPARADAS: configurar acuerdos (`manage`), calcular,
+     * aprobar liquidaciones y ajustes, registrar pagos, ajustar y revertir. El servicio valida siempre (no los botones).
+     */
+    public const PERMISO_COMISIONES_VER_PROPIAS = 'ventas_asesor.comisiones.view_own';
+
+    public const PERMISO_COMISIONES_VER_TODAS = 'ventas_asesor.comisiones.view_all';
+
+    public const PERMISO_COMISIONES_CONFIGURAR = 'ventas_asesor.comisiones.manage';
+
+    public const PERMISO_COMISIONES_CALCULAR = 'ventas_asesor.comisiones.calcular';
+
+    public const PERMISO_COMISIONES_APROBAR = 'ventas_asesor.comisiones.approve';
+
+    public const PERMISO_COMISIONES_PAGAR = 'ventas_asesor.comisiones.pay';
+
+    public const PERMISO_COMISIONES_AJUSTAR = 'ventas_asesor.comisiones.ajustar';
+
+    public const PERMISO_COMISIONES_REVERTIR = 'ventas_asesor.comisiones.revertir';
+
+    public const PERMISO_RENTABILIDAD_VER = 'ventas_asesor.rentabilidad.view';
+
+    public const PERMISO_RENTABILIDAD_CONFIGURAR = 'ventas_asesor.rentabilidad.configurar';
+
+    public const PERMISO_KPIS_VER_TODOS = 'ventas_asesor.kpis.view_all';
+
     /**
      * - 'all': concede todo, como Bagisto.
      * - 'custom': concede solo si los permisos son una lista de cadenas que
@@ -107,6 +167,39 @@ class AutorizacionVentasAsesor
     public function puedeVerRegistroDe(?AdminContract $admin, ?int $advisorId): bool
     {
         return match ($this->alcanceDeVisibilidad($admin)) {
+            AlcanceVisibilidad::TODOS => true,
+            AlcanceVisibilidad::PROPIOS => $advisorId !== null
+                && $admin->id !== null
+                && (int) $admin->id === $advisorId,
+            AlcanceVisibilidad::NINGUNO => false,
+        };
+    }
+
+    /**
+     * Alcance de lectura de Cartera (P-08): `cartera.view_all` = todo; `cartera.view_own` = solo lo atribuido al
+     * propio asesor; sin ninguna de las dos, nada. Es independiente de `pedidos.view_*`: tener la clave agrupadora
+     * `ventas_asesor.cartera` sola NO concede lectura.
+     */
+    public function alcanceDeCartera(?AdminContract $admin): AlcanceVisibilidad
+    {
+        if ($this->tienePermiso($admin, self::PERMISO_CARTERA_VER_TODA)) {
+            return AlcanceVisibilidad::TODOS;
+        }
+
+        if ($this->tienePermiso($admin, self::PERMISO_CARTERA_VER_PROPIA)) {
+            return AlcanceVisibilidad::PROPIOS;
+        }
+
+        return AlcanceVisibilidad::NINGUNO;
+    }
+
+    /**
+     * Espejo de `puedeVerRegistroDe()` para Cartera: `$advisorId` es el asesor propietario del pedido (o null si
+     * no tiene atribucion). Sin atribucion valida y sin `view_all`, niega (RA-6).
+     */
+    public function puedeVerCarteraDe(?AdminContract $admin, ?int $advisorId): bool
+    {
+        return match ($this->alcanceDeCartera($admin)) {
             AlcanceVisibilidad::TODOS => true,
             AlcanceVisibilidad::PROPIOS => $advisorId !== null
                 && $admin->id !== null

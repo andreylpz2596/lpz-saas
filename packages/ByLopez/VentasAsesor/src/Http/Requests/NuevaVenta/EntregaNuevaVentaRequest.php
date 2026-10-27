@@ -48,8 +48,11 @@ class EntregaNuevaVentaRequest extends FormRequest
             "{$prefijo}.apellido" => ['required_with:'.$prefijo, 'string', 'max:191'],
             "{$prefijo}.lineas" => ['required_with:'.$prefijo, 'array', 'min:1'],
             "{$prefijo}.lineas.*" => ['string', 'max:191'],
-            "{$prefijo}.ciudad" => ['required_with:'.$prefijo, 'string', 'max:191'],
-            "{$prefijo}.departamento" => ['required_with:'.$prefijo, 'string', 'max:191'],
+            // D-58: en Colombia el municipio es un CODIGO DIVIPOLA elegido del catalogo (el backend resuelve
+            // ciudad y estado). `ciudad`/`departamento` solo se admiten para otros paises y se ignoran si hay codigo.
+            "{$prefijo}.municipio_codigo" => [Rule::requiredIf(fn () => $this->has($prefijo) && strtoupper((string) $this->input("{$prefijo}.pais", 'CO')) === 'CO'), 'nullable', 'string', 'regex:/^\d{5}$/'],
+            "{$prefijo}.ciudad" => ['nullable', 'string', 'max:191'],
+            "{$prefijo}.departamento" => ['nullable', 'string', 'max:191'],
             "{$prefijo}.pais" => ['required_with:'.$prefijo, 'string', 'size:2'],
             "{$prefijo}.codigo_postal" => ['nullable', 'string', 'max:32'],
             "{$prefijo}.telefono" => ['required_with:'.$prefijo, 'string', 'max:32'],
@@ -70,6 +73,16 @@ class EntregaNuevaVentaRequest extends FormRequest
         return $facturacion === null ? null : $this->aOrigen((array) $facturacion);
     }
 
+    public function messages(): array
+    {
+        return [
+            'envio.direccion.municipio_codigo.required' => 'Selecciona una ciudad o municipio de la lista.',
+            'facturacion.direccion.municipio_codigo.required' => 'Selecciona una ciudad o municipio de la lista.',
+            'envio.direccion.municipio_codigo.regex' => 'Selecciona una ciudad o municipio de la lista.',
+            'facturacion.direccion.municipio_codigo.regex' => 'Selecciona una ciudad o municipio de la lista.',
+        ];
+    }
+
     private function aOrigen(array $datos): OrigenDireccion
     {
         return match ($datos['tipo'] ?? null) {
@@ -87,13 +100,14 @@ class EntregaNuevaVentaRequest extends FormRequest
             nombre: (string) $d['nombre'],
             apellido: (string) $d['apellido'],
             lineas: array_values((array) $d['lineas']),
-            ciudad: (string) $d['ciudad'],
-            departamento: (string) $d['departamento'],
+            ciudad: (string) ($d['ciudad'] ?? ''),
+            departamento: (string) ($d['departamento'] ?? ''),
             pais: (string) $d['pais'],
             codigoPostal: isset($d['codigo_postal']) ? (string) $d['codigo_postal'] : null,
             telefono: (string) $d['telefono'],
             email: isset($d['email']) ? (string) $d['email'] : null,
             empresa: isset($d['empresa']) ? (string) $d['empresa'] : null,
+            municipioCodigo: isset($d['municipio_codigo']) && $d['municipio_codigo'] !== '' ? (string) $d['municipio_codigo'] : null,
         );
     }
 }

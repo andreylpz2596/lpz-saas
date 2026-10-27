@@ -115,13 +115,6 @@ Vue 3 components are used within Blade templates via `@pushOnce('scripts')` / Bl
 - **Repositories**: `<Model>Repository` (e.g., `ProductRepository`)
 - **Controllers**: `<Model>Controller` in `Http/Controllers/Admin/` or `Shop/`
 
-### Adding a New Package
-
-1. Create `packages/Webkul/<Name>/src/` with the standard structure
-2. Add PSR-4 namespace to root `composer.json` autoload
-3. Register ServiceProvider in `bootstrap/providers.php`
-4. Register ModuleServiceProvider in `config/concord.php`
-5. Run `composer dump-autoload && php artisan optimize:clear`
 
 Or use: `php artisan package:make Webkul/<Name>` (requires `bagisto/bagisto-package-generator`)
 
@@ -131,3 +124,202 @@ Or use: `php artisan package:make Webkul/<Name>` (requires `bagisto/bagisto-pack
 - **pint_tests.yml**: Code style checks with Laravel Pint
 - **admin_playwright_tests.yml / shop_playwright_tests.yml**: E2E tests (6 parallel shards)
 - **translation_tests.yml**: Translation file validation
+
+
+
+# Proyecto ByLopez - Instrucciones para Claude Code
+
+## Proyecto
+
+Aplicación basada en Laravel + Bagisto.
+
+El desarrollo personalizado de ByLopez debe mantenerse aislado del core de Bagisto.
+
+---
+
+## Restricción absoluta
+
+NO modificar:
+
+packages/Webkul/
+
+NO modificar el core de Bagisto.
+
+Se permite inspeccionar packages/Webkul/ únicamente como referencia para:
+
+- arquitectura
+- controladores
+- repositories
+- DataGrids
+- Blade
+- componentes UI
+- permisos
+- patrones de Bagisto
+- validaciones
+- estructura de módulos
+
+Todo desarrollo específico de Corte y Confección debe mantenerse dentro de:
+
+packages/ByLopez/CorteConfeccion/
+
+No crear soluciones en el core para resolver problemas del módulo.
+
+---
+
+## Antes de modificar código
+
+Antes de implementar cualquier funcionalidad:
+
+1. Inspeccionar el código existente relacionado.
+2. Identificar modelos, servicios, controladores, rutas, vistas y migraciones involucradas.
+3. Buscar si ya existe una funcionalidad similar.
+4. Evitar duplicar lógica.
+5. Identificar posibles regresiones.
+6. Entender primero el flujo de negocio existente.
+
+No asumir que algo no existe sin buscarlo.
+
+---
+
+## Arquitectura
+
+Preferir reutilizar la arquitectura existente.
+
+Evitar:
+
+- lógica de negocio compleja directamente en Blade
+- estados duplicados en múltiples archivos
+- validaciones repetidas
+- consultas duplicadas
+- código muerto
+- métodos enormes
+- soluciones temporales cuando existe una solución estructural
+
+Preferir cuando corresponda:
+
+- services
+- support classes
+- state machines
+- Form Requests
+- repositories
+- componentes reutilizables
+- helpers centralizados
+
+No crear abstracciones innecesarias.
+
+---
+
+## Flujo de negocio
+
+La lógica del negocio tiene prioridad sobre simplificaciones técnicas.
+
+Antes de cambiar un flujo existente:
+
+1. identificar cómo funciona actualmente;
+2. explicar si existe una inconsistencia;
+3. preservar trazabilidad;
+4. evitar saltarse estados;
+5. evitar actualizar datos históricos de forma destructiva.
+
+Si el requerimiento del usuario puede generar inconsistencias de negocio, señalarlo antes de implementarlo.
+
+---
+
+## UX / Frontend
+
+Actuar como desarrollador frontend senior.
+
+Las vistas administrativas deben ser:
+
+- intuitivas
+- limpias
+- fáciles de escanear
+- coherentes con Bagisto
+- responsivas cuando sea posible
+- con jerarquía visual clara
+
+Priorizar:
+
+- pocos clics
+- reducción de ruido visual
+- agrupación lógica
+- accordions cuando ayuden
+- estados visuales claros
+- feedback de acciones
+- campos con nombres comprensibles
+- evitar información duplicada
+
+No cambiar el flujo de negocio solamente para hacer una interfaz más simple.
+
+---
+
+## Seguridad y permisos
+
+Antes de agregar o modificar acciones:
+
+- revisar permisos existentes
+- revisar roles
+- evitar depender únicamente de ocultar botones en frontend
+- validar autorización también en backend
+
+---
+
+## Base de datos
+
+Antes de crear una migración:
+
+- revisar tablas existentes
+- revisar relaciones
+- revisar nullable/default
+- considerar datos históricos existentes
+
+No destruir información histórica salvo solicitud explícita.
+
+---
+
+## Calidad
+
+No solucionar únicamente el síntoma de un bug.
+
+Buscar la causa raíz.
+
+Antes de finalizar:
+
+- revisar sintaxis PHP
+- namespaces
+- imports
+- rutas
+- relaciones
+- permisos
+- estados
+- validaciones
+- posibles referencias rotas
+
+Ejecutar las pruebas disponibles que sean relevantes.
+
+Nunca afirmar que algo fue probado si no se ejecutó realmente.
+
+---
+
+## Alcance
+
+No modificar archivos fuera del alcance del requerimiento sin una razón clara.
+
+Si durante el trabajo se detecta un problema adicional:
+
+- informarlo;
+- no corregirlo automáticamente si implica ampliar significativamente el alcance.
+
+---
+
+## Respuesta final
+
+Ser conciso.
+
+Al terminar informar:
+
+- cambios realizados
+- archivos principales modificados
+- pruebas ejecutadas y resultado
+- riesgos o pendientes encontrados
+- confirmar si packages/Webkul/ permaneció sin cambios

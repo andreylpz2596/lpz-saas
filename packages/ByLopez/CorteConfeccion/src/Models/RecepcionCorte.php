@@ -23,11 +23,11 @@ class RecepcionCorte extends Model implements RecepcionCorteContract
     ];
 
     protected $casts = [
-        'fecha_recepcion'      => 'date',
+        'fecha_recepcion' => 'date',
         'peso_sobrante_usable' => 'decimal:3',
-        'peso_retasos'         => 'decimal:3',
-        'peso_desperdicio'     => 'decimal:3',
-        'merma_total'          => 'decimal:3',
+        'peso_retasos' => 'decimal:3',
+        'peso_desperdicio' => 'decimal:3',
+        'merma_total' => 'decimal:3',
     ];
 
     public function ordenCorte(): BelongsTo

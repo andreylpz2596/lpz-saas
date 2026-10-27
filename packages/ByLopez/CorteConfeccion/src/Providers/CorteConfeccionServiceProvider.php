@@ -2,6 +2,7 @@
 
 namespace ByLopez\CorteConfeccion\Providers;
 
+use ByLopez\CorteConfeccion\Console\Commands\DiagnosticarCatalogoCorte;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -23,5 +24,9 @@ class CorteConfeccionServiceProvider extends ServiceProvider
         $this->loadTranslationsFrom(__DIR__.'/../Resources/lang', 'corteconfeccion');
         $this->loadViewsFrom(__DIR__.'/../Resources/views', 'corteconfeccion');
         Blade::anonymousComponentPath(__DIR__.'/../Resources/views/components', 'corteconfeccion');
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([DiagnosticarCatalogoCorte::class]);
+        }
     }
 }

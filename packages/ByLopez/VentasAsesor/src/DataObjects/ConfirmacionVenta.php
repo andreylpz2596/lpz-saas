@@ -24,6 +24,9 @@ final class ConfirmacionVenta
     /** Pedido `canceled`, `closed` o `fraud` (p. ej. al devolver uno ya existente): sin saldo. */
     public const PAGO_NO_APLICA = 'no_aplica';
 
+    /** C5: toda la obligacion del pedido quedo cubierta por mercancia recibida de vuelta y no hubo pagos. Derivado, no guardado. */
+    public const PAGO_DEVUELTO = 'devuelto';
+
     /**
      * @param  array{customer_id: int|null, nombre: string}  $cliente
      * @param  array{codigo: string, titulo: string|null}  $metodoPago

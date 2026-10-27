@@ -2,19 +2,23 @@
 
 namespace ByLopez\CorteConfeccion\Http\Requests;
 
+use ByLopez\CorteConfeccion\Models\OrdenCorte;
+use ByLopez\CorteConfeccion\Support\CortadorAccess;
 use Illuminate\Foundation\Http\FormRequest;
 
 class EntregarOrdenCorteRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return bouncer()->hasPermission('corte_confeccion.ordenes_corte.operar');
+        $orden = OrdenCorte::query()->find((int) $this->route('id'));
+
+        return $orden && CortadorAccess::puedeOperarOrden($orden);
     }
 
     public function rules(): array
     {
-        return [
-            'peso_entregado' => ['required', 'numeric', 'gt:0'],
-        ];
+        // El peso entregado ya no lo escribe el usuario: OrdenCorteService::entregar()
+        // lo calcula automaticamente a partir de los rollos reservados.
+        return [];
     }
 }

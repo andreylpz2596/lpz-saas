@@ -13,6 +13,7 @@ class RecepcionCorteDetalle extends Model implements RecepcionCorteDetalleContra
 
     protected $fillable = [
         'recepcion_corte_id',
+        'orden_corte_detalle_id',
         'product_id',
         'producto_sku',
         'producto_nombre',
@@ -25,6 +26,16 @@ class RecepcionCorteDetalle extends Model implements RecepcionCorteDetalleContra
     public function recepcionCorte(): BelongsTo
     {
         return $this->belongsTo(RecepcionCorte::class, 'recepcion_corte_id');
+    }
+
+    /**
+     * Nullable: solo las recepciones creadas desde F0 en adelante tienen esta
+     * relacion resuelta (ver migracion 2026_09_22_000001_...). Las recepciones
+     * historicas quedan en NULL a proposito, sin reescritura retroactiva.
+     */
+    public function ordenCorteDetalle(): BelongsTo
+    {
+        return $this->belongsTo(OrdenCorteDetalle::class, 'orden_corte_detalle_id');
     }
 
     public function product(): BelongsTo

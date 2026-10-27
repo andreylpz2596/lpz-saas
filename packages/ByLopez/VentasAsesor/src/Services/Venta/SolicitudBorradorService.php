@@ -79,7 +79,7 @@ class SolicitudBorradorService
         try {
             DB::transaction(function () use ($borradorId, $productoId, $varianteId, $cantidad, $actor, $lote) {
                 [$borrador, $carrito] = $this->borradores->bloquearParaEditar($borradorId, $actor);
-                $variante = $this->variante($lote, $productoId, $varianteId, (int) $carrito->customer_id, $cantidad);
+                $variante = $this->variante($lote, $productoId, $varianteId, (int) $carrito->customer_id, $cantidad, (int) $carrito->id);
 
                 if (! $variante->activa) {
                     throw new VarianteInvalida(VarianteInvalida::PRODUCTO_NO_VENDIBLE);
@@ -121,7 +121,7 @@ class SolicitudBorradorService
             $variante = $solicitud->variante;
 
             // Variante aun vendible y cliente con grupo apto.
-            $v = $this->variante($lote, $this->productoDe($variante), (int) $variante->id, (int) $carrito->customer_id, $cantidad);
+            $v = $this->variante($lote, $this->productoDe($variante), (int) $variante->id, (int) $carrito->customer_id, $cantidad, (int) $carrito->id);
 
             if (! $v->activa) {
                 throw new VarianteInvalida(VarianteInvalida::PRODUCTO_NO_VENDIBLE);
@@ -174,11 +174,11 @@ class SolicitudBorradorService
         return $solicitud;
     }
 
-    private function variante(?LoteCatalogo $lote, int $productoId, int $varianteId, int $customerId, int $cantidad): VarianteVenta
+    private function variante(?LoteCatalogo $lote, int $productoId, int $varianteId, int $customerId, int $cantidad, ?int $cartId = null): VarianteVenta
     {
         return $lote === null
-            ? $this->catalogo->variante($productoId, $varianteId, $customerId, $cantidad)
-            : $this->catalogo->varianteEnLote($lote, $productoId, $varianteId, $customerId, $cantidad);
+            ? $this->catalogo->variante($productoId, $varianteId, $customerId, $cantidad, $cartId)
+            : $this->catalogo->varianteEnLote($lote, $productoId, $varianteId, $customerId, $cantidad, $cartId);
     }
 
     /** Producto de primer nivel: el padre del hijo, o el propio simple. */
@@ -217,7 +217,7 @@ class SolicitudBorradorService
 
         if ($vendible && $customerId !== null) {
             try {
-                $v = $this->variante($lote, $productoId, (int) $variante->id, $customerId, $cantidad);
+                $v = $this->variante($lote, $productoId, (int) $variante->id, $customerId, $cantidad, $cartId);
                 $opciones = $v->opciones;
                 $precio = $v->precioUnitario;
             } catch (GrupoComercialInvalidoException) {

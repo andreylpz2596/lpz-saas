@@ -1,402 +1,333 @@
 @php
+    /*
+     * F4 - Creacion V2. Flujo: rollos -> resumen de tela -> lineas -> variantes
+     * reales -> revision -> crear. Los IDs (familia, color, eje) viajan solo como
+     * campos ocultos: el usuario ve tela, rollo, color, linea y talla. La
+     * resolucion a simples exactos ocurre SIEMPRE en el servidor.
+     */
     $rollosData = $rollos->map(fn ($rollo) => [
         'id' => $rollo->id,
         'codigo' => $rollo->codigo,
-        'compra_origen' => $rollo->compraTela?->codigo ?? $rollo->compra_tela_id,
+        'proveedor' => $rollo->proveedor,
+        'referencia' => $rollo->referencia,
+        'color' => $rollo->color,
+        'gramaje' => $rollo->gramaje,
         'tipo_tela_id' => $rollo->tipo_tela_id,
         'tipo_tela' => $rollo->tipo_tela,
-        'color' => $rollo->color,
-        'referencia' => $rollo->referencia,
-        'gramaje' => $rollo->gramaje,
         'peso_disponible' => (float) $rollo->peso_disponible,
+        'estado' => \ByLopez\CorteConfeccion\Enums\EstadoRollo::tryFrom((string) $rollo->estado)?->label() ?? $rollo->estado,
+        'bloqueo' => ! $rollo->tipo_tela_id
+            ? 'Sin tipo de tela vinculado al catalogo'
+            : (! $rollo->color_option_id ? 'Sin color vinculado al catalogo' : null),
     ])->values();
-
-    $productLabels = $products->keyBy('id')->map(fn ($product) => $product->sku.' - '.$product->name);
-
-    $oldDetalles = collect(old('detalles', [[
-        'product_id' => '',
-        'cantidad_cortada' => '',
-        'cantidad_real_cortada' => '',
-        'observacion' => '',
-    ]]))->map(function ($detalle) use ($productLabels) {
-        $productId = $detalle['product_id'] ?? '';
-
-        return array_merge([
-            'product_id' => '',
-            'product_label' => '',
-            'cantidad_cortada' => '',
-            'cantidad_real_cortada' => '',
-            'observacion' => '',
-        ], $detalle, [
-            'product_label' => $productId ? ($productLabels[$productId] ?? '') : '',
-        ]);
-    })->values();
 @endphp
+
+@include('corteconfeccion::admin.partials.estilos')
 
 <x-admin::layouts>
     <x-slot:title>Crear orden de corte</x-slot>
 
+    <div class="bylopez-scope">
     <form method="POST" action="{{ route('admin.corte_confeccion.ordenes_corte.store') }}">
         @csrf
 
         <div class="flex items-center justify-between gap-4 max-sm:flex-wrap">
             <p class="text-xl font-bold text-gray-800 dark:text-white">Crear orden de corte</p>
-            <button class="primary-button">Guardar</button>
         </div>
 
-        <div class="mt-4 grid grid-cols-2 gap-4 max-md:grid-cols-1">
-            <x-admin::form.control-group>
-                <x-admin::form.control-group.label>Codigo</x-admin::form.control-group.label>
-                <div class="min-h-10 rounded-md border bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
-                    Se generara automaticamente al guardar
-                </div>
-            </x-admin::form.control-group>
-
-            <x-admin::form.control-group>
-                <x-admin::form.control-group.label class="required">Cortador</x-admin::form.control-group.label>
-                <select
-                    name="cortador_id"
-                    class="custom-select w-full rounded-md border px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-white"
-                >
-                    <option value="">Seleccionar cortador</option>
-                    @foreach ($cortadores as $cortador)
-                        <option value="{{ $cortador->id }}" @selected((string) old('cortador_id') === (string) $cortador->id)>
-                            {{ $cortador->name }}{{ $cortador->email ? ' - '.$cortador->email : '' }}
-                        </option>
+        @if ($errors->any())
+            <div class="mt-4 rounded border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+                <p class="font-semibold">No se pudo crear la orden. Revisa lo siguiente:</p>
+                <ul class="mt-2 list-disc space-y-1 pl-5">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
                     @endforeach
-                </select>
-                <x-admin::form.control-group.error control-name="cortador_id" />
-            </x-admin::form.control-group>
+                </ul>
+            </div>
+        @endif
 
-            <x-admin::form.control-group>
-                <x-admin::form.control-group.label>Fecha entrega</x-admin::form.control-group.label>
-                <x-admin::form.control-group.control type="date" name="fecha_entrega" value="{{ old('fecha_entrega') }}" />
-                <x-admin::form.control-group.error control-name="fecha_entrega" />
-            </x-admin::form.control-group>
+        <div class="mt-4 rounded border bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900">
+            <div class="mb-2">
+                <p class="text-base font-semibold text-gray-800 dark:text-white">1. Datos de la orden</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">La orden define QUE se va a cortar; las cantidades las reporta luego el cortador.</p>
+            </div>
 
-            <x-admin::form.control-group>
-                <x-admin::form.control-group.label>Fecha solicitud</x-admin::form.control-group.label>
-                <x-admin::form.control-group.control type="date" name="fecha_solicitud" value="{{ old('fecha_solicitud') }}" />
-                <x-admin::form.control-group.error control-name="fecha_solicitud" />
-            </x-admin::form.control-group>
+            <div class="grid grid-cols-2 gap-x-4 max-md:grid-cols-1">
+                <x-admin::form.control-group class="!mb-2">
+                    <x-admin::form.control-group.label class="required">Cortador</x-admin::form.control-group.label>
+                    <x-corteconfeccion::record-search
+                        name="cortador_id"
+                        :search-url="route('admin.corte_confeccion.usuarios.cortadores')"
+                        :selected-id="old('cortador_id')"
+                        placeholder="Buscar cortador..."
+                        rules="required"
+                        label="Cortador"
+                    />
+                    <x-admin::form.control-group.error control-name="cortador_id" />
+                </x-admin::form.control-group>
+
+                <x-admin::form.control-group class="!mb-2">
+                    <x-admin::form.control-group.label>Observacion</x-admin::form.control-group.label>
+                    <x-admin::form.control-group.control type="textarea" name="observacion" rows="2" value="{{ old('observacion') }}" />
+                    <x-admin::form.control-group.error control-name="observacion" />
+                </x-admin::form.control-group>
+            </div>
         </div>
-
-        <x-admin::form.control-group class="mt-4">
-            <x-admin::form.control-group.label>Observacion</x-admin::form.control-group.label>
-            <x-admin::form.control-group.control type="textarea" name="observacion" value="{{ old('observacion') }}" />
-            <x-admin::form.control-group.error control-name="observacion" />
-        </x-admin::form.control-group>
 
         <v-orden-corte-form
             :rollos='@json($rollosData)'
-            :old-rollo-ids='@json(old('rollo_ids', []))'
-            :old-detalles='@json($oldDetalles)'
-            :can-edit-cantidad-cortada='@json($canEditCantidadCortada)'
-            product-search-url="{{ route('admin.catalog.products.search') }}"
+            :old-rollo-ids='@json(array_map("intval", (array) old("rollo_ids", [])))'
+            :old-seleccion='@json(array_values((array) old("seleccion", [])))'
+            opciones-url="{{ route('admin.corte_confeccion.ordenes_corte.opciones') }}"
+            previsualizar-url="{{ route('admin.corte_confeccion.ordenes_corte.previsualizar') }}"
         ></v-orden-corte-form>
     </form>
+    </div>
 
     @pushOnce('scripts')
         <script type="text/x-template" id="v-orden-corte-form-template">
             <div>
-                <div class="mt-6 rounded border p-4 dark:border-gray-800">
-                    <div class="mb-3 flex items-center justify-between gap-3 max-md:flex-wrap">
-                        <p class="text-base font-semibold text-gray-800 dark:text-white">Rollos a cortar</p>
+                {{-- Campos ocultos: lo unico que viaja al servidor (sin product_id). --}}
+                <input v-for="id in rolloIds" :key="'r' + id" type="hidden" name="rollo_ids[]" :value="id" />
+                <template v-for="(fila, i) in seleccionPlana" :key="'s' + i">
+                    <input type="hidden" :name="'seleccion[' + i + '][attribute_family_id]'" :value="fila.attribute_family_id" />
+                    <input type="hidden" :name="'seleccion[' + i + '][color_option_id]'" :value="fila.color_option_id" />
+                    <input type="hidden" :name="'seleccion[' + i + '][eje_option_id]'" :value="fila.eje_option_id" />
+                </template>
 
-                        <div class="flex min-w-[420px] gap-2 max-md:w-full max-md:min-w-0">
-                            <select
-                                class="custom-select w-full rounded-md border px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-white"
-                                v-model="rolloPickerId"
-                            >
-                                <option value="">Seleccionar rollo</option>
-                                <option
-                                    v-for="rollo in availableRollos"
-                                    :key="rollo.id"
-                                    :value="rollo.id"
-                                >
-                                    @{{ rollo.codigo }} - @{{ rollo.tipo_tela }} - @{{ rollo.color }} - @{{ formatKg(rollo.peso_disponible) }}
-                                </option>
-                            </select>
-
-                            <button
-                                type="button"
-                                class="secondary-button whitespace-nowrap"
-                                @click="addSelectedRollo"
-                            >
-                                Agregar
-                            </button>
+                {{-- 2. ROLLOS --}}
+                <div class="mt-4 rounded border bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <p class="text-base font-semibold text-gray-800 dark:text-white">2. Rollos</p>
+                            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Elige los rollos a cortar. Deben ser del mismo tipo de tela; pueden ser de distintos colores y gramajes.</p>
                         </div>
+                        <input
+                            type="text"
+                            v-model="filtro"
+                            placeholder="Buscar por codigo, color o referencia..."
+                            class="w-72 rounded-md border px-3 py-2 text-sm max-sm:w-full dark:border-gray-800 dark:bg-gray-900 dark:text-white"
+                        />
                     </div>
 
-                    <input
-                        v-for="(rollo, index) in selectedRollos"
-                        type="hidden"
-                        :name="'rollo_ids[' + index + ']'"
-                        :value="rollo.id"
-                    />
+                    <p v-if="! rollosVisibles.length" class="text-sm text-gray-500 dark:text-gray-400">No hay rollos disponibles.</p>
 
-                    <x-admin::form.control-group.error control-name="rollo_ids" />
-                    <x-admin::form.control-group.error control-name="rollo_ids.0" />
+                    <div class="grid grid-cols-3 gap-3 max-xl:grid-cols-2 max-md:grid-cols-1">
+                        <label
+                            v-for="rollo in rollosVisibles"
+                            :key="rollo.id"
+                            class="flex cursor-pointer gap-3 rounded border p-3 text-sm dark:border-gray-800"
+                            :class="[rolloIds.includes(rollo.id) ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-gray-950', rolloDeshabilitado(rollo) ? '!cursor-not-allowed opacity-50' : '']"
+                        >
+                            <input type="checkbox" class="mt-1 h-4 w-4 shrink-0 accent-blue-600" :checked="rolloIds.includes(rollo.id)" :disabled="rolloDeshabilitado(rollo)" @change="toggleRollo(rollo)" />
+                            <span class="min-w-0 flex-1">
+                                <span class="flex items-start justify-between gap-2">
+                                    <span class="min-w-0 break-words font-semibold text-gray-800 dark:text-white">@{{ rollo.codigo }}</span>
+                                    <span class="shrink-0 text-base font-bold text-gray-900 dark:text-white">@{{ formatoKg(rollo.peso_disponible) }}</span>
+                                </span>
+                                <span class="mt-0.5 block text-gray-700 dark:text-gray-200">@{{ rollo.color }}</span>
+                                <span class="block text-xs text-gray-500 dark:text-gray-400">@{{ rollo.tipo_tela }}<template v-if="rollo.gramaje"> · @{{ rollo.gramaje }} g</template></span>
+                                <span class="mt-1 flex flex-wrap items-center justify-between gap-2">
+                                    <span class="min-w-0 break-words text-xs text-gray-500 dark:text-gray-400">@{{ rollo.proveedor }}<template v-if="rollo.referencia"> · @{{ rollo.referencia }}</template></span>
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">@{{ rollo.estado }}</span>
+                                </span>
+                                <span v-if="rollo.bloqueo" class="mt-1 block text-xs text-amber-600 dark:text-amber-400">@{{ rollo.bloqueo }}</span>
+                                <span v-else-if="rolloDeshabilitado(rollo)" class="mt-1 block text-xs text-amber-600 dark:text-amber-400">Otra tela: no se puede mezclar con la seleccionada.</span>
+                            </span>
+                        </label>
+                    </div>
 
-                    <p
-                        class="mb-3 text-sm font-semibold"
-                        :class="rolloWarningType === 'error' ? 'text-red-600' : 'text-amber-600'"
-                        v-if="rolloWarning"
-                    >
-                        @{{ rolloWarning }}
+                    <p class="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                        <strong>@{{ rolloIds.length }}</strong> rollo(s) seleccionado(s) · <strong>@{{ formatoKg(pesoSeleccionado) }}</strong>
                     </p>
+                </div>
 
-                    <div class="overflow-x-auto">
-                        <table class="w-full min-w-[900px] text-left text-sm">
-                            <thead class="border-b text-gray-600 dark:border-gray-800 dark:text-gray-300">
-                                <tr>
-                                    <th class="px-3 py-2">Codigo rollo</th>
-                                    <th class="px-3 py-2">Compra origen</th>
-                                    <th class="px-3 py-2">Tipo tela</th>
-                                    <th class="px-3 py-2">Color</th>
-                                    <th class="px-3 py-2">Referencia</th>
-                                    <th class="px-3 py-2">Gramaje</th>
-                                    <th class="px-3 py-2">Peso disponible</th>
-                                    <th class="px-3 py-2"></th>
-                                </tr>
-                            </thead>
+                {{-- Resumen de tela (compacto) --}}
+                <div v-if="rolloIds.length" class="mt-3 rounded border bg-gray-50 px-4 py-2.5 text-sm dark:border-gray-800 dark:bg-gray-950">
+                    <p v-if="cargando" class="text-gray-500 dark:text-gray-400">Cargando lineas y tallas disponibles...</p>
 
-                            <tbody>
-                                <tr
-                                    class="border-b last:border-b-0 dark:border-gray-800"
-                                    v-for="(rollo, index) in selectedRollos"
-                                    :key="rollo.id"
-                                >
-                                    <td class="px-3 py-2">@{{ rollo.codigo }}</td>
-                                    <td class="px-3 py-2">@{{ rollo.compra_origen }}</td>
-                                    <td class="px-3 py-2">@{{ rollo.tipo_tela }}</td>
-                                    <td class="px-3 py-2">@{{ rollo.color }}</td>
-                                    <td class="px-3 py-2">@{{ rollo.referencia }}</td>
-                                    <td class="px-3 py-2">@{{ rollo.gramaje }}</td>
-                                    <td class="px-3 py-2">@{{ formatKg(rollo.peso_disponible) }}</td>
-                                    <td class="px-3 py-2 text-right">
-                                        <button
-                                            type="button"
-                                            class="transparent-button"
-                                            @click="removeRollo(index)"
-                                        >
-                                            Quitar
-                                        </button>
-                                    </td>
-                                </tr>
-
-                                <tr v-if="! selectedRollos.length">
-                                    <td class="px-3 py-4 text-center text-gray-500" colspan="8">Sin rollos seleccionados</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div v-else-if="errorOpciones" class="rounded border border-red-300 bg-red-50 p-3 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+                        <p v-for="mensaje in errorOpciones">@{{ mensaje }}</p>
                     </div>
 
-                    <div class="mt-4 grid grid-cols-2 gap-4 max-md:grid-cols-1">
-                        <div class="rounded border p-3 dark:border-gray-800">
-                            <p class="text-sm text-gray-600 dark:text-gray-300">Cantidad rollos</p>
-                            <p class="text-lg font-semibold text-gray-800 dark:text-white">@{{ selectedRollos.length }}</p>
-                        </div>
-
-                        <div class="rounded border p-3 dark:border-gray-800">
-                            <p class="text-sm text-gray-600 dark:text-gray-300">Peso total disponible</p>
-                            <p class="text-lg font-semibold text-gray-800 dark:text-white">@{{ formatKg(pesoTotalDisponible) }}</p>
-                        </div>
+                    <div v-else-if="matriz" class="flex flex-wrap gap-x-8 gap-y-1">
+                        <p><span class="text-xs text-gray-500 dark:text-gray-400">Tipo de tela</span> <span class="ml-1 font-semibold text-gray-800 dark:text-white">@{{ matriz.tela.nombre }}</span></p>
+                        <p><span class="text-xs text-gray-500 dark:text-gray-400">Peso disponible</span> <span class="ml-1 font-semibold text-gray-800 dark:text-white">@{{ formatoKg(matriz.tela.peso_total) }}</span></p>
+                        <p><span class="text-xs text-gray-500 dark:text-gray-400">Colores de esta orden</span> <span class="ml-1 font-semibold text-gray-800 dark:text-white">@{{ matriz.colores.map((c) => c.label).join(', ') }}</span></p>
                     </div>
                 </div>
 
-                <div class="mt-6 rounded border p-4 dark:border-gray-800">
-                    <div class="mb-3 flex items-center justify-between gap-3">
-                        <p class="text-base font-semibold text-gray-800 dark:text-white">Productos a cortar</p>
+                {{-- 3. LINEAS --}}
+                <div v-if="matriz" class="mt-4 rounded border bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                    <p class="text-base font-semibold text-gray-800 dark:text-white">3. Lineas</p>
+                    <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Elige una o varias lineas a cortar con esta tela.</p>
 
-                        <button
-                            type="button"
-                            class="secondary-button"
-                            @click="addDetalle"
-                        >
-                            Agregar producto
+                    <p v-if="! matriz.lineas.length" class="mt-3 text-sm text-amber-600 dark:text-amber-400">No hay productos en el catalogo asociados a este tipo de tela.</p>
+
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <label v-for="linea in matriz.lineas" :key="linea.attribute_family_id" class="flex cursor-pointer items-center gap-2 rounded border px-3 py-1.5 text-sm dark:border-gray-800" :class="lineasElegidas.includes(linea.attribute_family_id) ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-gray-950'">
+                            <input type="checkbox" class="h-4 w-4 accent-blue-600" :checked="lineasElegidas.includes(linea.attribute_family_id)" @change="toggleLinea(linea)" />
+                            <span class="font-semibold text-gray-800 dark:text-white">@{{ linea.nombre }}</span>
+                        </label>
+                    </div>
+                </div>
+
+                {{-- 4. VARIANTES --}}
+                <div v-if="matriz && lineasSeleccionadas.length" class="mt-4 rounded border bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                    <p class="text-base font-semibold text-gray-800 dark:text-white">4. Variantes</p>
+                    <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Solo aparecen las tallas que existen en el catalogo para cada linea y color.</p>
+
+                    <details v-for="linea in lineasSeleccionadas" :key="'v' + linea.attribute_family_id" :open="lineasSeleccionadas.length === 1" class="mt-3 rounded border dark:border-gray-800">
+                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-950">
+                            <span class="min-w-0">
+                                <span class="block font-semibold text-gray-900 dark:text-white">@{{ linea.nombre }}</span>
+                                <span class="block text-xs text-gray-500 dark:text-gray-400">@{{ resumenLinea(linea) }}</span>
+                            </span>
+                            <svg class="h-4 w-4 shrink-0 text-gray-500 transition-transform [details[open]_&]:rotate-180" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
+                        </summary>
+
+                        <div class="border-t px-3 py-2 dark:border-gray-800">
+                            <div v-for="celda in linea.colores" :key="celda.color_option_id" class="border-b py-2 last:border-b-0 dark:border-gray-800">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">@{{ celda.color }}</p>
+                                    <div v-if="! celda.error && celda.opciones.length" class="flex gap-3 text-xs">
+                                        <button type="button" class="text-blue-600 hover:underline dark:text-blue-400" @click="marcarTodas(linea, celda, true)">Todas</button>
+                                        <span class="text-gray-300 dark:text-gray-700">|</span>
+                                        <button type="button" class="text-gray-500 hover:underline dark:text-gray-400" @click="marcarTodas(linea, celda, false)">Ninguna</button>
+                                    </div>
+                                </div>
+
+                                <p v-if="celda.error" class="mt-1 text-xs text-amber-600 dark:text-amber-400">No se puede cortar: @{{ celda.mensaje }}</p>
+
+                                <template v-else>
+                                    <div class="mt-1.5 flex flex-wrap gap-2">
+                                        <label v-for="opcion in celda.opciones" :key="opcion.option_id" class="flex min-w-[2.75rem] cursor-pointer items-center justify-center rounded border px-3 py-1 text-sm focus-within:ring-2 focus-within:ring-blue-300 dark:border-gray-700" :class="estaElegida(linea, celda, opcion) ? 'border-blue-500 bg-blue-50 font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200'">
+                                            <input type="checkbox" class="sr-only" :checked="estaElegida(linea, celda, opcion)" @change="toggleOpcion(linea, celda, opcion)" />
+                                            @{{ opcion.label }}
+                                        </label>
+                                    </div>
+                                    <p v-for="aviso in celda.advertencias" class="mt-1 text-xs text-amber-600 dark:text-amber-400">Inactivo en tienda — permitido para producción</p>
+                                </template>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                {{-- 5. REVISION --}}
+                <div v-if="matriz" class="mt-4 rounded border bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <p class="text-base font-semibold text-gray-800 dark:text-white">5. Revision</p>
+                            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                <template v-if="seleccionPlana.length"><strong>@{{ seleccionPlana.length }}</strong> variante(s) seleccionada(s). </template>
+                                Revisa los productos exactos que se van a cortar antes de crear la orden.
+                            </p>
+                        </div>
+                        <button type="button" class="secondary-button" :disabled="! seleccionPlana.length || revisando" @click="revisar">
+                            @{{ revisando ? 'Revisando...' : 'Revisar seleccion' }}
                         </button>
                     </div>
-
-                    <x-admin::form.control-group.error control-name="detalles" />
-
-                    <div class="overflow-x-auto">
-                        <table class="w-full min-w-[980px] text-left text-sm">
-                            <thead class="border-b text-gray-600 dark:border-gray-800 dark:text-gray-300">
-                                <tr>
-                                    <th class="px-3 py-2 min-w-[420px]">Producto Bagisto</th>
-                                    <th class="px-3 py-2">Cantidad cortada</th>
-                                    <th class="px-3 py-2">Observacion</th>
-                                    <th class="px-3 py-2"></th>
-                                </tr>
-                            </thead>
-
-                            <tbody>
-                                <tr
-                                    class="border-b align-top last:border-b-0 dark:border-gray-800"
-                                    v-for="(detalle, index) in detalles"
-                                    :key="detalle.key"
-                                >
-                                    <td class="px-3 py-2 min-w-[420px]">
-                                        <input
-                                            type="hidden"
-                                            :name="'detalles[' + index + '][product_id]'"
-                                            :value="detalle.product_id"
-                                        />
-
-                                        <div class="relative">
-                                            <input
-                                                type="text"
-                                                class="w-full rounded-md border px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-white"
-                                                placeholder="Buscar producto"
-                                                v-model="detalle.product_query"
-                                                @input="searchProducts(index)"
-                                                @focus="openProductResults(index)"
-                                            />
-
-                                            <template v-if="detalle.is_searching">
-                                                <img
-                                                    class="absolute top-2.5 h-5 w-5 animate-spin ltr:right-3 rtl:left-3"
-                                                    src="{{ bagisto_asset('images/spinner.svg') }}"
-                                                />
-                                            </template>
-
-                                            <template v-else>
-                                                <span class="icon-search pointer-events-none absolute top-1.5 flex items-center text-2xl ltr:right-3 rtl:left-3"></span>
-                                            </template>
-
-                                            <div
-                                                class="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-md border bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900"
-                                                v-if="detalle.show_results"
-                                            >
-                                                <button
-                                                    type="button"
-                                                    class="flex w-full flex-col gap-1 border-b px-3 py-2 text-left last:border-b-0 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-950"
-                                                    v-for="product in detalle.searched_products"
-                                                    :key="product.id"
-                                                    @click="selectProduct(index, product)"
-                                                >
-                                                    <span class="font-semibold text-gray-800 dark:text-white">@{{ product.name }}</span>
-                                                    <span class="text-xs text-gray-600 dark:text-gray-300">SKU: @{{ product.sku }}</span>
-                                                </button>
-
-                                                <div
-                                                    class="px-3 py-2 text-sm text-gray-500"
-                                                    v-if="! detalle.searched_products.length && detalle.product_query.length > 1 && ! detalle.is_searching"
-                                                >
-                                                    Sin productos encontrados
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    <td class="px-3 py-2">
-                                        <input
-                                            v-if="canEditCantidadCortada"
-                                            type="number"
-                                            min="0"
-                                            class="w-full rounded-md border px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-white"
-                                            :name="'detalles[' + index + '][cantidad_cortada]'"
-                                            v-model="detalle.cantidad_cortada"
-                                        />
-
-                                        <div
-                                            v-else
-                                            class="min-h-10 rounded-md border bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300"
-                                        >
-                                            @{{ detalle.cantidad_cortada || 0 }}
-                                        </div>
-                                    </td>
-
-                                    <td class="px-3 py-2">
-                                        <input
-                                            class="w-full rounded-md border px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-white"
-                                            :name="'detalles[' + index + '][observacion]'"
-                                            v-model="detalle.observacion"
-                                        />
-                                    </td>
-
-                                    <td class="px-3 py-2 text-right">
-                                        <button
-                                            type="button"
-                                            class="transparent-button"
-                                            @click="removeDetalle(index)"
-                                        >
-                                            Quitar
-                                        </button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
                 </div>
 
-                <div class="mt-6 rounded border p-4 dark:border-gray-800">
-                    <p class="mb-3 text-base font-semibold text-gray-800 dark:text-white">Cierre de corte</p>
-
-                    <div class="grid grid-cols-2 gap-4 max-md:grid-cols-1">
-                        <div class="mb-4">
-                            <label class="mb-1.5 flex gap-1 text-xs font-medium text-gray-800 dark:text-white">
-                                Peso sobrante
-                            </label>
-
-                            <input
-                                type="number"
-                                step="0.001"
-                                name="peso_sobrante_total"
-                                class="w-full rounded-md border px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-white"
-                                v-model="pesoSobrante"
-                            />
-
-                            <x-admin::form.control-group.error control-name="peso_sobrante_total" />
+                {{-- MODAL DE REVISION: ultimo paso antes de crear --}}
+                <div v-if="modalAbierta && preview" class="fixed inset-0 z-[10010] flex items-center justify-center bg-gray-900/50 p-4 max-sm:p-2" @click.self="cerrarModal(false)">
+                    <div class="flex max-h-full w-full max-w-4xl flex-col rounded-lg border bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="revision-orden-titulo">
+                        <div class="shrink-0 border-b px-5 py-4 max-sm:px-4 dark:border-gray-800">
+                            <p id="revision-orden-titulo" class="text-lg font-bold text-gray-800 dark:text-white">Revisar selección</p>
+                            <p class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">Confirma que los productos seleccionados sean correctos antes de crear la orden de corte.</p>
                         </div>
 
-                        <div class="mb-4">
-                            <label class="mb-1.5 flex gap-1 text-xs font-medium text-gray-800 dark:text-white">
-                                Merma
-                            </label>
+                        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4 max-sm:px-4">
+                            <div v-if="faltantes.length" class="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                                <p class="font-semibold">Falta información para crear la orden:</p>
+                                <ul class="mt-1 list-disc pl-5"><li v-for="falta in faltantes">@{{ falta }}</li></ul>
+                            </div>
 
-                            <input
-                                type="number"
-                                step="0.001"
-                                name="merma_total"
-                                class="w-full rounded-md border px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-white"
-                                v-model="merma"
-                            />
+                            <div v-if="preview.errores.length" class="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                                <p class="font-semibold">Hay combinaciones que no se pueden cortar:</p>
+                                <ul class="mt-1 list-disc pl-5"><li v-for="error in preview.errores">@{{ error }}</li></ul>
+                            </div>
 
-                            <x-admin::form.control-group.error control-name="merma_total" />
+                            {{-- Indicadores --}}
+                            <div class="grid grid-cols-4 gap-3 max-md:grid-cols-2">
+                                <div class="rounded border p-3 dark:border-gray-800">
+                                    <p class="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">Rollos seleccionados</p>
+                                    <p class="mt-1 text-xl font-bold text-gray-800 dark:text-white">@{{ rollosSeleccionados.length }}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">@{{ formatoKg(pesoSeleccionado) }}</p>
+                                </div>
+                                <div class="rounded border p-3 dark:border-gray-800">
+                                    <p class="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">Líneas</p>
+                                    <p class="mt-1 text-xl font-bold text-gray-800 dark:text-white">@{{ previewAgrupado.length }}</p>
+                                </div>
+                                <div class="rounded border p-3 dark:border-gray-800">
+                                    <p class="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">Colores</p>
+                                    <p class="mt-1 text-xl font-bold text-gray-800 dark:text-white">@{{ coloresPreview.length }}</p>
+                                    <p class="break-words text-xs text-gray-500 dark:text-gray-400">@{{ coloresPreview.join(', ') }}</p>
+                                </div>
+                                <div class="rounded border p-3 dark:border-gray-800">
+                                    <p class="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">Variantes</p>
+                                    <p class="mt-1 text-xl font-bold text-gray-800 dark:text-white">@{{ preview.filas.length }}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">tallas seleccionadas</p>
+                                </div>
+                            </div>
+
+                            {{-- Rollos --}}
+                            <p class="mb-2 mt-5 text-sm font-semibold text-gray-800 dark:text-white">Rollos seleccionados</p>
+                            <div class="rounded border dark:border-gray-800">
+                                <table class="w-full text-sm max-md:hidden">
+                                    <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-950 dark:text-gray-400">
+                                        <tr><th class="px-3 py-2 font-semibold">Código</th><th class="px-3 py-2 font-semibold">Color</th><th class="px-3 py-2 font-semibold">Tipo de tela</th><th class="px-3 py-2 font-semibold">Gramaje</th><th class="px-3 py-2 text-right font-semibold">Peso disponible</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="rollo in rollosSeleccionados" :key="'rm' + rollo.id" class="border-t dark:border-gray-800">
+                                            <td class="px-3 py-2 font-medium text-gray-800 dark:text-white">@{{ rollo.codigo }}</td>
+                                            <td class="px-3 py-2">@{{ rollo.color }}</td>
+                                            <td class="px-3 py-2">@{{ rollo.tipo_tela }}</td>
+                                            <td class="px-3 py-2">@{{ rollo.gramaje ? rollo.gramaje + ' g' : '—' }}</td>
+                                            <td class="px-3 py-2 text-right font-semibold text-gray-800 dark:text-white">@{{ formatoKg(rollo.peso_disponible) }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <ul class="md:hidden">
+                                    <li v-for="rollo in rollosSeleccionados" :key="'rl' + rollo.id" class="border-b px-3 py-2 text-sm last:border-b-0 dark:border-gray-800">
+                                        <p class="break-words font-medium text-gray-800 dark:text-white">@{{ rollo.codigo }}</p>
+                                        <p class="text-gray-600 dark:text-gray-300">@{{ rollo.color }} · @{{ rollo.tipo_tela }}<template v-if="rollo.gramaje"> · @{{ rollo.gramaje }} g</template></p>
+                                        <p class="font-semibold text-gray-800 dark:text-white">@{{ formatoKg(rollo.peso_disponible) }}</p>
+                                    </li>
+                                </ul>
+                            </div>
+                            <p class="mt-2 text-right text-sm font-semibold text-gray-800 dark:text-white">Total de tela seleccionada: @{{ formatoKg(pesoSeleccionado) }}</p>
+
+                            {{-- Lineas --}}
+                            <p class="mb-2 mt-4 text-sm font-semibold text-gray-800 dark:text-white">Líneas seleccionadas</p>
+                            <div class="flex flex-wrap gap-2">
+                                <span v-for="grupo in previewAgrupado" :key="'lc' + grupo.linea" class="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">@{{ grupo.linea }}</span>
+                            </div>
+
+                            {{-- Variantes a cortar: consolidado visual por linea (tallas unicas; la seleccion real no cambia) --}}
+                            <p class="mb-2 mt-5 text-sm font-semibold text-gray-800 dark:text-white">Variantes a cortar</p>
+                            <div class="space-y-2">
+                                <div v-for="grupo in tallasPorLinea" :key="'tl' + grupo.linea" class="rounded border px-3 py-2.5 dark:border-gray-800">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <p class="min-w-0 break-words font-semibold text-gray-800 dark:text-white">@{{ grupo.linea }}</p>
+                                        <span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">@{{ grupo.tallas.length }} @{{ grupo.tallas.length === 1 ? 'talla' : 'tallas' }}</span>
+                                    </div>
+                                    <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">Tallas incluidas</p>
+                                    <div class="mt-1 flex flex-wrap gap-2">
+                                        <span v-for="talla in grupo.tallas" :key="talla" class="rounded border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-sm font-medium text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">@{{ talla }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="mt-2 text-sm font-semibold text-gray-800 dark:text-white">@{{ tallasPorLinea.length }} @{{ tallasPorLinea.length === 1 ? 'línea' : 'líneas' }} · @{{ totalTallasConsolidadas }} @{{ totalTallasConsolidadas === 1 ? 'talla consolidada' : 'tallas consolidadas' }}</p>
                         </div>
-                    </div>
 
-                    <div class="mt-4 grid grid-cols-3 gap-4 max-md:grid-cols-1">
-                        <div class="rounded border p-3 dark:border-gray-800">
-                            <p class="text-sm text-gray-600 dark:text-gray-300">Peso consumido calculado</p>
-                            <p class="text-lg font-semibold text-gray-800 dark:text-white">@{{ formatKg(pesoConsumido) }}</p>
+                        <div class="flex shrink-0 items-center justify-between gap-3 border-t px-5 py-3 max-sm:px-4 dark:border-gray-800">
+                            <button type="button" class="secondary-button max-sm:flex-1" :disabled="enviando" @click="cerrarModal(true)">Volver a editar</button>
+                            <button type="button" class="primary-button max-sm:flex-1" :disabled="! puedeConfirmar || enviando" @click="confirmarCrear">
+                                @{{ enviando ? 'Creando orden...' : 'Crear orden de corte' }}
+                            </button>
                         </div>
-
-                        <div class="rounded border p-3 dark:border-gray-800">
-                            <p class="text-sm text-gray-600 dark:text-gray-300">Total piezas cortadas</p>
-                            <p class="text-lg font-semibold text-gray-800 dark:text-white">@{{ totalPiezas }}</p>
-                        </div>
-
-                        <div class="rounded border p-3 dark:border-gray-800">
-                            <p class="text-sm text-gray-600 dark:text-gray-300">Peso promedio por pieza</p>
-                            <p class="text-lg font-semibold text-gray-800 dark:text-white">@{{ formatKg(pesoPromedio, 6) }}</p>
-                        </div>
-                    </div>
-
-                    <div class="mt-4 rounded border dark:border-gray-800">
-                        <div
-                            class="grid grid-cols-3 gap-3 border-b p-3 text-sm last:border-b-0 dark:border-gray-800 max-md:grid-cols-1"
-                            v-for="resumen in resumenPorProducto"
-                            :key="resumen.producto"
-                        >
-                            <span>@{{ resumen.producto }}</span>
-                            <span>@{{ resumen.piezas }} piezas</span>
-                            <span>@{{ formatKg(pesoPromedio, 6) }} aprox. por pieza</span>
-                        </div>
-
-                        <div class="p-3 text-sm text-gray-500" v-if="! resumenPorProducto.length">Sin cantidades reales</div>
                     </div>
                 </div>
             </div>
@@ -407,243 +338,358 @@
                 template: '#v-orden-corte-form-template',
 
                 props: {
-                    rollos: {
-                        type: Array,
-                        default: () => [],
-                    },
-
-                    oldRolloIds: {
-                        type: Array,
-                        default: () => [],
-                    },
-
-                    oldDetalles: {
-                        type: Array,
-                        default: () => [],
-                    },
-
-                    productSearchUrl: {
-                        type: String,
-                        required: true,
-                    },
-
-                    canEditCantidadCortada: {
-                        type: Boolean,
-                        default: false,
-                    },
+                    rollos: { type: Array, default: () => [] },
+                    oldRolloIds: { type: Array, default: () => [] },
+                    oldSeleccion: { type: Array, default: () => [] },
+                    opcionesUrl: { type: String, required: true },
+                    previsualizarUrl: { type: String, required: true },
                 },
 
                 data() {
                     return {
-                        rolloPickerId: '',
-                        catalogRollos: [...this.rollos],
-                        selectedRollos: [],
-                        rolloWarning: '',
-                        rolloWarningType: 'warning',
-                        pesoSobrante: @json(old('peso_sobrante_total', '')),
-                        merma: @json(old('merma_total', '')),
-                        searchTimers: {},
-                        detalles: this.prepareDetalles(this.oldDetalles),
+                        rolloIds: this.oldRolloIds.slice(),
+                        filtro: '',
+                        matriz: null,
+                        cargando: false,
+                        errorOpciones: null,
+                        lineasElegidas: [],
+                        elegidas: {},
+                        preview: null,
+                        previewVigente: false,
+                        revisando: false,
+                        modalAbierta: false,
+                        enviando: false,
+                        faltantes: [],
+                        temporizador: null,
+                        oldPendiente: this.oldSeleccion.slice(),
                     };
                 },
 
                 computed: {
-                    availableRollos() {
-                        return this.catalogRollos.filter((rollo) => ! this.selectedRollos.some((selected) => Number(selected.id) === Number(rollo.id)));
+                    rollosSeleccionados() {
+                        return this.rollos.filter((r) => this.rolloIds.includes(r.id));
                     },
 
-                    pesoTotalDisponible() {
-                        return this.selectedRollos.reduce((total, rollo) => total + Number(rollo.peso_disponible || 0), 0);
+                    tipoTelaElegida() {
+                        return this.rollosSeleccionados.length ? this.rollosSeleccionados[0].tipo_tela_id : null;
                     },
 
-                    pesoConsumido() {
-                        return Math.max(this.pesoTotalDisponible - (Number.parseFloat(this.pesoSobrante) || 0) - (Number.parseFloat(this.merma) || 0), 0);
+                    pesoSeleccionado() {
+                        return this.rollosSeleccionados.reduce((total, r) => total + Number(r.peso_disponible || 0), 0);
                     },
 
-                    totalPiezas() {
-                        return this.detalles.reduce((total, detalle) => total + (Number.parseInt(detalle.cantidad_cortada, 10) || 0), 0);
+                    rollosVisibles() {
+                        let texto = this.filtro.trim().toLowerCase();
+
+                        if (! texto) {
+                            return this.rollos;
+                        }
+
+                        return this.rollos.filter((r) => [r.codigo, r.color, r.referencia, r.proveedor, r.tipo_tela].join(' ').toLowerCase().includes(texto));
                     },
 
-                    pesoPromedio() {
-                        return this.totalPiezas > 0 ? this.pesoConsumido / this.totalPiezas : 0;
+                    lineasSeleccionadas() {
+                        return this.matriz ? this.matriz.lineas.filter((l) => this.lineasElegidas.includes(l.attribute_family_id)) : [];
                     },
 
-                    resumenPorProducto() {
-                        let grouped = {};
+                    seleccionPlana() {
+                        return Object.values(this.elegidas).filter((f) => this.lineasElegidas.includes(f.attribute_family_id));
+                    },
 
-                        this.detalles.forEach((detalle) => {
-                            let producto = detalle.selected_product_label || detalle.product_query || 'Sin producto';
+                    previewAgrupado() {
+                        if (! this.preview) {
+                            return [];
+                        }
 
-                            grouped[producto] = (grouped[producto] || 0) + (Number.parseInt(detalle.cantidad_cortada, 10) || 0);
+                        let grupos = {};
+
+                        this.preview.filas.forEach((fila) => {
+                            grupos[fila.linea] = grupos[fila.linea] || { linea: fila.linea, filas: [] };
+                            grupos[fila.linea].filas.push(fila);
                         });
 
-                        return Object.keys(grouped)
-                            .filter((producto) => grouped[producto] > 0)
-                            .map((producto) => ({
-                                producto,
-                                piezas: grouped[producto],
-                            }));
+                        return Object.values(grupos);
                     },
-                },
 
-                mounted() {
-                    this.oldRolloIds.forEach((rolloId) => this.addRolloById(rolloId));
-                },
+                    puedeCrear() {
+                        return Boolean(this.preview) && this.previewVigente && this.preview.errores.length === 0 && this.preview.filas.length > 0;
+                    },
 
-                methods: {
-                    prepareDetalles(detalles) {
-                        let rows = detalles.length ? detalles : [{}];
+                    puedeConfirmar() {
+                        return this.puedeCrear && this.faltantes.length === 0;
+                    },
 
-                        return rows.map((detalle, index) => ({
-                            key: `${Date.now()}-${index}-${Math.random()}`,
-                            product_id: detalle.product_id || '',
-                            product_query: detalle.product_label || '',
-                            selected_product_label: detalle.product_label || '',
-                            cantidad_cortada: detalle.cantidad_cortada || detalle.cantidad_real_cortada || '',
-                            observacion: detalle.observacion || '',
-                            searched_products: [],
-                            show_results: false,
-                            is_searching: false,
+                    filasPreview() {
+                        return this.previewAgrupado.flatMap((grupo) => grupo.filas);
+                    },
+
+                    coloresPreview() {
+                        return [...new Set(this.filasPreview.map((fila) => fila.color))];
+                    },
+
+                    // Solo presentacion: cada talla una vez por linea. La seleccion enviada sigue siendo seleccionPlana.
+                    tallasPorLinea() {
+                        return this.previewAgrupado.map((grupo) => ({
+                            linea: grupo.linea,
+                            tallas: [...new Set(grupo.filas.map((fila) => fila.talla))],
                         }));
                     },
 
-                    addSelectedRollo() {
-                        if (! this.rolloPickerId) {
-                            this.rolloWarning = 'Seleccione un rollo disponible antes de agregar.';
-                            this.rolloWarningType = 'warning';
+                    totalTallasConsolidadas() {
+                        return this.tallasPorLinea.reduce((total, grupo) => total + grupo.tallas.length, 0);
+                    },
+                },
 
-                            return;
-                        }
-
-                        this.addRolloById(this.rolloPickerId);
-                        this.rolloPickerId = '';
+                watch: {
+                    rolloIds() {
+                        this.invalidarRevision();
+                        clearTimeout(this.temporizador);
+                        this.temporizador = setTimeout(() => this.cargarOpciones(), 250);
                     },
 
-                    addRolloById(rolloId) {
-                        let rollo = this.catalogRollos.find((item) => Number(item.id) === Number(rolloId));
+                    lineasElegidas() { this.invalidarRevision(); },
+                    elegidas: { deep: true, handler() { this.invalidarRevision(); } },
+                },
 
-                        if (! rollo || this.selectedRollos.some((selected) => Number(selected.id) === Number(rollo.id))) {
-                            return;
-                        }
+                mounted() {
+                    if (this.rolloIds.length) {
+                        this.cargarOpciones();
+                    }
 
-                        if (! this.compatibleWithSelection(rollo)) {
-                            this.rolloWarning = 'No se pueden mezclar rollos con diferente tipo de tela, color o gramaje.';
-                            this.rolloWarningType = 'error';
+                    document.addEventListener('keydown', this.alPulsarTecla);
+                    window.addEventListener('pageshow', this.alMostrarPagina);
+                },
 
-                            return;
-                        }
+                beforeUnmount() {
+                    document.removeEventListener('keydown', this.alPulsarTecla);
+                    window.removeEventListener('pageshow', this.alMostrarPagina);
+                    document.body.style.overflow = '';
+                },
 
-                        if (
-                            this.selectedRollos.length
-                            && this.normalize(this.selectedRollos[0].referencia) !== this.normalize(rollo.referencia)
-                        ) {
-                            this.rolloWarning = 'Referencia diferente entre rollos seleccionados.';
-                            this.rolloWarningType = 'warning';
-                        } else {
-                            this.rolloWarning = '';
-                        }
-
-                        this.selectedRollos.push(rollo);
+                methods: {
+                    formatoKg(valor) {
+                        return Number(valor || 0).toLocaleString('es-CO', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + ' kg';
                     },
 
-                    rolloLabel(rollo) {
-                        return `${rollo.codigo} - ${rollo.tipo_tela} - ${rollo.color} - ${rollo.referencia} - ${this.formatKg(rollo.peso_disponible)}`;
+                    invalidarRevision() {
+                        this.previewVigente = false;
                     },
 
-                    removeRollo(index) {
-                        this.selectedRollos.splice(index, 1);
-                        this.rolloWarning = '';
-                    },
-
-                    compatibleWithSelection(rollo) {
-                        if (! this.selectedRollos.length) {
+                    rolloDeshabilitado(rollo) {
+                        if (rollo.bloqueo) {
                             return true;
                         }
 
-                        let base = this.selectedRollos[0];
-
-                        return String(base.tipo_tela_id ?? '') === String(rollo.tipo_tela_id ?? '')
-                            && this.normalize(base.color) === this.normalize(rollo.color)
-                            && this.normalize(base.gramaje) === this.normalize(rollo.gramaje);
+                        return ! this.rolloIds.includes(rollo.id) && this.tipoTelaElegida !== null && rollo.tipo_tela_id !== this.tipoTelaElegida;
                     },
 
-                    addDetalle() {
-                        this.detalles.push(this.prepareDetalles([{}])[0]);
+                    toggleRollo(rollo) {
+                        this.rolloIds = this.rolloIds.includes(rollo.id)
+                            ? this.rolloIds.filter((id) => id !== rollo.id)
+                            : [...this.rolloIds, rollo.id];
                     },
 
-                    removeDetalle(index) {
-                        this.detalles.splice(index, 1);
+                    mensajesDeError(error) {
+                        let errores = error.response?.data?.errors;
 
-                        if (! this.detalles.length) {
-                            this.addDetalle();
-                        }
-                    },
-
-                    openProductResults(index) {
-                        let detalle = this.detalles[index];
-
-                        if (detalle.searched_products.length) {
-                            detalle.show_results = true;
-                        }
-                    },
-
-                    searchProducts(index) {
-                        let detalle = this.detalles[index];
-
-                        if (detalle.product_query !== detalle.selected_product_label) {
-                            detalle.product_id = '';
+                        if (errores) {
+                            return Object.values(errores).flat();
                         }
 
-                        clearTimeout(this.searchTimers[index]);
+                        return [error.response?.data?.message || 'No se pudieron cargar las opciones.'];
+                    },
 
-                        this.searchTimers[index] = setTimeout(() => {
-                            if ((detalle.product_query || '').length <= 1) {
-                                detalle.searched_products = [];
-                                detalle.show_results = false;
+                    cargarOpciones() {
+                        this.matriz = null;
+                        this.errorOpciones = null;
+                        this.preview = null;
 
-                                return;
+                        if (! this.rolloIds.length) {
+                            this.lineasElegidas = [];
+                            this.elegidas = {};
+
+                            return;
+                        }
+
+                        this.cargando = true;
+
+                        this.$axios.get(this.opcionesUrl, { params: { rollo_ids: this.rolloIds } })
+                            .then((respuesta) => {
+                                this.matriz = respuesta.data.data;
+                                this.depurarSeleccion();
+                                this.aplicarOld();
+                            })
+                            .catch((error) => { this.errorOpciones = this.mensajesDeError(error); })
+                            .finally(() => { this.cargando = false; });
+                    },
+
+                    // Tras cambiar los rollos, solo sobreviven las combinaciones que siguen siendo validas.
+                    depurarSeleccion() {
+                        let validas = {};
+                        let lineas = [];
+
+                        this.matriz.lineas.forEach((linea) => {
+                            linea.colores.forEach((celda) => {
+                                celda.opciones.forEach((opcion) => {
+                                    let clave = this.clave(linea.attribute_family_id, celda.color_option_id, opcion.option_id);
+
+                                    if (this.elegidas[clave]) {
+                                        validas[clave] = this.elegidas[clave];
+                                    }
+                                });
+                            });
+
+                            if (this.lineasElegidas.includes(linea.attribute_family_id)) {
+                                lineas.push(linea.attribute_family_id);
+                            }
+                        });
+
+                        this.elegidas = validas;
+                        this.lineasElegidas = lineas;
+                    },
+
+                    // Si el envio anterior fallo, se restaura la seleccion que habia.
+                    aplicarOld() {
+                        if (! this.oldPendiente.length) {
+                            return;
+                        }
+
+                        this.oldPendiente.forEach((fila) => {
+                            let familia = Number(fila.attribute_family_id);
+
+                            if (! this.lineasElegidas.includes(familia)) {
+                                this.lineasElegidas.push(familia);
                             }
 
-                            detalle.is_searching = true;
-                            detalle.show_results = true;
+                            let clave = this.clave(familia, Number(fila.color_option_id), Number(fila.eje_option_id));
+                            this.elegidas[clave] = { attribute_family_id: familia, color_option_id: Number(fila.color_option_id), eje_option_id: Number(fila.eje_option_id) };
+                        });
 
-                            this.$axios.get(this.productSearchUrl, {
-                                params: {
-                                    query: detalle.product_query,
-                                },
+                        this.oldPendiente = [];
+                    },
+
+                    clave(familia, color, eje) {
+                        return familia + '|' + color + '|' + eje;
+                    },
+
+                    toggleLinea(linea) {
+                        this.lineasElegidas = this.lineasElegidas.includes(linea.attribute_family_id)
+                            ? this.lineasElegidas.filter((id) => id !== linea.attribute_family_id)
+                            : [...this.lineasElegidas, linea.attribute_family_id];
+                    },
+
+                    estaElegida(linea, celda, opcion) {
+                        return Boolean(this.elegidas[this.clave(linea.attribute_family_id, celda.color_option_id, opcion.option_id)]);
+                    },
+
+                    toggleOpcion(linea, celda, opcion) {
+                        let clave = this.clave(linea.attribute_family_id, celda.color_option_id, opcion.option_id);
+                        let siguientes = { ...this.elegidas };
+
+                        if (siguientes[clave]) {
+                            delete siguientes[clave];
+                        } else {
+                            siguientes[clave] = { attribute_family_id: linea.attribute_family_id, color_option_id: celda.color_option_id, eje_option_id: opcion.option_id };
+                        }
+
+                        this.elegidas = siguientes;
+                    },
+
+                    marcarTodas(linea, celda, marcar) {
+                        let siguientes = { ...this.elegidas };
+
+                        celda.opciones.forEach((opcion) => {
+                            let clave = this.clave(linea.attribute_family_id, celda.color_option_id, opcion.option_id);
+
+                            if (marcar) {
+                                siguientes[clave] = { attribute_family_id: linea.attribute_family_id, color_option_id: celda.color_option_id, eje_option_id: opcion.option_id };
+                            } else {
+                                delete siguientes[clave];
+                            }
+                        });
+
+                        this.elegidas = siguientes;
+                    },
+
+                    contarLinea(linea) {
+                        return this.seleccionPlana.filter((f) => f.attribute_family_id === linea.attribute_family_id).length;
+                    },
+
+                    // "3 colores · 7 tallas seleccionadas" (tallas = variantes marcadas de la linea).
+                    resumenLinea(linea) {
+                        let elegidas = this.seleccionPlana.filter((f) => f.attribute_family_id === linea.attribute_family_id);
+                        let colores = new Set(elegidas.map((f) => f.color_option_id)).size;
+
+                        return colores + (colores === 1 ? ' color' : ' colores') + ' · ' + elegidas.length + (elegidas.length === 1 ? ' talla seleccionada' : ' tallas seleccionadas');
+                    },
+
+                    // Datos del formulario que el servidor exige pero que viven fuera de este componente.
+                    calcularFaltantes() {
+                        let cortador = document.querySelector('input[name="cortador_id"]');
+
+                        return cortador && cortador.value ? [] : ['Selecciona el cortador en "Datos de la orden".'];
+                    },
+
+                    revisar() {
+                        this.revisando = true;
+
+                        this.$axios.post(this.previsualizarUrl, { rollo_ids: this.rolloIds, seleccion: this.seleccionPlana })
+                            .then((respuesta) => {
+                                this.preview = respuesta.data.data;
+                                this.previewVigente = true;
                             })
-                                .then((response) => {
-                                    detalle.searched_products = response.data.data || [];
-                                    detalle.is_searching = false;
-                                })
-                                .catch(() => {
-                                    detalle.searched_products = [];
-                                    detalle.is_searching = false;
-                                });
-                        }, 500);
+                            .catch((error) => {
+                                this.preview = { filas: [], errores: this.mensajesDeError(error) };
+                                this.previewVigente = true;
+                            })
+                            .finally(() => {
+                                this.revisando = false;
+                                this.faltantes = this.calcularFaltantes();
+                                this.modalAbierta = true;
+                                document.body.style.overflow = 'hidden';
+                            });
                     },
 
-                    selectProduct(index, product) {
-                        let detalle = this.detalles[index];
-                        let label = `${product.sku} - ${product.name}`;
+                    cerrarModal(irAFaltante) {
+                        if (this.enviando) {
+                            return;
+                        }
 
-                        detalle.product_id = product.id;
-                        detalle.product_query = label;
-                        detalle.selected_product_label = label;
-                        detalle.searched_products = [];
-                        detalle.show_results = false;
+                        this.modalAbierta = false;
+                        document.body.style.overflow = '';
+
+                        if (irAFaltante === true && this.faltantes.length) {
+                            let cortador = document.querySelector('input[name="cortador_id"]');
+                            let campo = cortador ? cortador.parentElement.querySelector('input[type="text"]') : null;
+
+                            if (campo) {
+                                campo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                campo.focus();
+                            }
+                        }
                     },
 
-                    normalize(value) {
-                        return String(value ?? '').trim().toLowerCase();
+                    // Mismo submit nativo de siempre; el modal solo lo dispara una vez.
+                    confirmarCrear() {
+                        this.faltantes = this.calcularFaltantes();
+
+                        if (this.enviando || ! this.puedeConfirmar) {
+                            return;
+                        }
+
+                        this.enviando = true;
+                        this.$el.closest('form').requestSubmit();
                     },
 
-                    formatNumber(value, decimals = 3) {
-                        return Number(value || 0).toFixed(decimals);
+                    alPulsarTecla(evento) {
+                        if (evento.key === 'Escape' && this.modalAbierta) {
+                            this.cerrarModal(false);
+                        }
                     },
 
-                    formatKg(value, decimals = 3) {
-                        return `${this.formatNumber(value, decimals)} kg`;
+                    // Al volver con "atras" la pagina puede restaurarse con el boton bloqueado.
+                    alMostrarPagina() {
+                        this.enviando = false;
                     },
                 },
             });

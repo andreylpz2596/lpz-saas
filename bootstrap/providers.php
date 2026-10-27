@@ -1,6 +1,8 @@
 <?php
 
 use App\Providers\AppServiceProvider;
+use ByLopez\Cargues\Providers\CarguesServiceProvider;
+use ByLopez\CorteConfeccion\Providers\CorteConfeccionServiceProvider;
 use ByLopez\Logistica\Providers\LogisticaServiceProvider;
 use ByLopez\VentasAsesor\Providers\VentasAsesorServiceProvider;
 use Webkul\Admin\Providers\AdminServiceProvider;
@@ -56,6 +58,8 @@ return [
      */
     AdminServiceProvider::class,
     AttributeServiceProvider::class,
+    CarguesServiceProvider::class,
+    CorteConfeccionServiceProvider::class,
     LogisticaServiceProvider::class,
     VentasAsesorServiceProvider::class,
     BookingProductServiceProvider::class,
@@ -97,4 +101,5 @@ return [
     TaxServiceProvider::class,
     ThemeServiceProvider::class,
     UserServiceProvider::class,
+
 ];

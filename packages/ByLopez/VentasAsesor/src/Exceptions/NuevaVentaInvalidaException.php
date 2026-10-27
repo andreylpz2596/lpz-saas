@@ -28,6 +28,9 @@ class NuevaVentaInvalidaException extends RuntimeException
     /** El cliente no tiene direccion predeterminada ni se indico una: hace falta una real (D-30). */
     public const DIRECCION_FACTURACION_REQUERIDA = 'direccion_facturacion_requerida';
 
+    /** Cierre F1 (D1): el domiciliario elegido no esta entre los que Logistica permite elegir (inactivo, otra clase...). */
+    public const DOMICILIARIO_NO_VALIDO = 'domiciliario_no_valido';
+
     public function __construct(
         public readonly string $codigo,
         public readonly ?int $varianteId = null,

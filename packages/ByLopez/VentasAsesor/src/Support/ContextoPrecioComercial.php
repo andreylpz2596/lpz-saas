@@ -3,9 +3,11 @@
 namespace ByLopez\VentasAsesor\Support;
 
 use ByLopez\VentasAsesor\Exceptions\ContextoPrecioComercialInvalidoException;
+use ByLopez\VentasAsesor\Models\BorradorVenta;
 use Closure;
 use Webkul\Checkout\Models\CartProxy;
 use Webkul\Customer\Contracts\CustomerGroup;
+use Webkul\Customer\Models\CustomerGroupProxy;
 use Webkul\Customer\Models\CustomerProxy;
 
 /**
@@ -218,12 +220,53 @@ class ContextoPrecioComercial
         return new MarcoCreacionDeCarrito($customerId);
     }
 
-    /** Grupo ACTUAL del cliente; sin grupo (o grupo borrado), el invitado, como el core. */
+    /**
+     * Grupo de la operacion. Con carrito (contexto normal) manda el GRUPO EFECTIVO de la venta (GRP-01: override temporal
+     * guardado en su borrador); si no hay override, el grupo ACTUAL del cliente; sin grupo (o grupo borrado), el
+     * invitado, como el core. El cliente real nunca se modifica.
+     */
     protected function resolverGrupo(MarcoDePrecio $marco): CustomerGroup
     {
         $cliente = $this->exigirCliente($marco->customerId);
 
+        if ($marco instanceof MarcoPrecioComercial && ($override = $this->grupoOverrideDeLaVenta($marco)) !== null) {
+            return $override;
+        }
+
         return $cliente->group ?? core()->getGuestCustomerGroup();
+    }
+
+    /**
+     * Override de grupo de la venta (borrador) de ESTE carrito, o null si no hay. Fail closed: un override aplicado para
+     * otro cliente, o a un grupo que ya no existe, jamas se degrada al grupo del cliente (precio equivocado en silencio).
+     */
+    protected function grupoOverrideDeLaVenta(MarcoPrecioComercial $marco): ?CustomerGroup
+    {
+        $borrador = BorradorVenta::query()
+            ->where('cart_id', $marco->cartId)
+            ->first(['id', 'grupo_override', 'grupo_efectivo_id', 'grupo_override_customer_id']);
+
+        if (! $borrador || ! $borrador->grupo_override) {
+            return null;
+        }
+
+        if ($borrador->grupo_override_customer_id !== $marco->customerId) {
+            throw new ContextoPrecioComercialInvalidoException(
+                ContextoPrecioComercialInvalidoException::OVERRIDE_DE_OTRO_CLIENTE,
+                "El override de grupo de la venta {$borrador->id} no pertenece al cliente {$marco->customerId}.",
+            );
+        }
+
+        $grupo = $borrador->grupo_efectivo_id === null ? null : CustomerGroupProxy::modelClass()::query()->find($borrador->grupo_efectivo_id);
+
+        if (! $grupo) {
+            throw new ContextoPrecioComercialInvalidoException(
+                ContextoPrecioComercialInvalidoException::GRUPO_OVERRIDE_INEXISTENTE,
+                "El grupo del override de la venta {$borrador->id} ya no existe.",
+            );
+        }
+
+        return $grupo;
     }
 
     protected function exigirCliente(int $customerId): object

@@ -15,6 +15,7 @@ class ProveedorTelaReferencia extends Model
         'proveedor_tela_id',
         'tipo_tela_id',
         'color',
+        'color_option_id',
         'referencia',
         'gramaje',
         'valor_kilo_referencia',
@@ -33,6 +34,19 @@ class ProveedorTelaReferencia extends Model
     public function tipoTela(): BelongsTo
     {
         return $this->belongsTo(AttributeOption::class, 'tipo_tela_id');
+    }
+
+    /**
+     * F1 (docs/ORDEN_CORTE_CREACION_V2_AUDITORIA_02.md §5.4): identidad real
+     * del color, contra el atributo Bagisto `code = 'color'`. Nullable a
+     * proposito -- puede no existir todavia una opcion real (ver "Verde
+     * Botella" en el encargo de F1): `color` (texto) sigue siendo el
+     * snapshot visual/historico, pero nunca la identidad para resolver
+     * variantes en runtime.
+     */
+    public function colorOption(): BelongsTo
+    {
+        return $this->belongsTo(AttributeOption::class, 'color_option_id');
     }
 
     public function rollos(): HasMany

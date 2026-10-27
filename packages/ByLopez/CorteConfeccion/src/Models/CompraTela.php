@@ -28,13 +28,13 @@ class CompraTela extends Model implements CompraTelaContract
     ];
 
     protected $casts = [
-        'fecha_compra'    => 'date',
-        'subtotal'        => 'decimal:2',
-        'descuento'       => 'decimal:2',
-        'impuesto'        => 'decimal:2',
-        'total_factura'   => 'decimal:2',
+        'fecha_compra' => 'date',
+        'subtotal' => 'decimal:2',
+        'descuento' => 'decimal:2',
+        'impuesto' => 'decimal:2',
+        'total_factura' => 'decimal:2',
         'cantidad_rollos' => 'integer',
-        'peso_total'      => 'decimal:3',
+        'peso_total' => 'decimal:3',
     ];
 
     public function proveedor(): BelongsTo

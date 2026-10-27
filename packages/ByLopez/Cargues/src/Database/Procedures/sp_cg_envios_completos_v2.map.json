@@ -1,0 +1,109 @@
+{
+    "tabla": "bylopez_cgi_envios_completos",
+    "acciones": [
+        "actualizar_estado"
+    ],
+    "campos": [
+        {
+            "nombre": "transportadora",
+            "etiqueta": "Transportadora (código o nombre de 99 Envíos)",
+            "tipo": "identificador",
+            "longitud": 120,
+            "nulo": false
+        },
+        {
+            "nombre": "numero_de_guia",
+            "etiqueta": "Número de guía",
+            "tipo": "identificador",
+            "longitud": 40,
+            "nulo": false
+        },
+        {
+            "nombre": "fecha_envio",
+            "etiqueta": "Fecha de envío",
+            "tipo": "fecha_hora",
+            "nulo": false,
+            "formato": {
+                "formatos": [
+                    "Y-m-d H:i:s"
+                ]
+            }
+        },
+        {
+            "nombre": "fecha_actualizacion",
+            "etiqueta": "Fecha de actualización del estado",
+            "tipo": "fecha_hora",
+            "nulo": false,
+            "formato": {
+                "formatos": [
+                    "Y-m-d H:i:s"
+                ]
+            }
+        },
+        {
+            "nombre": "estado_del_envio",
+            "etiqueta": "Estado del envío (texto del proveedor)",
+            "tipo": "texto",
+            "longitud": 191,
+            "nulo": false
+        },
+        {
+            "nombre": "valor_comercial",
+            "etiqueta": "Valor comercial",
+            "tipo": "decimal",
+            "precision": 14,
+            "escala": 2,
+            "nulo": true,
+            "vacio": "nulo"
+        },
+        {
+            "nombre": "valor_servicio",
+            "etiqueta": "Valor del servicio (literal)",
+            "tipo": "texto",
+            "longitud": 40,
+            "nulo": true,
+            "vacio": "nulo"
+        },
+        {
+            "nombre": "valor_seguro_99",
+            "etiqueta": "Valor del seguro",
+            "tipo": "decimal",
+            "precision": 14,
+            "escala": 2,
+            "nulo": true,
+            "vacio": "nulo"
+        },
+        {
+            "nombre": "seguro",
+            "etiqueta": "Seguro",
+            "tipo": "texto",
+            "longitud": 60,
+            "nulo": true,
+            "vacio": "nulo"
+        },
+        {
+            "nombre": "aplica_contrapago",
+            "etiqueta": "Aplica contrapago",
+            "tipo": "booleano",
+            "nulo": true,
+            "vacio": "nulo"
+        }
+    ],
+    "llaves": {
+        "primaria": [
+            "transportadora",
+            "numero_de_guia"
+        ],
+        "unicas": [],
+        "indices": []
+    },
+    "duplicados": "rechazar_todas",
+    "transaccion": "motor",
+    "reanudable": false,
+    "tablas_negocio": [
+        "bylopez_lg_guia_estados_proveedor",
+        "bylopez_lg_guia_estado_proveedor_eventos",
+        "bylopez_lg_guias",
+        "bylopez_lg_proveedor_transportadoras"
+    ]
+}

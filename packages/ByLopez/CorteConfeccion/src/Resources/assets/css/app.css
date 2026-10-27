@@ -1,0 +1,5 @@
+/*
+ * Solo utilidades: el reset/base de Tailwind ya lo carga el bundle de
+ * packages/Webkul/Admin, cargarlo de nuevo aqui solo duplicaria bytes.
+ */
+@tailwind utilities;

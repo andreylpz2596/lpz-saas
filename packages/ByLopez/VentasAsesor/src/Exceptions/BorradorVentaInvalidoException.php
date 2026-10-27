@@ -32,8 +32,16 @@ class BorradorVentaInvalidoException extends RuntimeException
     /** El carrito del borrador ya no existe. */
     public const SIN_CARRITO = 'sin_carrito';
 
+    /**
+     * ASESOR-01: el usuario vende como asesor (permiso marcador) pero no tiene un perfil de asesor ACTIVO. Falla cerrado:
+     * nunca se degrada a «sin asignar» ni a «empresa».
+     */
+    public const ASESOR_SIN_ASOCIACION = 'asesor_sin_asociacion';
+
     public function __construct(public readonly string $codigo)
     {
-        parent::__construct('Operacion de borrador no valida: '.$codigo);
+        parent::__construct($codigo === self::ASESOR_SIN_ASOCIACION
+            ? 'Tu usuario no tiene un asesor comercial asociado. Contacta al administrador.'
+            : 'Operacion de borrador no valida: '.$codigo);
     }
 }

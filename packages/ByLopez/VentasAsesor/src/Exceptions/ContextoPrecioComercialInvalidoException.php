@@ -26,6 +26,12 @@ class ContextoPrecioComercialInvalidoException extends RuntimeException
 
     public const CARRITO_DE_OTRO_CLIENTE = 'carrito_de_otro_cliente';
 
+    /** GRP-01: el override de grupo de la venta fue aplicado para OTRO cliente (no se hereda; fail closed). */
+    public const OVERRIDE_DE_OTRO_CLIENTE = 'override_de_otro_cliente';
+
+    /** GRP-01: el grupo del override ya no existe (borrado); nunca se cae al grupo del cliente ni al invitado. */
+    public const GRUPO_OVERRIDE_INEXISTENTE = 'grupo_override_inexistente';
+
     public function __construct(public readonly string $codigo, string $mensaje)
     {
         parent::__construct($mensaje);

@@ -1,6 +1,9 @@
 <?php
 
+use ByLopez\CorteConfeccion\Tests\CorteConfeccionTestCase;
 use Webkul\Admin\Tests\AdminTestCase;
+use Webkul\Attribute\Models\Attribute;
+use Webkul\Attribute\Models\AttributeOption;
 use Webkul\Core\Tests\CoreTestCase;
 use Webkul\Customer\Tests\CustomerTestCase;
 use Webkul\DataGrid\Tests\DataGridTestCase;
@@ -26,6 +29,7 @@ ini_set('memory_limit', '1024M');
 */
 
 uses(AdminTestCase::class)->in('../packages/Webkul/Admin/tests');
+uses(CorteConfeccionTestCase::class)->in('../packages/ByLopez/CorteConfeccion/tests');
 uses(CoreTestCase::class)->in('../packages/Webkul/Core/tests');
 uses(CustomerTestCase::class)->in('../packages/Webkul/Customer/tests');
 uses(DataGridTestCase::class)->in('../packages/Webkul/DataGrid/tests');
@@ -63,7 +67,16 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+function cc_test_color_option(string $adminName = 'Blanco'): AttributeOption
 {
-    // ..
+    $attribute = Attribute::firstWhere('code', 'color')
+        ?? Attribute::factory()->create([
+            'code' => 'color',
+            'type' => 'select',
+            'admin_name' => 'Color',
+        ]);
+
+    return AttributeOption::factory()
+        ->for($attribute, 'attribute')
+        ->create(['admin_name' => $adminName]);
 }

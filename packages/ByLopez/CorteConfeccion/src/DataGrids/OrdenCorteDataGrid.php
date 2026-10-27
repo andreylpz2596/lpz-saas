@@ -3,6 +3,7 @@
 namespace ByLopez\CorteConfeccion\DataGrids;
 
 use ByLopez\CorteConfeccion\Enums\EstadoOrdenCorte;
+use ByLopez\CorteConfeccion\Support\CortadorAccess;
 use Illuminate\Support\Facades\DB;
 use Webkul\DataGrid\DataGrid;
 
@@ -35,6 +36,12 @@ class OrdenCorteDataGrid extends DataGrid
                 'o.created_at'
             );
 
+        if ($cortadorId = request()->query('cortador_id')) {
+            $queryBuilder->where('o.cortador_id', $cortadorId);
+        }
+
+        CortadorAccess::filtrarOrdenesCorteSiAplica($queryBuilder, 'o.cortador_id');
+
         $this->addFilter('codigo', 'o.codigo');
         $this->addFilter('cortador_nombre_snapshot', 'o.cortador_nombre_snapshot');
         $this->addFilter('estado', 'o.estado');
@@ -54,9 +61,9 @@ class OrdenCorteDataGrid extends DataGrid
             'fecha_entrega' => 'Entrega',
         ] as $index => $label) {
             $column = [
-                'index'      => $index,
-                'label'      => $label,
-                'type'       => match ($index) {
+                'index' => $index,
+                'label' => $label,
+                'type' => match ($index) {
                     'cantidad_rollos', 'total_camisetas_cortadas' => 'integer',
                     'peso_total' => 'decimal',
                     'fecha_entrega' => 'date',
@@ -64,11 +71,15 @@ class OrdenCorteDataGrid extends DataGrid
                 },
                 'searchable' => in_array($index, ['codigo', 'cortador_nombre_snapshot'], true),
                 'filterable' => in_array($index, ['codigo', 'estado', 'cortador_nombre_snapshot', 'fecha_entrega'], true),
-                'sortable'   => true,
+                'sortable' => true,
             ];
 
             if ($index === 'estado') {
                 $column['closure'] = fn ($row) => $this->estadoBadge((string) $row->estado);
+            }
+
+            if ($index === 'codigo') {
+                $column['closure'] = fn ($row) => $this->codigoEnlace($row);
             }
 
             $this->addColumn($column);
@@ -77,37 +88,31 @@ class OrdenCorteDataGrid extends DataGrid
 
     public function prepareActions(): void
     {
-        $this->addAction(['icon' => 'icon-eye', 'title' => 'Ver', 'method' => 'GET', 'url' => fn ($row) => route('admin.corte_confeccion.ordenes_corte.show', $row->id)]);
+        if (bouncer()->hasPermission('corte_confeccion.ordenes_corte')) {
+            $this->addAction(['icon' => 'icon-eye', 'title' => 'Ver', 'method' => 'GET', 'url' => fn ($row) => route('admin.corte_confeccion.ordenes_corte.show', $row->id)]);
+
+            // No existe una pantalla de edicion separada: la solicitud es de solo lectura una vez
+            // creada, y el resto del flujo (reportar resultado, confirmar recepcion, cambiar de
+            // estado) ocurre dentro de la misma vista de detalle. "Editar" apunta ahi.
+            $this->addAction(['icon' => 'icon-edit', 'title' => 'Editar', 'method' => 'GET', 'url' => fn ($row) => route('admin.corte_confeccion.ordenes_corte.show', $row->id)]);
+        }
     }
 
     protected function estadoBadge(string $estado): string
     {
-        $classes = [
-            'borrador' => 'label-info',
-            EstadoOrdenCorte::PendienteEntrega->value => 'label-pending',
-            EstadoOrdenCorte::EntregadoACortador->value => 'label-active',
-            EstadoOrdenCorte::EnCorte->value => 'label-processing',
-            EstadoOrdenCorte::ReportadoPorCortador->value => 'label-processing',
-            EstadoOrdenCorte::RecibidoBodega->value => 'label-active',
-            EstadoOrdenCorte::Cerrado->value => 'label-closed',
-            EstadoOrdenCorte::Anulado->value => 'label-canceled',
-        ];
+        return EstadoOrdenCorte::badgeHtml($estado);
+    }
 
-        $labels = [
-            'borrador' => 'Borrador',
-            EstadoOrdenCorte::PendienteEntrega->value => 'Pendiente entrega',
-            EstadoOrdenCorte::EntregadoACortador->value => 'Entregado',
-            EstadoOrdenCorte::EnCorte->value => 'En corte',
-            EstadoOrdenCorte::ReportadoPorCortador->value => 'Reportado',
-            EstadoOrdenCorte::RecibidoBodega->value => 'Recibido bodega',
-            EstadoOrdenCorte::Cerrado->value => 'Cerrado',
-            EstadoOrdenCorte::Anulado->value => 'Anulado',
-        ];
+    protected function codigoEnlace($row): string
+    {
+        if (! bouncer()->hasPermission('corte_confeccion.ordenes_corte')) {
+            return e($row->codigo);
+        }
 
         return sprintf(
-            '<p class="%s">%s</p>',
-            $classes[$estado] ?? 'label-info',
-            e($labels[$estado] ?? str_replace('_', ' ', ucfirst($estado)))
+            '<a class="text-blue-600 hover:underline dark:text-blue-400" href="%s">%s</a>',
+            route('admin.corte_confeccion.ordenes_corte.show', $row->id),
+            e($row->codigo)
         );
     }
 }

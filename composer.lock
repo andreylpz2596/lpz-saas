@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e8b509f04c82c5c51df0891e3ae7ec7d",
+    "content-hash": "e54feab4c6e009c47e06cd21f1dbc795",
     "packages": [
         {
             "name": "apimatic/core",
@@ -361,6 +361,63 @@
                 "source": "https://github.com/Bacon/BaconQrCode/tree/2.0.8"
             },
             "time": "2022-12-07T17:46:57+00:00"
+        },
+        {
+            "name": "bagisto-eu/pickup",
+            "version": "0.0.3",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/bagisto-europe/bagisto-pickup.git",
+                "reference": "64b92b18df4d57f3f548704464e549249b232ca2"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/bagisto-europe/bagisto-pickup/zipball/64b92b18df4d57f3f548704464e549249b232ca2",
+                "reference": "64b92b18df4d57f3f548704464e549249b232ca2",
+                "shasum": ""
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Bagisto\\Pickup\\Providers\\PickupServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Bagisto\\Pickup\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Bagisto Europe",
+                    "email": "info@bagisto.eu"
+                }
+            ],
+            "description": "Allow customers to pickup orders from physical stores",
+            "homepage": "https://github.com/bagisto-europe/bagisto-pickup",
+            "keywords": [
+                "bagisto",
+                "bagisto-shipping-methods",
+                "delivery-options",
+                "ecommerce",
+                "laravel",
+                "pickup",
+                "shipping",
+                "shipping-methods",
+                "store-pickup"
+            ],
+            "support": {
+                "email": "support@bagisto.eu",
+                "issues": "https://github.com/bagisto-europe/bagisto-pickup/issues",
+                "source": "https://github.com/bagisto-europe/bagisto-pickup/tree/0.0.3"
+            },
+            "time": "2025-06-28T23:31:52+00:00"
         },
         {
             "name": "barryvdh/laravel-dompdf",
@@ -15159,5 +15216,5 @@
         "ext-tokenizer": "*"
     },
     "platform-dev": {},
-    "plugin-api-version": "2.9.0"
+    "plugin-api-version": "2.6.0"
 }

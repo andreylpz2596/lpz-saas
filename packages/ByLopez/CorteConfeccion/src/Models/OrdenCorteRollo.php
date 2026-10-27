@@ -13,14 +13,16 @@ class OrdenCorteRollo extends Model
         'orden_corte_id',
         'rollo_id',
         'peso_inicial_usado',
+        'entregado_en',
         'peso_sobrante',
         'peso_consumido',
     ];
 
     protected $casts = [
         'peso_inicial_usado' => 'decimal:3',
-        'peso_sobrante'      => 'decimal:3',
-        'peso_consumido'     => 'decimal:3',
+        'entregado_en' => 'datetime',
+        'peso_sobrante' => 'decimal:3',
+        'peso_consumido' => 'decimal:3',
     ];
 
     public function ordenCorte(): BelongsTo

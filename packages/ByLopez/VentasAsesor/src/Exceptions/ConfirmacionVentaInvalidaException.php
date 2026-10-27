@@ -49,6 +49,18 @@ class ConfirmacionVentaInvalidaException extends RuntimeException
     /** El total recalculado por Bagisto no es el total_esperado (detalles.total_nuevo). */
     public const TOTALES_CAMBIARON = 'totales_cambiaron';
 
+    /** G-11: tipo de operacion desconocido (solo venta_normal, muestra, reposicion, garantia). */
+    public const TIPO_OPERACION_INVALIDO = 'tipo_operacion_invalido';
+
+    /** G-11: muestra / reposicion / garantia sin `ventas_asesor.pedidos.tipo_operacion` (el asesor solo venta normal). */
+    public const TIPO_OPERACION_SIN_PERMISO = 'tipo_operacion_sin_permiso';
+
+    /** R2 (Doc. 23): con el bloqueo activo, una referencia no alcanza su minimo o falta configuracion. detalles.referencias (sin costos). */
+    public const RENTABILIDAD_INSUFICIENTE = 'rentabilidad_insuficiente';
+
+    /** R2: «Vender para» sin `ventas_asesor.pedidos.assign`, o asesor elegido invalido. */
+    public const PROPIEDAD_COMERCIAL_INVALIDA = 'propiedad_comercial_invalida';
+
     /** @param  array<string, mixed>  $detalles */
     public function __construct(
         public readonly string $codigo,

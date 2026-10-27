@@ -1,0 +1,12 @@
+{
+    "name": "bylopez-corteconfeccion-admin-styles",
+    "private": true,
+    "description": "Build de Tailwind independiente para las vistas admin de packages/ByLopez/CorteConfeccion. El tailwind.config.js de packages/Webkul/Admin solo escanea sus propios blade files, asi que las clases usadas unicamente aqui nunca se compilaban. Este build genera un CSS aparte, cargado desde las vistas de este paquete via @push('styles'), sin modificar packages/Webkul/.",
+    "scripts": {
+        "build": "tailwindcss -c tailwind.config.js -i ./src/Resources/assets/css/app.css -o ../../../public/themes/admin/default/build-bylopez/corteconfeccion.css --minify",
+        "watch": "tailwindcss -c tailwind.config.js -i ./src/Resources/assets/css/app.css -o ../../../public/themes/admin/default/build-bylopez/corteconfeccion.css --watch"
+    },
+    "devDependencies": {
+        "tailwindcss": "^3.3.2"
+    }
+}

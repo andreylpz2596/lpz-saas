@@ -2,6 +2,8 @@
 
 namespace ByLopez\VentasAsesor\Services\Venta;
 
+use ByLopez\Logistica\Contracts\DomiciliarioDeVenta;
+use ByLopez\Logistica\Support\CondicionesEnvio;
 use ByLopez\Logistica\Support\PuntosRecogida;
 use ByLopez\VentasAsesor\DataObjects\DireccionBorrador;
 use ByLopez\VentasAsesor\DataObjects\MetodoEntregaDisponible;
@@ -9,7 +11,9 @@ use ByLopez\VentasAsesor\DataObjects\OrigenDireccion;
 use ByLopez\VentasAsesor\DataObjects\VistaEntregaBorrador;
 use ByLopez\VentasAsesor\DataObjects\VistaLineasBorrador;
 use ByLopez\VentasAsesor\Exceptions\EntregaBorradorInvalidaException as EntregaInvalida;
+use ByLopez\VentasAsesor\Models\BorradorVenta;
 use ByLopez\VentasAsesor\Support\Clientes\ValidadorDireccionComercial;
+use ByLopez\VentasAsesor\Support\Logistica\MunicipioDesdeCatalogo;
 use ByLopez\VentasAsesor\Support\Venta\CarritoComercial;
 use Closure;
 use Illuminate\Support\Facades\DB;
@@ -42,7 +46,8 @@ use Webkul\User\Contracts\Admin;
  * - Concurrencia: bloqueo del borrador y del carrito (bloquearParaEditar), el mismo
  *   orden que el resto de operaciones; las tarifas son filas hijas del carrito.
  *
- * No crea pedidos, no crea Shipment, no elige transportadora y no procesa pagos.
+ * No crea pedidos, no crea Shipment y no procesa pagos. El asesor PUEDE indicar quien entrega un domicilio local
+ * (opcional; cierre F1, D1): las opciones y la sugerencia las da Logistica (DomiciliarioDeVenta).
  */
 class EntregaBorradorService
 {
@@ -52,6 +57,8 @@ class EntregaBorradorService
         protected CarritoComercial $carritos,
         protected ValidadorDireccionComercial $validador,
         protected PuntosRecogida $puntosRecogida,
+        protected DomiciliarioDeVenta $domiciliarios,
+        protected MunicipioDesdeCatalogo $municipios,
     ) {}
 
     /** $lineas: las del mismo borrador ya leidas en esta operacion (03G-B2); evita releerlas. */
@@ -66,7 +73,10 @@ class EntregaBorradorService
         $envio = $carrito?->shipping_address;
         $requiereEnvio = (bool) $carrito?->haveStockableItems();
 
-        $metodos = $carrito ? $carrito->shipping_rates->sortBy('id')->values()->map(fn ($t) => $this->aMetodo($t))->all() : [];
+        // D-41: la recogida (`pickup` de bagisto-eu/pickup) solo se ofrece si el envio es una bodega.
+        $metodos = $carrito ? $carrito->shipping_rates->sortBy('id')
+            ->filter(fn ($t) => $this->puntosRecogida->metodoPermitido((string) $t->method, $envio))
+            ->values()->map(fn ($t) => $this->aMetodo($t))->all() : [];
         $seleccionado = null;
 
         foreach ($metodos as $metodo) {
@@ -95,7 +105,44 @@ class EntregaBorradorService
             requiereEnvio: $requiereEnvio,
             entregaCompleta: $facturacion !== null && (! $requiereEnvio || ($envio !== null && $seleccionado !== null)),
             avisos: $avisos,
+            domiciliario: $this->domiciliario($borradorId, $carrito, $requiereEnvio),
         );
+    }
+
+    /**
+     * Domicilio local (zona local configurada en Logistica): quien entrega es OBLIGATORIO y fija la tarifa. null = no aplica
+     * (recogida, direccion fuera de toda zona local o sin envio): sin selector. Agrega `condicion` (quien paga el
+     * domicilio, por el metodo ya elegido; null si aun no hay metodo) para que la pantalla lo diga en lenguaje comercial.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function domiciliario(int $borradorId, ?object $carrito, bool $requiereEnvio): ?array
+    {
+        $envio = $carrito?->shipping_address;
+
+        if (! $requiereEnvio || ! $envio || $this->puntosRecogida->correspondiente($envio)) {
+            return null;
+        }
+
+        $metodo = $carrito->shipping_method ?: null;
+        $opciones = $this->domiciliarios->opcionesParaVenta(
+            $this->municipios->municipioDeDireccion($envio->city, $envio->state, $envio->country),
+            $metodo,
+            BorradorVenta::query()->whereKey($borradorId)->first(['transportadora_id'])?->transportadora_id,
+        );
+
+        if ($opciones === null) {
+            return null;
+        }
+
+        $tarifaElegida = $metodo ? $carrito->selected_shipping_rate : null;
+        $opciones['condicion'] = $metodo ? app(CondicionesEnvio::class)->deOrden((object) [
+            'shipping_method' => $metodo,
+            'base_shipping_amount' => $tarifaElegida?->base_price,
+            'base_shipping_discount_amount' => $tarifaElegida?->base_discount_amount,
+        ])->value : null;
+
+        return $opciones;
     }
 
     /**
@@ -188,7 +235,12 @@ class EntregaBorradorService
             $this->exigirDestino($carrito);
 
             // saveShippingMethod recalcula las tarifas y exige que el metodo este entre ellas.
-            if (trim($metodo) === '' || ! Cart::saveShippingMethod($metodo)) {
+            // La recogida ademas exige que el envio sea una bodega (D-41, PuntosRecogida).
+            if (
+                trim($metodo) === ''
+                || ! $this->puntosRecogida->metodoPermitido($metodo, $carrito->shipping_address)
+                || ! Cart::saveShippingMethod($metodo)
+            ) {
                 throw new EntregaInvalida(EntregaInvalida::METODO_NO_DISPONIBLE);
             }
 
@@ -382,6 +434,11 @@ class EntregaBorradorService
             descripcion: $tarifa->method_description,
             precio: (float) $tarifa->price,
             descuento: (float) $tarifa->discount_amount,
+            condicion: app(CondicionesEnvio::class)->deOrden((object) [
+                'shipping_method' => (string) $tarifa->method,
+                'base_shipping_amount' => $tarifa->base_price,
+                'base_shipping_discount_amount' => $tarifa->base_discount_amount,
+            ])->value,
         );
     }
 }

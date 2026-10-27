@@ -2,7 +2,6 @@
 
 use ByLopez\Logistica\Carriers\DomicilioLocal;
 use ByLopez\Logistica\Carriers\EnvioNacional;
-use ByLopez\Logistica\Carriers\RecogidaBodega;
 
 /*
  * Metodos de entrega de ByLopez (D-40). Metodo de entrega != transportadora: la
@@ -13,17 +12,12 @@ use ByLopez\Logistica\Carriers\RecogidaBodega;
  * nacen inactivos; titulos, descripciones y tarifas se cambian desde el panel.
  *
  * El envio gratis NO es un metodo: es una promocion con CartRule (free_shipping).
+ *
+ * La RECOGIDA ya no es de ByLopez: la da la extension de Bagisto bagisto-eu/pickup (carrier
+ * `pickup`). La regla "recogida solo con envio a una bodega real" (D-41) vive en
+ * Support\PuntosRecogida::metodoPermitido().
  */
 return [
-    // Tarifa 0: costo natural del metodo, no una promocion.
-    'recogida_bodega' => [
-        'code' => 'recogida_bodega',
-        'title' => 'Recogida en bodega',
-        'description' => 'El cliente recoge el pedido en la bodega.',
-        'active' => false,
-        'class' => RecogidaBodega::class,
-    ],
-
     // Sin tarifa configurada no se ofrece: la tarifa no se inventa.
     'domicilio_local' => [
         'code' => 'domicilio_local',

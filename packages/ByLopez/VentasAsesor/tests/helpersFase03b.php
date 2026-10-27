@@ -1,5 +1,6 @@
 <?php
 
+use ByLopez\VentasAsesor\Models\Asesor;
 use Webkul\Customer\Models\Customer;
 use Webkul\Customer\Models\CustomerGroup;
 use Webkul\Faker\Helpers\Product as ProductFaker;
@@ -37,7 +38,15 @@ if (! function_exists('f03b_admin')) {
             'name' => 'F03B rol '.uniqid(), 'permission_type' => $tipo, 'permissions' => $tipo === 'all' ? null : $permisos,
         ]);
 
-        return Admin::factory()->create(['role_id' => $rol->id]);
+        $admin = Admin::factory()->create(['role_id' => $rol->id]);
+
+        // ASESOR-01: quien vende como asesor (rol `custom` con el permiso marcador) necesita su perfil activo para
+        // operar; se crea aqui para que los escenarios de asesor sigan siendo validos. Sin marcador no hay perfil.
+        if ($tipo === 'custom' && in_array('ventas_asesor.operar_como_asesor', $permisos, true)) {
+            Asesor::query()->create(['admin_id' => $admin->id, 'nombre' => $admin->name, 'activo' => true]);
+        }
+
+        return $admin;
     }
 }
 

@@ -2,7 +2,9 @@
 
 namespace ByLopez\VentasAsesor\Services\Venta;
 
+use ByLopez\Logistica\Contracts\DomiciliarioDeVenta;
 use ByLopez\VentasAsesor\DataObjects\DatosClienteComercial;
+use ByLopez\VentasAsesor\DataObjects\DireccionComercial;
 use ByLopez\VentasAsesor\DataObjects\EstadoNuevaVenta;
 use ByLopez\VentasAsesor\DataObjects\LineaBorradorVenta;
 use ByLopez\VentasAsesor\DataObjects\MetodoPagoDisponible;
@@ -18,12 +20,14 @@ use ByLopez\VentasAsesor\Exceptions\NuevaVentaInvalidaException as Invalida;
 use ByLopez\VentasAsesor\Exceptions\VarianteInvalidaException;
 use ByLopez\VentasAsesor\Models\BorradorVenta;
 use ByLopez\VentasAsesor\Services\Clientes\CrearClienteComercialService;
+use ByLopez\VentasAsesor\Services\Clientes\GuardarDireccionClienteComercialService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Venta\CantidadVenta;
 use ByLopez\VentasAsesor\Support\Venta\LoteCatalogo;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 use Webkul\Checkout\Models\CartProxy;
+use Webkul\Customer\Contracts\CustomerAddress;
 use Webkul\Customer\Models\CustomerAddressProxy;
 use Webkul\User\Contracts\Admin;
 
@@ -55,7 +59,31 @@ class NuevaVentaService
         protected PagoBorradorService $pagos,
         protected ConfirmarVentaService $confirmacion,
         protected AutorizacionVentasAsesor $autorizacion,
+        protected GuardarDireccionClienteComercialService $direccionesCliente,
+        protected DomiciliarioDeVenta $domiciliarios,
     ) {}
+
+    /**
+     * 03G-D: el asesor agrega una direccion REUTILIZABLE al cliente de SU borrador sin salir de
+     * Nueva venta. La guarda el servicio de RT-04 (email opcional, telefono E.164, codigo postal
+     * segun la configuracion de Bagisto, municipio DIVIPOLA resuelto en backend, eventos customer.addresses.*); aqui solo se autoriza (propietario
+     * del borrador editable) y se fija el cliente: nunca uno que llegue en la peticion. Si el
+     * cliente no tiene predeterminada, la nueva lo es (como el primer alta del core). No toca el
+     * carrito: usarla en la venta es entregaRapida() con OrigenDireccion::guardada().
+     */
+    public function agregarDireccionCliente(int $borradorId, DireccionComercial $direccion, Admin $actor): CustomerAddress
+    {
+        return DB::transaction(function () use ($borradorId, $direccion, $actor) {
+            [, $carrito] = $this->borradores->bloquearParaEditar($borradorId, $actor);
+            $customerId = (int) $carrito->customer_id;
+
+            if (! $direccion->predeterminada && $this->direccionPredeterminadaId($customerId) === null) {
+                $direccion = $direccion->comoPredeterminada();
+            }
+
+            return $this->direccionesCliente->guardar($customerId, $direccion);
+        });
+    }
 
     /** Venta nueva para un cliente existente. Sin carrito hasta tener cliente valido. */
     public function iniciar(
@@ -151,6 +179,11 @@ class NuevaVentaService
         ?OrigenDireccion $facturacion = null,
     ): EstadoNuevaVenta {
         DB::transaction(function () use ($borradorId, $actor, $envio, $metodo, $facturacion) {
+            // Primero la guarda del dominio (permiso, borrador EDITABLE, propietario): sobre un borrador
+            // confirmado/confirmando el carrito ya no existe y, sin esto, la ausencia de facturacion se
+            // reportaba como `direccion_facturacion_requerida` en lugar de `borrador_no_editable`.
+            $this->borradores->bloquearParaEditar($borradorId, $actor);
+
             $carrito = $this->carritoDe($borradorId);
 
             if ($facturacion === null && $carrito?->billing_address === null) {
@@ -177,6 +210,46 @@ class NuevaVentaService
         return $this->estado($borradorId);
     }
 
+    /**
+     * Cierre F1 (D1): el asesor indica QUIEN ENTREGA un domicilio local (obligatorio para confirmar; null = quitar la
+     * eleccion). Se guarda el id en el borrador y, como la tarifa del domicilio depende de domiciliario + zona, se recalculan
+     * las tarifas del carrito y se reaplica el metodo ya elegido (precio y total nuevos). Al confirmar se comunica a Logistica.
+     */
+    public function elegirDomiciliario(int $borradorId, ?int $transportadoraId, Admin $actor): EstadoNuevaVenta
+    {
+        $revision = false;
+
+        DB::transaction(function () use ($borradorId, $transportadoraId, $actor, &$revision) {
+            $this->borradores->bloquearParaEditar($borradorId, $actor);
+
+            if ($transportadoraId !== null && ! $this->domiciliarios->esSeleccionable($transportadoraId)) {
+                throw new Invalida(Invalida::DOMICILIARIO_NO_VALIDO);
+            }
+
+            BorradorVenta::query()->whereKey($borradorId)->update(['transportadora_id' => $transportadoraId]);
+
+            $carrito = $this->carritoDe($borradorId);
+
+            if ($carrito?->shipping_address === null || ! $this->tieneLineas($borradorId)) {
+                return;
+            }
+
+            if ($carrito->shipping_method) {
+                $revision = $this->reaplicarEntrega($borradorId, (string) $carrito->shipping_method, $actor);
+
+                return;
+            }
+
+            // Sin metodo aun: se vuelven a pedir las tarifas para que el domicilio aparezca (o desaparezca) con su valor.
+            try {
+                $this->entrega->calcularMetodosSinVista($borradorId, $actor);
+            } catch (EntregaInvalida) {
+            }
+        });
+
+        return $this->estado($borradorId, requiereRevisionEntrega: $revision);
+    }
+
     /** Elige el metodo de pago; los ofrecidos se resuelven UNA vez y se reutilizan en el estado. */
     public function seleccionarPago(int $borradorId, string $metodo, Admin $actor): EstadoNuevaVenta
     {
@@ -191,8 +264,9 @@ class NuevaVentaService
         Admin $actor,
         int|float|string $totalEsperado,
         ?SeleccionPropiedadComercial $seleccion = null,
+        ?string $tipoOperacion = null,
     ) {
-        return $this->confirmacion->confirmar($borradorId, $actor, $totalEsperado, $seleccion);
+        return $this->confirmacion->confirmar($borradorId, $actor, $totalEsperado, $seleccion, $tipoOperacion);
     }
 
     /**
@@ -423,6 +497,11 @@ class NuevaVentaService
             $motivos[] = EstadoNuevaVenta::MOTIVO_REVISAR_ENTREGA;
         } elseif (! $entrega->entregaCompleta) {
             $motivos[] = EstadoNuevaVenta::MOTIVO_ENTREGA_INCOMPLETA;
+        }
+
+        // Domicilio local: sin domiciliario valido con tarifa en la zona no se confirma (el servidor lo vuelve a exigir).
+        if (($entrega->domiciliario['requerido'] ?? false) && ! ($entrega->domiciliario['listo'] ?? false)) {
+            $motivos[] = EstadoNuevaVenta::MOTIVO_DOMICILIARIO_REQUERIDO;
         }
 
         if ($pago->metodoSeleccionado === null) {

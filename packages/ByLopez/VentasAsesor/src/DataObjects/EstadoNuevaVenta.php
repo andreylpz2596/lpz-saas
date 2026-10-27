@@ -27,6 +27,8 @@ final class EstadoNuevaVenta
 
     public const MOTIVO_REVISAR_ENTREGA = 'entrega_requiere_revision';
 
+    public const MOTIVO_DOMICILIARIO_REQUERIDO = 'domiciliario_requerido';
+
     public const MOTIVO_SIN_PAGO = 'sin_metodo_pago';
 
     /**

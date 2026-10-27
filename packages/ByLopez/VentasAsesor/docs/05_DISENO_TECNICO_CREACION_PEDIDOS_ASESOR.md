@@ -2873,6 +2873,13 @@ estados, pero sin evidencia del dinero.
   están `canceled`, `closed` ni `fraud`.
 - **Por qué no `order.status`:** no sirve para calcular el saldo (§34.5).
 
+> **Aclarado 2026-10-05 (D-56, Doc. 04).** Esta regla se implementa hoy como **lectura
+> derivada** en `Support/Pedidos/EstadoPagoPedido` (Mis ventas: listado, detalle y KPI
+> «Pendientes de pago») y, duplicada con la misma semántica, en
+> `ConfirmarVentaService::estadoPago()` (03F; deuda: unificar en `EstadoPagoPedido`). Mostrar
+> el estado de pago **no es Cartera**: no registra, valida, aplica ni concilia pagos, y no
+> autoriza ni bloquea el despacho.
+
 ### 34.7 Varias facturas, cancelaciones y reembolsos
 
 - **Varias facturas:** el panel admite facturas parciales por cantidad. Las transacciones se
@@ -3055,6 +3062,15 @@ Para pedidos `canceled`, `closed` o `fraud`, no aplica.
 **Diseño cerrado, sin implementar:** no hay migración, modelo, servicio ni configuración.
 Decisiones: D-48 a D-51 aprobadas por Camilo Gaitán y **D-53** (idempotencia y concurrencia)
 cerrada. El despliegue de D-48 en producción sigue necesitando una autorización aparte.
+
+> **Revisado por PAG-A (2026-10-05, Doc. 04 D-59, §42 de este documento).** Este cierre se conserva como
+> historial. Cambia: (a) registrar un pago **ya no crea de inmediato** la `order_transaction` (P-01): la
+> Transaction nativa nace al **confirmar**; (b) la tabla `bylopez_va_registros_pago` (§35.4, nunca creada)
+> queda sustituida por `bylopez_va_pagos` + `bylopez_va_aplicaciones_pago` + `bylopez_va_pagos_eventos`;
+> (c) lo «pagado» deja de ser `SUM(transacciones)` y pasa a la fórmula de §42.3; (d) el orden de bloqueos pasa
+> a `pago → pedidos → facturas` (§42.5). **Siguen vigentes:** las primitivas de §35.1, la regla de estado del
+> pedido de §35.2, la idempotencia por `(mecanismo, clave)` de §35.3 (con huella ampliada) y los medios de
+> cobro de §35.6.
 
 ### 35.1 Primitivas reales de Bagisto (verificadas)
 
@@ -3252,6 +3268,12 @@ refleja lo que Bagisto haría hoy. D-48 sigue pendiente de desplegarse; cuando s
 cambio de configuración, el mismo servicio informará `pago_pendiente` sin tocar código.
 
 ### 36.4 Requisito futuro aprobado por Camilo para Cartera (documentado, sin implementar)
+
+> **Actualizado por PAG-A (2026-10-05, §42).** El abono general **sigue siendo una sola operación
+> atómica**, pero ya no produce Transactions al registrarse: crea **un pago `sin_revisar` con varias
+> aplicaciones**, y las Transactions nativas (una por aplicación) se crean al **confirmar**. FIFO queda
+> como **propuesta editable** (P-07) y la regla dura «nunca más que el dinero recibido» se conserva
+> (P-06). El texto original se conserva abajo.
 
 - **Dos formas de registrar dinero, ambas futuras:**
   - **A. Pago de un pedido específico:** total o parcial, sobre su factura (ya diseñado en §35).
@@ -4641,3 +4663,1314 @@ Sin diseño visual, sin Vue, sin polling, sin WebSockets, sin n8n/WhatsApp/IA, s
 logística adicional, sin comisiones ni descuentos D-38, sin tocar Webkul. `cantidadEnCarrito`
 N+1, `prepareForCart`, `collectTotals`, Payment core, SMTP y el índice de `order_items` quedan
 como deuda ya documentada (§41.7–§41.8), sin auditar de nuevo aquí.
+
+### 41.10 03G-D: Entrega → Dirección → Pago en la pantalla (2026-10-05, sin commit)
+
+Referencia funcional y visual: el checkout nativo de Bagisto (opciones de radio grandes, título,
+descripción debajo, precio alineado, el siguiente paso aparece cuando el anterior está decidido).
+Sigue siendo **una sola pantalla**, sin wizard; cualquier decisión anterior se puede cambiar.
+
+#### 41.10.1 Auditoría: «Recogida en bodega» vs «Recogida en tienda»
+
+| Concepto | Qué era | Dónde vive |
+|---|---|---|
+| «Recogida en bodega» | Opción **de UI** (`entregaForm.tipo = punto_recogida`): pone como CartAddress de envío la bodega real (`PuntosRecogida`, D-41) y manda `metodo = pickup` en la misma petición | Solo pantalla |
+| «Recogida en tienda» | **ShippingRate real** del carrier `pickup` (extensión `bagisto-eu/pickup`; título y descripción en `core_config sales.carriers.pickup.*`) | `cart_shipping_rates` → `cart.shipping_method = 'pickup'` → `orders.shipping_method` |
+| «Envío por pagar» / «Envío gratuito» | Rates de los carriers del core `flatrate` / `free` (activos en `lpz_saas`) | `cart_shipping_rates` |
+| «Domicilio local» | Rate de `ByLopez\Logistica\Carriers\DomicilioLocal` (tarifa en `core_config`) | `cart_shipping_rates` |
+
+Era **la misma decisión preguntada dos veces**: la opción de UI ya aplicaba `pickup`, y después
+la lista de rates volvía a mostrar «Recogida en tienda» **junto a** «Envío por pagar» y «Envío
+gratuito», que Bagisto también calcula para la dirección de la bodega (estado híbrido posible:
+envío por pagar a la propia bodega). `orders.shipping_method` es lo único que llega a Bagisto.
+
+**Corrección.**
+- UI: una sola opción «Recogida en tienda» (título/descripción reales de `pickup`); al elegirla se
+  aplica el rate `pickup` y se muestra como información (bodega + precio real del rate). No se
+  vuelve a preguntar. La opción «Recogida en bodega» desaparece de la UI.
+- Dominio: `PuntosRecogida::metodoPermitido()` pasa a ser bicondicional: `pickup` solo con
+  destino bodega **y** con destino bodega solo `pickup`. Lo usan `EntregaBorradorService::vista()`
+  (rates ofrecidos), `seleccionarMetodo()` (422 `metodo_entrega_no_disponible`) y
+  `ConfirmarVentaService::revalidarEntrega()` (03F: un carrito híbrido ya no se confirma).
+
+#### 41.10.2 Progresión visual
+
+```
+ENTREGA  ○ Recogida en tienda   ○ Envío a domicilio
+  ├─ Recogida → bodega real + pickup aplicados → (facturación si hace falta) → PAGO
+  └─ Domicilio → DIRECCIÓN (tarjetas de CustomerAddress / + Agregar dirección)
+                   → MÉTODO DE ENVÍO (rates reales para ESA dirección) → PAGO
+PAGO → RESUMEN / CONFIRMAR
+```
+
+- Para domicilio el método va **después** de la dirección porque Bagisto calcula los rates para un
+  destino (`Shipping::collectRates()` exige `shipping_address`; `DomicilioLocal` no aplica a una
+  bodega). No se inventa una lista de métodos sin destino.
+- **Pago** aparece solo con `entregaLista` = `entrega_completa` del backend **y** el tipo elegido en
+  pantalla igual al aplicado al carrito (`tipoAplicado`, derivado del CartAddress de envío). El
+  botón Confirmar exige lo mismo: no se puede confirmar una recogida previa mientras se está
+  eligiendo domicilio.
+- Estilo de opciones: radio + título + descripción + precio a la derecha, borde/anillo azul al
+  seleccionar, área táctil completa; direcciones en 1 columna en móvil y 2 en escritorio.
+
+#### 41.10.3 Recogida
+
+- Envío = bodega real (inventory source activo) + datos de quien recibe tomados de la facturación
+  (03D). Sin formulario de dirección del cliente; sin dirección ficticia.
+- Facturación (Bagisto la exige para crear el Order): la que ya tenga el carrito, o la
+  **predeterminada** del cliente (`NuevaVentaService::entregaRapida`, D-30). Si no hay ninguna
+  resoluble (`requiere_direccion_facturacion`), la pantalla pide elegir una dirección real del
+  cliente o agregarla; nunca usa la bodega. Sin hueco de dominio nuevo.
+
+#### 41.10.4 Domicilio / envío y direcciones
+
+- Direcciones: `GET nueva-venta/clientes/{cliente}/direcciones` (CustomerAddress con scope
+  `address_type = customer`).
+- **Bug corregido:** la ruta usaba `{customer}`, que Bagisto vincula implícitamente al modelo
+  `Customer`; el controlador recibía un modelo y respondía 500 (`TypeError` en `laravel.log`
+  de desarrollo el 2026-10-03 y el 2026-10-05). Por eso las direcciones no cargaban. El
+  parámetro pasa a `{cliente}`.
+- **Predeterminada:** la de Bagisto (`addresses.default_address = 1`), igual que
+  `NuevaVentaService::direccionPredeterminadaId()`. Preselección **solo visual** (no escribe
+  nada): predeterminada; si no hay y el cliente tiene **una sola**, esa; con varias sin
+  predeterminada, el asesor elige (aviso «Selecciona la dirección de entrega»).
+- Al elegir una dirección se envía `envio = {tipo: guardada, address_id}`: `Cart::saveAddresses`
+  copia los campos al CartAddress con `parent_address_id` (vínculo informativo). La facturación
+  solo se manda si el backend no puede resolverla. Cambiar de dirección limpia el método (Bagisto
+  lo invalida al guardar direcciones).
+- Sin direcciones: «Este cliente no tiene una dirección de entrega.» + «+ Agregar dirección».
+
+#### 41.10.5 Agregar dirección sin salir de Nueva venta
+
+- Formulario inline (sirve a envío y a facturación): nombre, apellido, teléfono, dirección,
+  ciudad/municipio (texto libre: Bagisto no tiene catálogo de municipios), departamento
+  (`country_states` CO), código postal. Email **no** se pide (RT-04).
+- «Guardar en las direcciones del cliente» (marcado por defecto) →
+  `POST nueva-venta/{borrador}/direcciones` → `NuevaVentaService::agregarDireccionCliente()` →
+  `GuardarDireccionClienteComercialService` (RT-04: teléfono E.164, email NULL, eventos
+  `customer.addresses.create.*`). El cliente es **el del borrador** (nunca uno de la petición) y
+  se exige ser propietario del borrador editable (`bloquearParaEditar`; ajeno → 409). Si el
+  cliente no tenía predeterminada, la nueva lo es. Guardada **exige código postal** (regla vigente
+  de RT-04, ver D-57). ACL: misma clave `ventas_asesor.pedidos.create`.
+- Sin marcar → dirección **puntual** de esta venta: solo viaja al CartAddress
+  (`OrigenDireccion::puntual`, código postal opcional, D-46); no crea CustomerAddress.
+
+#### 41.10.6 CustomerAddress → CartAddress → OrderAddress
+
+- **CustomerAddress** (`address_type = customer`): reutilizable; solo se crea/modifica por RT-04
+  y de forma explícita. Usarla en una venta **no la modifica** (probado: fila idéntica antes y
+  después).
+- **CartAddress** (`cart_billing` / `cart_shipping`): snapshot de ESTA venta
+  (`Cart::saveAddresses`).
+- **OrderAddress** (`order_billing` / `order_shipping`): Bagisto lo copia del carrito al crear el
+  Order (`OrderResource`, 03F). Probado en confirmación real de testing.
+
+#### 41.10.7 Cambio Domicilio ↔ Recogida
+
+- Domicilio → Recogida: envío = bodega, método `pickup`, la dirección del cliente deja de ser
+  destino (`cart_shipping.parent_address_id` NULL). La facturación se conserva.
+- Recogida → Domicilio: el `pickup` no se arrastra (la pantalla limpia el método y el dominio lo
+  rechazaría con destino domicilio); se aplica la dirección elegida y se vuelve a pedir el método.
+
+#### 41.10.8 Pago
+
+Sin cambios de arquitectura (03E): métodos = allowlist del canal asesor ∩ disponibles en
+Bagisto. Solo cambia la presentación (radio + título + descripción). Transferencia: «El pago
+sigue pendiente hasta que exista evidencia real»; no crea transacción ni Cartera.
+**Hecho de configuración en `lpz_saas`:** `moneytransfer.generate_invoice = 1` e
+`invoice_status = paid` (D-48, despliegue pendiente), así que Bagisto crea la factura `paid` sin
+transacción y «Mis ventas» la muestra como **Revisar** (D-56), no como Pagado.
+
+#### 41.10.9 PDF de factura: separado del dominio comercial
+
+La confirmación vía `php artisan serve` sigue bloqueándose por el problema ya auditado (el PDF de la
+notificación de factura pide el logo por HTTP a la misma app de un solo worker): en `laravel.log`
+de desarrollo, los intentos del 2026-10-05 11:39 (pedido 37) y 11:53 (pedido 38) terminaron en
+«Maximum execution time» y se revirtieron (borradores quedan `confirmando` sin `order_id`; D-55
+permite reintentar). No es un problema de Entrega/Pago ni de RT-04. Configuración nativa propuesta
+para desarrollo (no aplicada, requiere aprobación): D-57.
+
+**Confirmación controlada (2026-10-05 12:20, borrador 36, por CLI con los mismos servicios):** sin
+`serve` de por medio el pedido llega a crearse dentro de la transacción (`Order event triggered`,
+id 39) y la ejecución muere en el **mismo PDF** de la factura, ahora por memoria:
+`Allowed memory size of 134217728 bytes exhausted` en `khaled.alshamaa/ar-php` (llamado desde
+`Webkul\Core\Traits\PDFHandler`). Todo se revirtió (0 pedidos nuevos, 0 facturas, 0 atribuciones;
+el borrador queda `confirmando` sin `order_id`). Conclusión: el bloqueo es el PDF de la
+notificación de factura, por dos causas independientes (logo por HTTP en `serve` y memoria de
+`ar-php` con `memory_limit = 128M`); Entrega, Pago, atribución y OrderAddress no intervienen.
+
+#### 41.10.10 Pruebas (`Fase03gdEntregaDireccionPagoTest`, 6 casos, HTTP real)
+
+A/B/J recogida sin dirección del cliente, `pickup` real y solo `pickup` ofrecido; C/D
+predeterminada y elección entre varias, CustomerAddress intacta; E/F/L alta desde Nueva venta
+sin email (RT-04), predeterminada, código postal exigido, ajeno 409; G/H cambios
+domicilio↔recogida sin híbridos; K/M/N confirmación con transferencia: OrderAddress = snapshot,
+sin transacción, atribución al asesor y visible en «Mis ventas»; pantalla con secciones
+condicionadas.
+
+### 41.11 03G-D: modal «Agregar dirección», postcode dinámico, desbloqueo del PDF y primer Order real (2026-10-05, sin commit)
+
+Camilo aprobó la progresión Entrega → Dirección → Método de envío → Pago (§41.10); no se rediseña.
+
+#### 41.11.1 Modal «Agregar dirección» (IMPLEMENTADO)
+
+- El formulario inline desaparece. «+ Agregar dirección» (domicilio y facturación de recogida)
+  abre `x-admin::modal` (`ref="modalDireccion"`), el mismo componente de las otras modales de la
+  pantalla. Cuerpo con scroll interno (`max-h-[60vh]`) y pie visible con «Cancelar» / «Guardar
+  dirección»: usable en celular con el teclado abierto. 1 columna en móvil, 2 en escritorio.
+- Campos: nombre, apellido, teléfono (normalización de RT-04, sin cambios), dirección física,
+  ciudad/municipio, departamento, código postal, «Guardar en las direcciones del cliente». **Email
+  no se pide.**
+- Guardada → RT-04 (`POST nueva-venta/{borrador}/direcciones`, §41.10.5) y se usa en la venta.
+  Sin guardar → dirección puntual: solo CartAddress (la modal no se cierra si faltan obligatorios;
+  el backend valida igual).
+- **Provisional hasta aprobar D-58 (reemplazado en §41.12 por el autocomplete único):** ciudad en texto y departamento en select. El select ahora
+  envía el **código** de `country_states` (lo que Bagisto guarda en `addresses.state`), no el
+  nombre; las tarjetas muestran el nombre. El autocomplete único «Departamento — Municipio» queda
+  PROPUESTO en D-58 (sin tablas ni endpoint).
+
+#### 41.11.2 Código postal (IMPLEMENTADO)
+
+`GuardarDireccionClienteComercialService` exige el código postal solo si
+`core()->isPostCodeRequired()` (`customer.address.requirements.postcode`) lo exige; ya no es fijo.
+En `lpz_saas` vale 0 → opcional. La modal lo marca obligatorio solo si «Guardar» está marcado y
+Bagisto lo exige. La dirección puntual del borrador sigue opcional (D-46). Auditoría completa del
+código postal colombiano y de por qué no se resuelve por municipio: D-58.
+
+#### 41.11.3 Desbloqueo del PDF en desarrollo (APLICADO por configuración)
+
+`core_config` id 8 `emails.general.notifications.emails.general.notifications.new_invoice`
+(global, `channel_code` NULL): **1 → 0**. Solo deja de enviarse el correo de factura al cliente
+(y su PDF). Creación de Invoice, `generate_invoice`, `invoice_status` y semántica de pago sin
+cambios. Restaurar: Configuración → Correos → Notificaciones → «Nueva factura» = Sí (o valor 1 +
+`php artisan optimize:clear`). Detalle: D-57.
+
+#### 41.11.4 Confirmación real (2026-10-05 ~14:40, una sola)
+
+Borrador 36 (venta de Camilo: cliente 1, 2 unidades, recogida + transferencia, 14.800; propietario
+admin 1). Antes: `confirmando`, sin `order_id`, 24 pedidos, lease vencido. Confirmado por CLI con
+los mismos servicios (`NuevaVentaService::confirmar`), 18,5 s, sin bloqueo.
+
+| Verificación | Resultado |
+|---|---|
+| Order | **id 41, `BYL-00000025-CO`**, `processing`, 14.800, 2 unidades |
+| `shipping_method` | `pickup` («Recogida en tienda») |
+| Invoice | `FAC-BYL-00000025-2025`, `paid` (config de `moneytransfer`), `email_sent = 0` |
+| Transacciones | **0** (ninguna ficticia) |
+| OrderAddress envío | BODEGA PRINCIPAL, «Carrea 74 b numero 58-19 sur», BOGOTA, **state MI, postcode 48127** (datos de la bodega, ver D-57) |
+| OrderAddress facturación | dirección real del cliente («dirección del cliente», SOACHA) |
+| Atribución | `unassigned` / `sin_asesor`, creador admin 1, canal `tienda_fisica`, mecanismo `ventas_asesor` — **correcto por D-27** (admin `all`, sin selección); no se tocaron roles |
+| Pago derivado (D-56) | **Revisar** (factura `paid` sin transacción) |
+| Despacho (D-56) | **Sin despachar** |
+| Mis ventas | visible con «ver todos», propietario «Sin asignar»; no visible para asesores con «ver propios» |
+| Borrador 36 | `confirmado`, `order_id = 41` |
+
+Nota: `orders.shipping_title` quedó «Recogida en tienda - Recogida en tienda» (Bagisto concatena
+título de carrier y de método); solo cosmético.
+
+### 41.12 03G-D: catálogo DIVIPOLA y autocomplete único «Departamento — Municipio» (D-58, 2026-10-05, sin commit)
+
+Camilo aprobó D-58 (Doc. 04). La modal «Agregar dirección» (§41.11) se conserva y la progresión
+Entrega → Dirección → Método de envío → Pago **no** se rediseña. Detalle de fuente, esquema,
+tablas, equivalencia, Bogotá, importador, endpoint y código postal: **Doc. 04, D-58**. Aquí, lo que
+cambió en la pantalla y en el flujo de la dirección.
+
+#### 41.12.1 Qué cambió en la modal
+
+- «Ciudad / municipio» y «Departamento» (dos controles provisionales de §41.11.1) → **un solo
+  input autocompletable**. Resultados en vivo (debounce 300 ms) con el formato
+  **«Departamento — Municipio»** («Boyacá — Pesca», «Santander — Bucaramanga»,
+  «Bogotá, D.C. — Bogotá, D.C.»); busca por municipio **o** departamento, sin tildes ni mayúsculas.
+- La lista va **en flujo** debajo del input (no flotante), con `max-height` y scroll propio, para que
+  el teclado del celular no la oculte; flechas ↑↓ + Enter y toque/clic eligen.
+- Al elegir se muestra «Departamento: Boyacá» solo como información; no hay segundo selector. Volver
+  a escribir invalida la selección. Sin selección, «Guardar dirección» no envía nada y muestra
+  «Selecciona una ciudad o municipio de la lista.».
+- El código postal, el teléfono (RT-04), el email opcional y la casilla «Guardar en las direcciones
+  del cliente» no cambian.
+
+#### 41.12.2 Qué viaja y qué decide el backend
+
+- La UI manda **`municipio_codigo`** (5 dígitos); ya no manda ciudad, departamento ni país.
+- `AgregarDireccionNuevaVentaRequest` / `EntregaNuevaVentaRequest`: `municipio_codigo` obligatorio
+  para CO (422 con «Selecciona una ciudad o municipio de la lista.»).
+- `ValidadorDireccionComercial` resuelve el código en el catálogo y **ignora** lo que el navegador
+  mande en `ciudad` / `departamento` / `pais`: `country = CO`, `state = country_states.code`
+  (`BOY`, `BOG`, …), `city = nombre_oficial` (`Pesca`). Código inexistente / inactivo →
+  `datos_cliente_invalidos` (`errores.municipio_codigo`).
+- Ambos destinos usan el mismo resultado: guardada → `GuardarDireccionClienteComercialService`
+  (CustomerAddress, RT-04) y luego CartAddress; puntual → solo CartAddress (`OrigenDireccion::puntual`).
+  El OrderAddress lo copia Bagisto al confirmar (probado).
+- Corrección encontrada por las pruebas: `NuevaVentaService::agregarDireccionCliente` reconstruía el
+  DTO al marcar «predeterminada» y perdía `municipioCodigo`; ahora usa
+  `DireccionComercial::comoPredeterminada()`.
+
+#### 41.12.3 Pruebas
+
+- `Fase03gdGeoDivipolaTest`: nombres (presentación / búsqueda); importador (dry-run sin escrituras,
+  persistir, cero inicial, trazabilidad, **idempotencia sin un solo INSERT/UPDATE**, cambios,
+  inactivación sin borrar y reactivación, **falla cerrado**: departamento sin equivalencia, estado
+  inexistente, esquema distinto, datos mal formados) y comando (códigos de salida); endpoint:
+  «Pes», «Tun», «Buc», «Boy», «Chí», «Bog», varias palabras, orden municipio→departamento, tope de 15,
+  mínimo 2 caracteres, Bouncer; `resolver()`.
+- `Fase03gdEntregaDireccionPagoTest` (ampliada): selección de Pesca → CO/BOY/Pesca; manipulación de
+  ciudad/estado/país ignorada (CustomerAddress y CartAddress); texto parcial → 422 sin escrituras;
+  inexistente / inactivo → rechazo; guardar = CustomerAddress, sin guardar = solo CartAddress;
+  CustomerAddress existente intacta; postcode `true` / `false`; email NULL; Bogotá → BOG;
+  confirmación con OrderAddress del catálogo.
+- Datos de prueba: fixture mínimo cargado con el **mismo importador** dentro de cada transacción
+  (`tests/helpersGeo.php`); nada depende del catálogo completo ni de contaminación previa.
+
+---
+
+## 42. PAG-A: arquitectura de Pagos / Cartera (2026-10-05, solo documentación)
+
+**Estado:** diseño **aprobado por Camilo Gaitán** (decisiones P-01…P-12 y C-1…C-4 en Doc. 04, **D-59**).
+**Sin migraciones, modelos, servicios, controladores, rutas, vistas ni API; sin tests; sin tocar
+Webkul ni configuración.** Revisa y sustituye en parte el diseño de **D-53** (§35 y §36.4), cuyo
+historial se conserva. La auditoría de Pagos/Cartera ya se había realizado: aquí solo se cierra la
+arquitectura; los datos de Bagisto citados salen de §32–§36 y de lecturas puntuales de `core_config`.
+
+### 42.1 Base aceptada
+
+| Hecho (auditoría ya aceptada) | Consecuencia de diseño |
+|---|---|
+| `orders` no representa el dinero cobrado | El saldo no se lee del pedido |
+| `invoices.state = paid` representa facturación, **no** demuestra ingreso (D-48: hoy `moneytransfer` crea la factura `paid` sin dinero) | `Invoice paid` nunca es evidencia de pago |
+| `order_transactions` es lo más cercano al dinero **verificado** nativo | Se crea solo al **confirmar** (P-01) |
+| Bagisto no ofrece pago reportado sin revisar, aplicación multipedido, rechazo, reversión auditable, actor, evidencia, saldo comercial, cartera de cliente ni idempotencia suficiente | Dominio propio ByLopez, complementario (no sustituye a Bagisto) |
+| Webkul no implementa reversión de Transactions | La reversión confirmada queda como capacidad futura sin mecanismo cerrado (§42.4) |
+
+**Tres conceptos que no se confunden (D-56 se mantiene):**
+**Invoice** = facturación · **Transaction** = dinero verificado en el modelo nativo ·
+**Pago ByLopez** = ingreso comercial reportado, aplicado a pedidos y su ciclo de revisión.
+Además, **Pedido ≠ Pago ≠ Despacho**, y **método de pago del pedido** (`order_payment.method`,
+03E) **≠ medio de cobro** por el que realmente entró un abono (§42.7).
+
+### 42.2 Modelo conceptual (sin migración; el DDL final se define en PAG-B)
+
+**Relación con D-53.** La tabla `bylopez_va_registros_pago` de §35.4 **nunca se creó** y queda
+**sustituida**: su clave de idempotencia pasa a `bylopez_va_pagos`, y su `order_transaction_id`
+pasa a `bylopez_va_aplicaciones_pago` (nace NULL y se llena al confirmar).
+
+**`bylopez_va_pagos`** — el ingreso comercial registrado.
+
+| Campo conceptual | Notas |
+|---|---|
+| `id`, `customer_id` | Cliente dueño del ingreso. Todas sus aplicaciones recaen en pedidos de ese cliente (I-11) |
+| `monto` | Positivo, moneda base (COP), sin multimoneda |
+| `medio_cobro` | Código de la fuente configurable (§42.7); no es texto libre |
+| `referencia` | Opcional / requerida según la política del medio |
+| `fecha_pago` | Cuándo ingresó realmente el dinero (distinta de la fecha de registro); no futura |
+| `estado` | `sin_revisar`, `confirmado`, `rechazado`, `reversado` (§42.4) |
+| `mecanismo`, `idempotency_key`, `huella_solicitud` | UNIQUE(`mecanismo`, `idempotency_key`); misma lógica de D-53 (§35.3) |
+| `registrado_por_admin_id`, `revisado_por_admin_id`, `revisado_en` | Sin FK a administradores (como la atribución); snapshot de nombre opcional |
+| `notas`, timestamps | |
+
+**`bylopez_va_aplicaciones_pago`** — a qué pedido se aplicó cada peso.
+
+| Campo conceptual | Notas |
+|---|---|
+| `id`, `pago_id`, `order_id`, `monto` | `monto > 0` |
+| `anulada_en`, `anulada_evento_id` *(implementado sin `anulada_evento_id`, ver §42.16)* | NULL = activa. Se llenan **exactamente** para las aplicaciones de un pago rechazado (o reversado) |
+| `order_transaction_id` | NULL hasta confirmar; UNIQUE; FK a `order_transactions`, RESTRICT. Es el **vínculo estructural** que evita el doble conteo (§42.3) |
+
+**`bylopez_va_pagos_eventos`** — historial **append-only** (sin UPDATE ni DELETE): `id`, `pago_id`,
+`tipo` (`registrado`, `confirmado`, `rechazado`, `reversado`), `actor_admin_id`, `motivo`
+(obligatorio al rechazar y al reversar), `datos` (JSON: distribución y montos al momento), fecha.
+
+**Posterior (PAG-G):** `bylopez_va_pago_evidencias`. Comprobante ≠ dinero confirmado: nunca confirma
+solo.
+
+**No se guarda:** saldo, deuda ni columnas equivalentes (`customers.deuda` queda descartado, P-03),
+ni totales derivados. **No se crean:** wallet, saldo a favor ni anticipos.
+
+**Invariantes**
+
+| # | Invariante |
+|---|---|
+| I-1 | Ninguna deuda ni saldo persistido: saldo del pedido y cartera del cliente son **derivados** |
+| I-2 | Un pago `sin_revisar` o `confirmado` tiene aplicaciones activas cuya suma = `monto` (P-06: sin sobreaplicación ni remanente) |
+| I-3 | Un pago `rechazado` o `reversado` no tiene aplicaciones activas; sus aplicaciones quedan anuladas (no borradas) con el evento que las anuló |
+| I-4 | Para todo pedido, `aplicado_total ≤ total` al escribir, comprobado **bajo bloqueo** |
+| I-5 | Toda Transaction nativa creada por ByLopez se vincula a su aplicación **en la misma transacción de base de datos** que la crea. Una Transaction sin vínculo es, por definición, «ajena» |
+| I-6 | Confirmar **no** cambia el saldo. Rechazar hace reaparecer exactamente lo aplicado por ese pago |
+| I-7 | `Invoice paid` jamás cuenta como pago por sí sola |
+| I-8 | Registrar nunca confirma. Todo pago nace `sin_revisar` |
+| I-9 | Eventos append-only; cada transición de estado escribe su evento en la misma transacción |
+| I-10 | Permisos y visibilidad se validan **en el servicio**, no solo en vistas ni botones |
+| I-11 | Todas las aplicaciones de un pago pertenecen a pedidos del `customer_id` del pago |
+| I-12 | No se modifica `orders.status` directamente: solo a través de repositorios y eventos públicos de Bagisto, y solo al confirmar |
+
+### 42.3 Fórmulas
+
+Todo en **moneda base**. Para un pedido `O` en el alcance de Cartera (§42.8):
+
+```text
+T(O)     = orders.base_grand_total
+Ap(O)    = Σ monto de aplicaciones de O con anulada_en IS NULL          (pagos sin_revisar o confirmado)
+Nv(O)    = Σ order_transactions.amount de las facturas de O
+           cuya id NO aparece en aplicaciones.order_transaction_id        («ajenas» a ByLopez)
+
+aplicado_total(O) = Ap(O) + Nv(O)
+verificado(O)     = Ap_confirmado(O) + Nv(O)         ← Ap_confirmado: aplicaciones activas de pagos confirmados
+sin_revisar(O)    = Ap_sin_revisar(O)
+                    ⇒ aplicado_total = verificado + sin_revisar
+saldo(O)          = max(0, T(O) − aplicado_total(O))     (redondeo a 2 decimales)
+```
+
+**Sin doble conteo.** Al confirmar, la aplicación pasa de `sin_revisar` a `confirmado` y recibe su
+`order_transaction_id`. Esa Transaction **queda excluida de `Nv`** por el vínculo, así que el pago
+se cuenta **una sola vez**: `sin_revisar` baja, `verificado` sube y `aplicado_total` y `saldo` no se
+mueven.
+
+**Estado de pago derivado del pedido** (evolución de `EstadoPagoPedido`, PAG-C; conserva las
+constantes de `ConfirmacionVenta`):
+
+| Estado | Condición |
+|---|---|
+| `no_aplica` | Pedido `canceled`, `closed` o `fraud` |
+| `revisar` | Pedido con Refund (P-10) · `Invoice paid` sin Transaction ni aplicación (D-48/histórico) · `aplicado_total > T` (anomalía) |
+| `pendiente` | `aplicado_total = 0` |
+| `parcial` | `0 < aplicado_total < T` |
+| `pagado` | `saldo = 0` y ninguna condición de `revisar`; la interfaz indica «por revisar» si `sin_revisar > 0` (no es un estado nuevo) |
+
+Para pedidos **fuera de Cartera** (anteriores a la fecha de corte) se conserva la derivación actual
+de D-56 (Invoice + Transaction).
+
+**Cartera del cliente `C`:**
+
+```text
+pedidos_en_cartera(C) = pedidos de C, en el alcance de Cartera (§42.8),
+                        con estado ∉ {canceled, closed, fraud}
+cartera(C)            = Σ saldo(O) para O ∈ pedidos_en_cartera(C) sin Refund
+por_revisar(C)        = Σ saldo(O) para O con Refund (se muestra aparte, sin ocultar la deuda;
+                        no entra en la propuesta FIFO)
+```
+
+Detalle por pedido: **Total · Aplicado · Verificado · Sin revisar · Saldo**. Las consultas deben
+agregar por lote (sumas agrupadas por pedido y por cliente), sin consulta por pedido: la misma
+estrategia que «Mis ventas».
+
+### 42.4 Estados, transiciones y semántica
+
+```text
+sin_revisar ──► confirmado ──► reversado   (reversado: capacidad futura, PAG-I)
+     └────────► rechazado
+```
+
+- Registrar + aplicar es **una operación atómica**; no existe un estado «registrado».
+- Terminales: `rechazado` y `reversado`. No hay transición de salida.
+- **RECHAZAR ≠ REVERSAR.**
+  - **Rechazar:** el ingreso nunca fue válido. Solo desde `sin_revisar`. Anula **exactamente** sus
+    aplicaciones. **No** crea Transaction (nunca hubo dinero confirmado en Bagisto). Motivo obligatorio.
+  - **Reversar:** el pago **ya estaba confirmado** (ya existe Transaction). Operación excepcional y de
+    mayor privilegio. Efecto comercial esperado: sus aplicaciones dejan de contar y la deuda reaparece.
+- **Mecánica de la reversión: ABIERTA, no aprobada.** La auditoría propuso una Transaction negativa
+  compensatoria. **No se implementa ni se aprueba.** PAG-I empieza con una microauditoría de sus efectos
+  sobre `SUM(amount)`, el panel de Bagisto, `Invoice`, `Order`, `Refund`, futuras pasarelas y reportes.
+- Pedidos con Refund: no reciben pagos nuevos sin revisión; resultado `revisar` (P-10). **Refund de
+  mercancía ≠ reversión de un pago.**
+
+### 42.5 Flujos, idempotencia, bloqueos
+
+**Orden canónico de bloqueos (todas las operaciones):**
+`pago → pedidos (id ascendente) → facturas (id ascendente) → creación de Transactions`.
+Una sola transacción de base de datos por operación; `DB::transaction` con reintentos ante deadlock
+(como §35.5). Sin bloqueo del cliente: los pedidos en común serializan a los abonos que se solapan.
+
+**Registrar (atómico e idempotente)** — desde el pedido (un pedido) o abono general (varios pedidos):
+
+1. `INSERT` del pago `sin_revisar` (reserva `UNIQUE(mecanismo, idempotency_key)`).
+2. Bloquear los pedidos afectados, en orden ascendente.
+3. Validar bajo bloqueo: pedido en alcance de Cartera, no `canceled`/`closed`/`fraud`, sin Refund, visible
+   para el actor, **saldo recalculado ahora**, cada aplicación `≤ saldo`, suma de aplicaciones **= monto**
+   (si no hay deuda aplicable suficiente se **rechaza** con motivo claro: P-06), medio válido y referencia
+   según su política.
+4. `INSERT` de las aplicaciones y del evento `registrado`. `COMMIT`.
+
+- **Idempotencia** (D-53 §35.3, se conserva): misma clave + misma huella → devuelve el pago existente
+  (`duplicado = true`); misma clave + huella distinta → conflicto; clave distinta → otro pago legítimo.
+  La huella cubre cliente, monto, medio, referencia, fecha y la distribución normalizada (pares
+  `order_id:monto` ordenados). Un doble clic, un reintento HTTP o dos usuarios **no duplican** ni
+  **sobreaplican**: el segundo espera el bloqueo del pedido, recalcula y se rechaza.
+- **La propuesta FIFO** se calcula antes (en la interfaz o el servicio) pero **el backend revalida todo**;
+  si el saldo cambió, rechaza y devuelve una propuesta nueva.
+
+**Confirmar** (`sin_revisar → confirmado`):
+
+1. Bloquear el pago; exigir `estado = sin_revisar` (si no, `409`, sin escribir).
+2. Bloquear pedidos y luego facturas (ascendente).
+3. Por **cada aplicación activa**: crear la Transaction nativa con `OrderTransactionRepository::create`
+   (monto de la aplicación, medio, factura del pedido) y **vincularla** (`order_transaction_id`) en
+   la misma transacción de base de datos.
+4. Si la factura queda cubierta: `InvoiceRepository::updateState('paid')` y después
+   `OrderRepository::updateOrderStatus($order)` **sin estado** (cálculo por cantidades, §35.2). Nunca
+   `UPDATE` directo sobre `orders.status` (I-12).
+5. Estado `confirmado`, revisor y fecha, evento `confirmado`. `COMMIT`.
+
+- **Confirmar dos veces:** la guarda de estado bajo bloqueo y el `UNIQUE` de `order_transaction_id` impiden
+  una segunda Transaction. **El saldo no cambia** (I-6).
+- **Puntos a resolver con una microauditoría puntual en PAG-E (no se deciden aquí):** pedido sin factura
+  (la Transaction exige `invoice_id`; ver la configuración objetivo, §42.9), pedido con varias facturas y
+  reparto de una aplicación entre facturas; cómo se compone el `transaction_id` de la Transaction.
+
+**Rechazar** (`sin_revisar → rechazado`): bloquear pago y pedidos (ascendente); exigir `sin_revisar`;
+anular exactamente sus aplicaciones (`anulada_en`); estado `rechazado`; motivo obligatorio; evento.
+**No** toca Transactions, `Invoice` ni `Order`. La deuda **reaparece automáticamente**. Rechazar dos
+veces no duplica nada (guarda de estado).
+
+**Registrar y confirmar son capacidades distintas.** Un usuario con ambos permisos puede hacer las dos
+acciones, pero **registrar jamás confirma** (I-8); el evento guarda siempre al actor.
+
+### 42.6 ACL (la validación vive en el servicio)
+
+Claves propuestas (siguen la convención de `Config/acl.php`: planas, `ventas_asesor.<grupo>.<hoja>`, sin
+guiones):
+
+| Clave | Autoriza |
+|---|---|
+| `ventas_asesor.cartera` | Agrupadora: ordena el árbol de Roles y abre el listado. **No autoriza operaciones** |
+| `ventas_asesor.cartera.view_own` | Ver cartera, saldos y pagos de **sus** pedidos y clientes (mismo criterio que `pedidos.view_own`: atribución `advisor_id`; sin atribución válida y sin `view_all`, se niega: RA-6) |
+| `ventas_asesor.cartera.view_all` | Ver toda la cartera |
+| `ventas_asesor.cartera.registrar` | Registrar + aplicar un pago a **un** pedido que el actor puede ver. Nace `sin_revisar` |
+| `ventas_asesor.cartera.abono_general` | Registrar un abono multipedido de un cliente (FIFO editable), solo sobre pedidos visibles |
+| `ventas_asesor.cartera.revisar` | Confirmar y rechazar |
+| `ventas_asesor.cartera.reversar` | Reversar un pago confirmado (diseñado, **no implementado**) |
+
+- **Reglas heredadas de `acl.php`:** la agrupadora lleva una ruta **string** (no arreglo), porque
+  `SessionController::redirectToFirstAccessibleRoute()` no indexa arreglos; cada hoja necesita una ruta
+  GET sin parámetros en la posición 0 de su `route`; las rutas POST (registrar, abono, confirmar, rechazar,
+  reversar) se añaden como elementos de su hoja (Bouncer mapea **una** clave por ruta; la última gana).
+  `AclYMenuConfiguracionTest` exige el árbol exacto: PAG-B debe actualizarlo.
+- `AutorizacionVentasAsesor` se ampliará con el alcance de cartera y las comprobaciones por acción.
+- **Quién revisa:** supervisora, administrador u otro rol al que se otorgue `revisar`. **Nada se
+  hardcodea** por nombre ni identidad (ni «mamá», ni Camilo, ni «supervisora»).
+- **P-12 (política; no se cambian roles en PAG-A):** los asesores no usan el flujo nativo
+  `sales.transactions` (claves nativas `sales.transactions`, con `admin.sales.transactions.store`, y
+  `sales.transactions.view`). Revisar en el despliegue (§42.12).
+
+### 42.7 Medios de cobro y referencia
+
+- **Medio de cobro ≠ método de pago del pedido.** Un pedido contraentrega puede cobrarse luego por
+  transferencia. Dato real (dev, 2026-10-05): `moneytransfer` se titula «Transferencia de dinero(NEQUI,
+  DAVIPLATA, EFECTIVO, BANCO)»: **un mismo método de Bagisto cubre varios medios reales**, así que el
+  medio de cobro se pide al registrar y nunca se infiere del método del pedido.
+- **Fuente única configurable** (propuesta: `ventasasesor.pagos.medios_cobro`, junto a
+  `metodos_permitidos`), con, por medio: código estable, clave de traducción, `activo` y política de
+  referencia (`requerida` / `opcional` / `no_aplica`). La política **no se dispersa** en controladores.
+  Es la lista que ya preveía §35.6; no admite texto libre.
+- **Valores iniciales conceptuales:** `transferencia`, `efectivo`, `contraentrega_recaudo`.
+  **Transferencia: referencia `requerida` (preferida).** Si en operación aparecen casos legítimos sin
+  referencia, se reporta antes de relajarla; no se encontró evidencia en el código a favor ni en contra.
+  Sin integraciones con Nequi, Daviplata, bancos ni pasarelas (posteriores).
+- El código del medio de cobro es el que recibirá `order_transactions.payment_method` al confirmar (D-50).
+
+### 42.8 Histórico y fecha de corte (propuesta; sin backfill)
+
+- **Hecho:** hay pedidos con `Invoice paid` y **0 Transactions** (las transferencias históricas, D-48; el
+  pedido 41 es ejemplo vivo). Eso **no demuestra pago**.
+- **Reglas aprobadas:** no crear pagos heredados, no reconciliar el histórico automáticamente y no
+  convertir `Invoice paid` en `Pago confirmado`.
+- **Política propuesta (pendiente de aprobación de Camilo):**
+  1. **`cartera.fecha_corte`:** almacenamiento propuesto en `core_config` (editable desde el panel, sin
+     despliegue). **Falla cerrado:** sin fecha, Cartera no calcula saldos ni permite registrar (solo
+     lectura heredada de D-56).
+  2. Los pedidos con `created_at ≥ fecha_corte` entran en Cartera; los anteriores quedan **«Histórico»**
+     con la derivación actual (D-56), sin saldo de Cartera y sin aplicar pagos.
+  3. **Precondición:** la fecha de corte debe ser **posterior al despliegue de la configuración objetivo de
+     `moneytransfer`** (§42.9); si no, los pedidos nuevos por transferencia nacerían con `Invoice paid`
+     sin dinero y saldrían como `revisar`.
+  4. **Incorporación puntual** de un pedido histórico: acción explícita, auditada, con motivo y permiso
+     elevado; nunca masiva ni automática (es el «casos puntuales» ya recomendado en D-12). Su mecanismo se
+     define en PAG-F.
+- **Pedido 41** (`BYL-00000025-CO`): `Invoice paid` + 0 Transactions. **No se modifica, no recibe Pago ni
+  Transaction y no se usa para pruebas con escritura**; solo lectura de referencia. Queda anterior a
+  cualquier fecha de corte válida.
+
+### 42.9 Configuración objetivo de `moneytransfer` (diseñada, NO aplicada)
+
+| Clave `core_config` | Hoy (dev, 2026-10-05) | Objetivo |
+|---|---|---|
+| `sales.payment_methods.moneytransfer.generate_invoice` | `1` | `1` (se mantiene: la Transaction nativa exige una factura abierta) |
+| `sales.payment_methods.moneytransfer.invoice_status` | `paid` | **`pending`** |
+| `sales.payment_methods.moneytransfer.order_status` | `processing` | **`pending_payment`** (como `cashondelivery`, que ya está en `pending` / `pending_payment`) |
+
+- Es la «opción nativa» de D-48: factura pendiente → Transaction al confirmar → factura `paid`. Con ello
+  una transferencia deja de producir `Invoice paid` sin dinero.
+- **Alcance:** global (también afecta a la tienda) y en producción requiere autorización explícita (D-48).
+- **PAG-A no cambia nada.** El cambio real va en PAG-F, antes de fijar la fecha de corte; hasta entonces
+  Cartera **no** puede tratar `Invoice paid` como pago.
+- **Sin relación con el correo de factura:** `new_invoice = 0` (temporal en desarrollo) sigue como está y
+  el problema de PDF/correo es deuda aparte.
+
+### 42.10 Entradas de usuario (arquitectura, no implementadas)
+
+La capa de servicios es **una sola**; las tres entradas la reutilizan.
+
+| Entrada | Contenido | Notas |
+|---|---|---|
+| **A. Desde el pedido** | «Mis ventas → Pedido → Registrar pago»: Total · Pagado/aplicado · Saldo · `[+ Registrar pago]` (modal sencilla) | La más rápida; un pedido |
+| **B. Desde el cliente** | Cartera total, pedidos con saldo, pagos recientes y `[+ Registrar abono]` | Multipedido con **propuesta FIFO editable** |
+| **C. Bandeja Pagos / Cartera** | `SIN REVISAR`, `CONFIRMADOS`, `RECHAZADOS`, `CARTERA` y filtros | Para supervisión: confirmar rápido; rechazar exige motivo |
+
+- **FIFO es propuesta, no regla.** Ej.: A 200.000 · B 300.000 · C 400.000 con un pago de 500.000 → propone
+  A 200.000 + B 300.000, pero el usuario autorizado puede cambiarlo a A 100.000 · B 0 · C 400.000. El
+  backend revalida.
+- **Sin ficha paralela de Customer (P-09):** el Customer de Bagisto sigue siendo la autoridad. La «Cartera del
+  cliente» es de ByLopez con ACL propia, y se enlaza con una tarjeta/resumen mediante un **hook limpio en la
+  ficha nativa** (el mecanismo exacto se audita puntualmente en PAG-D). Prohibido sobrescribir vistas de
+  Webkul.
+- **Pago registrado = saldo comercial menor de inmediato**, aunque esté `sin_revisar`: la revisión no
+  bloquea la operación.
+- **P-11:** no existe la regla «saldo pendiente ⇒ prohibido despachar». Contraentrega: pedido → pendiente de
+  pago → preparación → despacho → cobro → registro → revisión.
+
+### 42.11 Ejemplos canónicos (casos de prueba futuros)
+
+**1. Pago simple.** Pedido 500.000, saldo 500.000. El asesor registra 300.000 por transferencia →
+aplicado 300.000, sin revisar 300.000, **saldo 200.000**. La supervisora **confirma** → verificado
+300.000, sin revisar 0, **saldo sigue 200.000** (no baja a −100.000). Escenario alterno: la supervisora
+**rechaza** → la aplicación se anula y el **saldo vuelve a 500.000**; la auditoría se conserva.
+
+**2. Multipedido.** Cliente Rosario con A 200.000, B 300.000 y C 400.000 (cartera 900.000). Abono de
+500.000; FIFO propone A 200.000 + B 300.000 → A 0, B 0, C 400.000, **cartera 400.000**. Si el pago se
+rechaza: A 200.000, B 300.000, C 400.000, **cartera 900.000**.
+
+**3. Sobreaplicación.** Saldo aplicable total 200.000 y pago de 300.000 → **se rechaza** con motivo
+claro (sin wallet ni saldo a favor).
+
+**4. Anti doble conteo.** Confirmar un pago crea la Transaction vinculada: el saldo no cambia. Una
+Transaction creada a mano en el panel nativo y **sin vínculo** sí cuenta en `Nv` (dinero verificado
+ajeno).
+
+**5. Idempotencia y concurrencia.** Doble clic o reintento HTTP con la misma clave → un solo pago. Dos
+usuarios aplicando al mismo saldo → solo uno aplica; el otro recalcula y se rechaza. Confirmar dos veces
+→ una sola Transaction. Rechazar dos veces → sin efecto doble.
+
+### 42.12 Checklist de despliegue (no se ejecuta en PAG-A)
+
+1. Aplicar la configuración objetivo de `moneytransfer` (§42.9), con autorización explícita.
+2. Fijar `cartera.fecha_corte` posterior a (1).
+3. Revisar roles: ningún rol de asesor con `sales.transactions` ni `sales.transactions.view`; otorgar
+   `cartera.*` según el rol (P-12).
+4. Confirmar que no quedan pedidos nuevos con `Invoice paid` sin Transaction ni aplicación.
+5. Mantener (o decidir aparte) la configuración temporal de `new_invoice`.
+
+### 42.13 Riesgos
+
+| # | Riesgo | Mitigación |
+|---|---|---|
+| R-1 | Las pantallas nativas de Bagisto (facturas, transacciones, panel) mostrarán el pedido sin pagar hasta confirmar | Es intencional (P-01); Mis ventas y Cartera leen el dominio ByLopez |
+| R-2 | Doble conteo si falta el vínculo `order_transaction_id` | I-5 + prueba de invariante |
+| R-3 | Pedidos nuevos con `Invoice paid` sin dinero si la configuración no está alineada | Precondición de la fecha de corte |
+| R-4 | Uso de `sales.transactions` nativo por un asesor (sin revisión ni bloqueo) | P-12; esas Transactions cuentan como `Nv` pero se saltan la revisión |
+| R-5 | La pantalla nativa de transacciones no bloquea: carrera residual contra la guarda de sobreaplicación | Se recalcula `Nv` bajo bloqueo del pedido; riesgo ya documentado en §35.5 |
+| R-6 | Pedido sin factura o con varias facturas al confirmar | Microauditoría puntual en PAG-E |
+| R-7 | Refund posterior a un pago | `revisar` (P-10); Refund ≠ reversión |
+| R-8 | Mecánica de reversión sin cerrar | Microauditoría al inicio de PAG-I |
+
+### 42.14 Hoja de ruta (el orden definitivo lo fija Camilo en cada prompt)
+
+| Fase | Contenido | Puerta |
+|---|---|---|
+| **03G** | Validación manual de Camilo y cierre documental posterior | Independiente de PAG |
+| **PAG-A** | Arquitectura (este documento y D-59) | ✅ cerrada en documentación |
+| **PAG-B** | Modelo persistente (3 migraciones, modelos, enums), fuente `medios_cobro`, claves ACL (con su prueba) y **consulta de cartera** (servicios de lectura: saldo del pedido y cartera del cliente) | Sin registrar pagos todavía. **IMPLEMENTADA 2026-10-06 (sin commit): ver §42.16** |
+| **PAG-C** | Registrar pago desde el pedido (servicio atómico e idempotente + modal) y estado de pago de Mis ventas leyendo del dominio nuevo (evoluciona `EstadoPagoPedido`; salda la duplicación con `ConfirmarVentaService::estadoPago()`) | **IMPLEMENTADA 2026-10-06 (sin commit): ver §42.18.** Pagos reales bloqueados por diseño hasta fijar `cartera.fecha_corte` y migrar desarrollo |
+| **PAG-D** | Cartera del cliente + abono general multipedido (FIFO editable) + hook en la ficha del cliente | **IMPLEMENTADA 2026-10-06 (sin commit): ver §42.20** |
+| **PAG-E** | Bandeja central Pagos/Cartera + **Confirmar / Rechazar** (crea la Transaction nativa al confirmar; microauditoría de factura/pedido) | **IMPLEMENTADA 2026-10-06 (sin commit): ver §42.21** |
+| **PAG-F** | Configuración objetivo de `moneytransfer`, fecha de corte, incorporación puntual de históricos, roles (P-12) y activación | **No activar en producción antes de PAG-E y PAG-F**. **CERRADA EN DESARROLLO 2026-10-07 / PENDIENTE ROLLOUT PRODUCCIÓN: `moneytransfer` objetivo, corte `2026-10-06` (opción A) y rol `#2 ASESOR VENTAS` sin módulo Sales nativo (§42.22-§42.24)** |
+| **PAG-G** | Evidencias / comprobantes | |
+| **PAG-H** | Conciliación y saldo a favor / sobreaplicación (estudio; hoy fuera de alcance) | |
+| **PAG-I** | Reversión de pagos confirmados | Empieza con microauditoría del mecanismo |
+| Posterior | Canales automatizados (n8n / WhatsApp / IA) sobre la **misma** capa de servicios | IA no confirma dinero; n8n no escribe tablas directamente |
+
+### 42.15 Fuera de alcance de PAG-A (confirmado)
+
+Migraciones, modelos, servicios, controladores, vistas, API, cambios de configuración (`core_config`),
+cambios de roles, backfill, Transactions, Invoices, restauración de `new_invoice`, y cualquier toque a
+Webkul, a 03G, a Nueva venta, al PDF/correo, a Logística o a n8n/WhatsApp/IA.
+
+### 42.16 PAG-B: modelo persistente y consulta de cartera — IMPLEMENTADO (2026-10-06, sin commit)
+
+**Alcance (solo infraestructura).** Tres tablas, modelos, estados, fuente de medios de cobro, claves ACL,
+lectura de la fecha de corte y el servicio de CONSULTA. **No** registra, confirma, rechaza ni reversa pagos;
+**no** crea Transactions ni Invoices; **no** hay interfaz, rutas, API ni evidencias (PAG-G); **no** cambia
+configuración de Bagisto ni roles (P-12 sigue como política de despliegue); Webkul intacto; pedido 41
+intacto; sin backfill. Los servicios de escritura de los eventos (`registrado`, `confirmado`…) tampoco
+existen todavía: una prueba verifica que no hay clases de registrar/confirmar/rechazar/reversar.
+
+**Tipos reales verificados (lpz_saas, MariaDB 10.4.28):** `orders.id`, `customers.id`, `invoices.id`,
+`order_transactions.id` y `admins.id` son `int(10) unsigned`; el dinero de Bagisto es `decimal(12,4)`
+(`orders.base_grand_total`, `order_transactions.amount`). Por eso las FK de ByLopez hacia Bagisto son
+`unsignedInteger` (no bigint) y el dinero propio es `decimal(12,4)`. Las claves propias de las tres
+tablas son `bigint unsigned` (`$table->id()`).
+
+#### Migraciones (`src/Database/Migrations/`, aditivas, solo tablas propias)
+
+`2026_10_06_000011_create_bylopez_va_pagos_table`,
+`2026_10_06_000012_create_bylopez_va_aplicaciones_pago_table`,
+`2026_10_06_000013_create_bylopez_va_pagos_eventos_table`. **Aplicadas SOLO a `lpz_saas_testing`**
+(convención de las fases de pago); `lpz_saas` (desarrollo) no se migró: un `php artisan migrate` allí las
+creará (son aditivas y quedan vacías). `down()` borra solo su tabla; los FK RESTRICT impiden deshacer una
+tabla con historia dependiente.
+
+**`bylopez_va_pagos`**
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | bigint unsigned PK | |
+| `customer_id` | int unsigned | FK `customers.id` **RESTRICT** (`bvapag_customer_fk`) |
+| `monto` | decimal(12,4) | CHECK `monto > 0` (`bvapag_monto_positivo`) |
+| `medio_cobro` | varchar(40) | Código de `MediosCobro` (no es el método de pago del pedido) |
+| `fecha_pago` | date | Cuándo ingresó el dinero (distinta de `created_at`) |
+| `referencia`, `referencia_normalizada` | varchar(100) null | La normalizada es solo un índice para detectar repetidas (aviso, no bloqueo) |
+| `observacion` | text null | |
+| `estado` | varchar(20), default `sin_revisar` | Valor de `Enums\EstadoPago` |
+| `mecanismo`, `idempotency_key`, `huella_solicitud` | varchar(30), varchar(100), char(64) | Idempotencia de D-53 |
+| `registrado_por_admin_id` | int unsigned | **Sin FK** (la auditoría sobrevive al administrador) |
+| `revisado_por_admin_id`, `revisado_en`, `motivo_revision` | int unsigned null, timestamp null, varchar(500) null | Sin FK |
+| `created_at`, `updated_at` | timestamps | |
+
+Índices: **UNIQUE `bvapag_idem_unique` (`mecanismo`, `idempotency_key`)**; `bvapag_cliente_estado_idx`
+(`customer_id`, `estado`); `bvapag_estado_fecha_idx` (`estado`, `created_at`, para la bandeja);
+`bvapag_referencia_idx` (`medio_cobro`, `referencia_normalizada`); `bvapag_registrador_idx`.
+
+**`bylopez_va_aplicaciones_pago`**
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | bigint unsigned PK | |
+| `pago_id` | bigint unsigned | FK `bylopez_va_pagos` **RESTRICT** |
+| `order_id` | int unsigned | FK `orders.id` **RESTRICT** |
+| `invoice_id` | int unsigned null | FK `invoices.id` **RESTRICT**; se fija al confirmar |
+| `monto` | decimal(12,4) | CHECK `monto > 0` |
+| `posicion` | smallint unsigned, default 1 | Orden de la distribución (propuesta FIFO); informativo |
+| `anulada_en`, `anulada_por_admin_id` | timestamp null, int unsigned null | NULL = activa; sin FK al administrador |
+| `order_transaction_id` | int unsigned null | FK `order_transactions.id` **RESTRICT**; **UNIQUE** (varios NULL permitidos); es el vínculo anti doble conteo |
+| `created_at` | timestamp default now | Sin `updated_at` |
+
+Índices: **UNIQUE `bvaap_pago_order_unique` (`pago_id`, `order_id`)**; **UNIQUE `bvaap_transaction_unique`
+(`order_transaction_id`)**; `bvaap_order_activa_idx` (`order_id`, `anulada_en`).
+
+**`bylopez_va_pagos_eventos`** (append-only): `id`, `pago_id` (FK RESTRICT), `tipo` varchar(30)
+(`Enums\TipoEventoPago`), `actor_admin_id` int unsigned **null y sin FK**, `mecanismo` varchar(30), `motivo`
+varchar(500) null, `datos` json null, `created_at`. Índices `(pago_id, created_at)`, `tipo`,
+`actor_admin_id`. La inmutabilidad la impone el modelo (`PagoEvento` lanza
+`PagoEventoInmutableException` en `update`, `delete` y `save` sobre filas existentes); **alcance honesto:**
+son eventos de Eloquent, una consulta masiva o SQL directo los salta (misma regla que el historial de
+atribución: los eventos solo se escriben por el servicio).
+
+**Diferencias con el diseño conceptual de §42.2 (decididas al implementar):** (1) se omitió
+`anulada_evento_id` (circularidad entre tablas y poco valor; se conserva `anulada_en` + `anulada_por_admin_id`,
+y el evento de rechazo/reverso vive en `bylopez_va_pagos_eventos`); (2) se agregaron `invoice_id` y
+`posicion` a las aplicaciones, y `observacion`, `referencia_normalizada` y `motivo_revision` a los pagos;
+(3) `mecanismo` en los eventos; (4) CHECK `monto > 0` (MariaDB ≥ 10.2.1 / MySQL ≥ 8.0.16); (5) sin snapshot
+de nombre del administrador (se puede añadir después).
+
+#### Código
+
+| Pieza | Responsabilidad |
+|---|---|
+| `Enums\EstadoPago` | Fuente única de `sin_revisar`, `confirmado`, `rechazado`, `reversado`; `transicionesPermitidas()` / `puedeTransicionarA()` (solo las 3 aprobadas), `esFinal()`, `cuentaParaSaldo()` (sin_revisar y confirmado), `esVerificado()`, `valores()`. **No ejecuta transiciones** |
+| `Enums\TipoEventoPago` | `registrado`, `confirmado`, `rechazado`, `reversado`, `evidencia_agregada`, `posible_duplicado`; `estadoResultante()`, `exigeMotivo()` |
+| `Models\Pago`, `AplicacionPago`, `PagoEvento` | Eloquent planos (como el resto del paquete); `Pago` castea `estado` al enum; `AplicacionPago::scopeActivas()`; relaciones |
+| `Support\Cartera\MediosCobro` | **Fuente única** de medios de cobro sobre `ventasasesor.pagos.medios_cobro`: `todos()`, `activos()`, `existe()`, `estaActivo()`, `etiqueta()`, `politicaReferencia()`, `exigeReferencia()`, `admiteReferencia()`, `normalizarReferencia()`. Configuración inválida → `LogicException` |
+| `Support\Cartera\FechaCorteCartera` | Lee `ventasasesor.cartera.fecha_corte`: `valor()`, `activa()`, `incluye($creadoEn)`. **Sin fecha = inactiva (falla cerrado)**; no se inventó ninguna fecha |
+| `Support\AutorizacionVentasAsesor` | + constantes `PERMISO_CARTERA_*` y `alcanceDeCartera()` / `puedeVerCarteraDe()` (espejo de `pedidos`; la agrupadora sola no concede nada; `pedidos.view_all` no da cartera) |
+| `DataObjects\SaldoPedido`, `CarteraCliente` | DTO de lectura (con `toArray()`) |
+| `Services\Cartera\CarteraConsultaService` | `saldosDePedidos(array)` por lote y SIN actor; `saldoDePedido($id, $actor)`; `carteraDelCliente($customerId, $actor)` |
+
+**Medios de cobro (configuración inicial, a confirmar por Camilo).** `transferencia` (referencia
+**requerida**), `efectivo` (opcional), `contraentrega_recaudo` (opcional); etiquetas en
+`ventasasesor::app.cartera.medios.*` (es/en). Una prueba garantiza que esos códigos no se repiten en ningún
+otro archivo del paquete.
+
+**ACL (`Config/acl.php`, 7 claves nuevas; el árbol pasa de 23 a 30):** `ventas_asesor.cartera` (sort 7,
+agrupadora, ruta string) y las hojas `view_own` (1), `view_all` (2), `registrar` (3), `abono_general` (4),
+`revisar` (5), `reversar` (6). Todas apuntan a la ruta de inicio como marcador (regla 3 del encabezado) hasta
+que PAG-C cree la suya. **No se asignó a ningún rol existente** y no se quitó `sales.transactions` (P-12 sigue
+siendo checklist de despliegue). `AclYMenuConfiguracionTest` se actualizó (listas y conteo 30).
+
+#### Consulta: la fórmula implementada (Doc. 05 §42.3)
+
+Por pedido en Cartera, en moneda base y con redondeo a 2 decimales:
+`Ap` = aplicaciones activas (`anulada_en IS NULL`) de pagos `sin_revisar` o `confirmado`;
+`Nv` = suma de `order_transactions.amount` del pedido **sin vínculo** en
+`aplicaciones.order_transaction_id` (anti-join); `aplicado_total = Ap + Nv`;
+`verificado = Ap_confirmado + Nv`; `sin_revisar = Ap_sin_revisar`;
+`saldo = max(0, orders.base_grand_total − aplicado_total)`. **Ejemplo canónico probado:** pedido 500.000,
+pago sin revisar 300.000 → saldo 200.000; al «confirmar» (Transaction vinculada) el saldo **sigue** en
+200.000; sin el vínculo la misma Transaction contaría doble (aplicado 600.000, saldo 0, marcado
+`sobreaplicado`). Rechazar (aplicaciones anuladas) → saldo 500.000.
+
+- **Fuera de Cartera** (`en_cartera = false`, sin cifras): `cartera_inactiva` (sin fecha de corte),
+  `estado_no_aplica` (`canceled`, `closed`, `fraud`) y `anterior_a_fecha_corte` (creado antes de la fecha; el
+  límite exacto entra).
+- **`requiere_revision` y motivos** (nunca se resuelven solos): `pedido_con_reembolso` (P-10:
+  `orders.base_grand_total_refunded > 0` o fila en `refunds`), `factura_pagada_sin_evidencia` (`Invoice paid`
+  sin Transaction ni aplicación: **no es pago**), `sobreaplicado` y `aplicacion_activa_en_pago_cerrado`
+  (aplicación activa de un pago rechazado/reversado: invariante I-3 violada; no se cuenta y se señala).
+- **Cartera del cliente:** suma del saldo de sus pedidos en Cartera **sin** Refund; los pedidos con Refund se
+  suman aparte en `por_revisar_total`; `pedidos` sale del más antiguo al más nuevo (orden FIFO) con su
+  desglose Total · Aplicado · Verificado · Sin revisar · Saldo; `fuera_de_cartera` cuenta el resto.
+- **Alcance por actor (I-10):** `view_all` = todo; `view_own` = solo pedidos atribuidos al actor
+  (`bylopez_va_order_attributions.advisor_id`; sin atribución se niega, RA-6); sin permiso (o solo la
+  agrupadora, o solo `pedidos.view_*`) → `AuthorizationException`; un pedido ajeno o inexistente devuelve
+  `null` (no se revela). `saldosDePedidos()` no valida alcance y es solo para llamadores que ya lo acotaron.
+- **Rendimiento:** **5 consultas agrupadas por lote** (pedidos, reembolsos, aplicaciones, Transactions ajenas,
+  facturas pagadas), constantes con 1 o 15 pedidos (probado). Solo lectura (probado: ni un INSERT/UPDATE/DELETE).
+- **`EstadoPagoPedido` y «Mis ventas» no cambian** en PAG-B: su evolución hacia este dominio es de PAG-C.
+
+#### Pruebas (dirigidas, secuenciales, sobre `lpz_saas_testing`)
+
+| Archivo | Resultado |
+|---|---|
+| `PagBModeloPersistenteTest` | 16 passed (140 aserciones), ≈ 29 s: esquema y tipos de Bagisto, UNIQUE de idempotencia / pago-pedido / transacción, CHECK `monto > 0`, FK RESTRICT, eventos append-only, enums y transiciones, medios de cobro (fuente única y política), fecha de corte, ACL |
+| `PagBCarteraConsultaTest` | 14 passed (123 aserciones), ≈ 8 s: fórmula y ejemplo canónico, anti doble conteo, rechazo, Transactions ajenas, estados fuera de Cartera, Refund, fecha de corte, Invoice paid sin evidencia, cartera Rosario (FIFO y rechazo), alcance, lote, sin N+1, solo lectura |
+| `AclYMenuConfiguracionTest` | 10 passed (201 aserciones): árbol de 30 claves |
+| `AutorizacionVentasAsesorTest` | 32 passed (en la corrida combinada) |
+
+Pint: sin hallazgos en los archivos nuevos o tocados. No se ejecutaron regresiones masivas ni suites de otras
+fases.
+
+#### Pendiente y siguiente
+
+- Servicios de **registrar** (PAG-C), **confirmar / rechazar** (PAG-E) y reversar (PAG-I); eventos de auditoría;
+  idempotencia en uso real; estado de pago de Mis ventas sobre este dominio (PAG-C).
+- **Fecha de corte:** valor, almacenamiento definitivo (propuesta `core_config`) e incorporación puntual de
+  históricos siguen **pendientes de aprobación** (PAG-F); mientras tanto Cartera está inactiva.
+- Aplicar las migraciones en desarrollo (`php artisan migrate`) cuando se quiera; no se hizo para no alterar la
+  base de Camilo sin su visto bueno.
+- Registrar en el próximo prompt: ¿se confirma la lista inicial de medios de cobro y la política de referencia
+  de `efectivo` y `contraentrega_recaudo` (hoy `opcional`)?
+
+### 42.17 Corrección de acceso/menú tras la validación manual de 03G (2026-10-06)
+
+**Validación manual de Camilo (celular):** cambió las opciones de la venta, confirmó y se creó el pedido
+`#BYL-00000045-CO` por **$184.000 COP**; la pantalla reconoció «Esta venta ya fue confirmada» y mostró la modal
+«VENTA CREADA». El pedido no se modifica ni se usa para pruebas con escritura.
+
+**Causa exacta del error de acceso.** El botón «Ver pedido» de la modal armaba `/{admin_url}/sales/orders/{id}`.
+Esa ruta **no existe** en Bagisto 2.4.9 (la vista nativa es `sales/orders/view/{id}`, con la clave nativa
+`sales.orders.view`): resultaba en **404**, no en un problema de ACL. Además apuntaba a la pantalla nativa y no al detalle
+propio del módulo, que se rige por `pedidos.view_own|view_all` y la atribución (D-27/RA-6). Se verificó con el
+administrador de Camilo (rol «all»): `ventas-asesor/pedidos?pedido=45` y `sales/orders/view/45` dan 200 y
+`sales/orders/45` da 404. **No había contradicción entre crear y ver**: la atribución del pedido 45 es
+`unassigned / sin_asesor / sin_contexto` (lo creó el admin 1, que no opera como asesor); un rol `view_own` no lo
+vería (RA-6, correcto), uno `view_all` o «all» sí.
+
+**Corrección.** «Ver pedido» abre `admin.ventas_asesor.pedidos.index?pedido={id}` (el detalle del módulo, autorizado
+registro a registro). No se concedió ningún permiso ni se tocó Webkul.
+
+**Menú «Ventas Asesor»** (Config/menu.php; cada clave reutiliza una clave ACL existente, así que no hay permisos nuevos):
+
+| Entrada | Clave (ACL y menú) | Ruta |
+|---|---|---|
+| Inicio | `ventas_asesor.operar_como_asesor` | `admin.ventas_asesor.inicio.index` |
+| Mis ventas / Pedidos | `ventas_asesor.pedidos` | `admin.ventas_asesor.pedidos.index` |
+| Nueva venta (tercer nivel, bajo Mis ventas) | `ventas_asesor.pedidos.create` | `admin.ventas_asesor.nueva_venta.pantalla` |
+
+- Bagisto anida el menú por la clave con puntos y filtra cada entrada con esa misma clave: por eso «Nueva venta» queda
+  anidada bajo «Mis ventas / Pedidos» (no hay clave ACL hermana). **Limitación conocida:** el tercer nivel solo se
+  despliega cuando la sección está activa; desde otra sección el flyout no lo muestra (la pantalla de Inicio también
+  enlaza a Nueva venta). Hacerla de segundo nivel exige una clave ACL nueva (decisión de Camilo; no se tomó).
+- «Inicio» usa `operar_como_asesor`: un rol sin esa clave no ve «Inicio» (el módulo se abre en «Mis ventas»).
+- **No hay entrada de Cartera**: todavía no existe su pantalla (se agrega con PAG-D/PAG-E). Una prueba lo exige.
+
+### 42.18 PAG-C: registrar pago desde el pedido — IMPLEMENTADO (2026-10-06, sin commit)
+
+**Alcance.** Primera escritura del dominio de pagos: registrar **un** pago aplicado a **un** pedido. **No** confirma,
+rechaza ni reversa; **no** crea `order_transactions`; **no** toca `Invoice` ni `orders.status`. El dinero queda
+**REPORTADO y aplicado (`sin_revisar`)**, no verificado.
+
+**Servicio `Services\Cartera\RegistrarPagoService::registrar(actor, orderId, datos, idempotencyKey, mecanismo)`.**
+Controlador delgado (`Http\Controllers\Admin\PagosController@store`), request de forma
+(`Http\Requests\Cartera\RegistrarPagoRequest`), rechazos tipados (`Exceptions\RegistroPagoInvalidoException`, con código
+estable y estado HTTP) y resultado (`DataObjects\ResultadoRegistroPago`).
+
+Flujo (una sola transacción de base de datos, hasta 3 intentos ante deadlock):
+
+1. **Autorización en el servicio:** `ventas_asesor.cartera.registrar` **más** alcance de lectura de cartera sobre el
+   pedido (`view_all` = todo; `view_own` = pedido atribuido al actor; sin atribución se niega, RA-6). Sin permiso → 403;
+   pedido inexistente **o fuera de alcance** → misma respuesta 404 (no revela existencia). Nada hardcodeado por rol o persona.
+2. **Falla cerrado:** sin `cartera.fecha_corte` → `cartera_inactiva`, **antes** de tocar ninguna tabla de pagos.
+3. Validación de forma y normalización: monto > 0 con máximo 2 decimales; medio **activo** de `MediosCobro`; referencia
+   según su política (`transferencia` la exige; `no_aplica` la rechaza); fecha válida y no futura; clave de idempotencia
+   de 16 a 100 caracteres seguros. El backend es la autoridad; la interfaz solo refleja las reglas.
+4. **Idempotencia** (§42.5): misma clave + misma huella → devuelve el pago existente (`duplicado = true`, HTTP 200, sin
+   escribir); misma clave + huella distinta → `idempotencia_en_conflicto` (409). La huella (SHA-256) cubre cliente,
+   medio, fecha, referencia normalizada y la distribución `order_id:monto`. El reintento se resuelve **antes** de
+   revalidar saldo (reenviar una solicitud ya registrada no falla porque el saldo ya bajó). Una carrera con la misma clave
+   la resuelve el `UNIQUE(mecanismo, idempotency_key)` (error 1062 → se devuelve el existente).
+5. **Orden de bloqueos** (§42.5): `INSERT` del pago (reserva la clave) → `SELECT … FOR UPDATE` del pedido.
+6. **Bajo el bloqueo se recalcula el saldo REAL** con `CarteraConsultaService` (nunca el que vio el navegador) y se valida:
+   pedido en Cartera (no cancelado/cerrado/fraude, creado desde la fecha de corte), con cliente, **sin
+   `requiere_revision`** (Refund, sobreaplicación, factura pagada sin evidencia…) y `monto ≤ saldo`
+   (`monto_excede_saldo`; no existe saldo a favor).
+7. `INSERT` de `AplicacionPago` (posición 1, sin `invoice_id` ni `order_transaction_id`) y del evento `registrado`
+   (actor, mecanismo y datos: pedido, monto, medio, fecha, `saldo_antes`, `saldo_despues`, huella). Cualquier fallo →
+   **rollback completo**: nunca queda un Pago sin aplicación (probado).
+
+El pago **siempre nace `sin_revisar`**, aunque el actor tenga `revisar` (I-8). El saldo comercial baja de inmediato
+(ejemplo canónico probado: 500.000 → registra 300.000 → aplicado 300.000, sin revisar 300.000, verificado 0, **saldo 200.000**).
+Dos registros simultáneos sobre el mismo pedido se serializan en el bloqueo: el segundo recalcula y se rechaza si ya no
+alcanza (la serialización real entre conexiones no se probó con procesos concurrentes; se apoya en `FOR UPDATE` + `UNIQUE`).
+
+**Ruta y ACL.** `POST {admin}/ventas-asesor/pedidos/{pedido}/pagos`, nombre
+`admin.ventas_asesor.pedidos.pagos.store`, mapeada a la hoja `ventas_asesor.cartera.registrar` (`$inicio` sigue en la
+posición 0). El árbol ACL **no cambia** (30 claves). **Cómo habilitarlo:** ningún rol tiene `cartera.*` (P-12); roles
+con permiso «all» ya pueden. Para un rol personalizado hay que marcar, en Roles, `cartera.registrar` y
+`cartera.view_own` o `cartera.view_all`. No se asignó nada.
+
+**Interfaz (detalle del pedido, `pedidos?pedido=ID`).** Bloque «Pago / Cartera» con Total · Aplicado · Sin revisar ·
+Verificado · Saldo (todo de `CarteraConsultaService`, sin cálculo en Blade ni controlador) y, si procede, el botón
+**«+ Registrar pago»** (permiso `registrar`, pedido en Cartera, sin revisión pendiente y con saldo). La modal precarga
+el saldo actual como monto (editable para pago parcial), muestra el saldo, ofrece solo los medios activos de
+`MediosCobro` (código, etiqueta y política de referencia vienen del servidor), marca la referencia como requerida u
+opcional, genera una clave de idempotencia por apertura y bloquea el doble clic. Al terminar recarga el detalle.
+Sin fecha de corte el bloque informa «Cartera todavía no está activa» y **no** ofrece el botón.
+
+**Estado de pago de «Mis ventas».** `Support\Pedidos\EstadoPagoPedido::desdeCartera()`: **para pedidos dentro de
+Cartera** la fuente única es el dominio (`requiere_revision` → revisar; aplicado = 0 → pendiente; saldo > 0 → parcial;
+saldo = 0 → pagado = «aplicado por completo»). La diferencia entre dinero **sin revisar** y **verificado** se muestra
+aparte (chips «Sin revisar» / «Verificado» en el listado y cifras en el detalle); nada sin revisar se llama
+«confirmado». **Para pedidos fuera de Cartera** (histórico, Cartera inactiva, cancelados…) rige la derivación D-56 por
+facturas, como dispone §42.8. `ConsultaPedidosAsesorService` obtiene ambos por lote (sin N+1, probado).
+Deuda que sigue: `ConfirmarVentaService::estadoPago()` (03F) conserva su copia de la regla D-56; para un pedido
+recién confirmado ambos dan «pendiente». Se unifica cuando se reabra 03F.
+
+**Cartera inactiva ya no toca tablas.** `CarteraConsultaService::saldosDePedidos()` devuelve los pedidos como «fuera
+de Cartera» sin consultar las tablas de pagos cuando no hay fecha de corte; así Mis ventas funciona en un entorno sin
+las migraciones de PAG-B (desarrollo, hoy).
+
+**Bloqueo real para pagos reales (por diseño, no se saltó):** hoy `cartera.fecha_corte` está **inactiva** y las tablas
+de PAG-B **no están migradas en desarrollo**. Para que Camilo registre un pago real sobre `#BYL-00000045-CO` hacen
+falta, con su autorización explícita: (1) `php artisan migrate` en desarrollo (crea las 3 tablas vacías), y (2) fijar
+`VENTASASESOR_CARTERA_FECHA_CORTE` (mecanismo actual: variable de entorno → config) a una fecha ≤ la creación del
+pedido. §42.8 pide que la fecha de corte sea posterior a la configuración objetivo de `moneytransfer` (§42.9, PAG-F); en
+desarrollo, con ese pedido, es una decisión de Camilo. **No se inventó ninguna fecha.**
+
+**Pruebas (dirigidas, secuenciales, sobre `lpz_saas_testing`).**
+
+| Archivo | Resultado |
+|---|---|
+| `PagCRegistrarPagoTest` (nuevo) | 4 passed (51 aserciones): parcial 500k→300k→saldo 200k sin Transactions ni cambios en Invoice/Order; idempotencia (misma solicitud no duplica; otra solicitud con la misma clave → 409); sobreaplicación, monto inválido, referencia requerida, medio no válido y Cartera inactiva rechazados sin escribir nada; ruta y ACL (sin `registrar` → 401; con `registrar` sin alcance o `view_own` sin atribución → 404; con permisos → 201, reintento → 200 duplicado; el detalle muestra el bloque) |
+| `PagBCarteraConsultaTest` | 14 passed (tras el atajo con Cartera inactiva) |
+| `PagBModeloPersistenteTest` (solo la prueba de «sin servicios de escritura», ahora «solo existe registrar») | 1 passed |
+| `Fase05aMisVentasTest` | 10 passed (alcance, estados derivados, KPI, sin N+1) |
+| `AclYMenuConfiguracionTest` | 11 passed (menú de 4 entradas con clave ACL y ruta GET reales, sin Cartera; «Ver pedido» al detalle del módulo) |
+
+Pint: sin hallazgos en los archivos PHP modificados. No se ejecutó Playwright, Chromium, JS, 03G, Corte ni suites completas.
+
+**Pendiente (PAG-D / PAG-E y después).**
+- **PAG-D:** cartera del cliente, abono general multipedido (FIFO editable) y enlace en la ficha del cliente; **entrada
+  de menú de Cartera** cuando exista su pantalla.
+- **PAG-E:** bandeja central y **Confirmar / Rechazar** (la Transaction nativa nace solo al confirmar).
+- **PAG-F:** configuración objetivo de `moneytransfer`, fecha de corte (valor y almacenamiento), roles (P-12).
+- La interfaz (modal y bloque) **no se probó en un navegador** (sin Playwright/JS por instrucción): la valida Camilo a
+  mano. Lo verificado: la ruta, el servicio y que el HTML del detalle incluye el bloque y el componente.
+- Decisión abierta: hacer «Nueva venta» entrada de segundo nivel del menú requiere una clave ACL nueva.
+
+### 42.19 «Mis ventas»: KPI clicables y listado compacto (2026-10-06, solo UX; sin cambio de reglas de negocio)
+
+- **Contrato de filtro `?resumen=`** (`hoy` · `abiertos` · `por_despachar` · `pendientes_pago`; cualquier otro valor se rechaza por
+  validación). Cada tarjeta KPI es un enlace a esa URL y **su cifra y su filtro usan el mismo método**
+  (`ConsultaPedidosAsesorService::resumen()`), así que no pueden divergir: hoy = creados desde las 00:00 sin cancelados, fraude ni
+  cerrados; abiertos = pendiente / pago pendiente / procesando; por despachar = unidades físicas pendientes (`agregadoDespacho`);
+  pendientes de pago = estado de pago exactamente «pendiente» (`idsPendientesDePago`, misma regla que la columna Pago).
+- **Convivencia con los demás filtros:** el resumen se combina en AND con búsqueda, desde/hasta, estado, entrega y asesor, y respeta el
+  alcance del actor (nunca lo amplía). Al **pulsar una tarjeta** se conservan `q`, `entrega` y `asesor` y se **reemplazan** `estado`
+  y fechas (contradirían al indicador); pulsar de nuevo la tarjeta activa, «Quitar filtro» o «Limpiar» vuelven atrás. Las cifras de las
+  tarjetas siguen siendo del alcance, no de los filtros.
+- Tarjeta activa: borde y fondo más marcados, check y `aria-current`. Listado de 8 columnas (Pedido/Fecha · Cliente · Asesor/Despacho ·
+  Unid./Total · Estado · Pago · Entrega · Acción) con pills de color semántico (misma paleta que los `label-*` de Bagisto:
+  amarillo pendiente, cian procesando/parcial, verde completado/pagado/despachado, índigo revisar, rojo cancelado, gris no aplica);
+  Estado (pedido), Pago (financiero) y Despacho (logístico) nunca comparten etiqueta. Bajo 1180 px se muestran tarjetas (2 columnas en
+  tablet, 1 en móvil). El pago muestra, solo dentro de Cartera, «Sin revisar» / «Verificado» y el saldo pendiente.
+- Prueba dirigida: `Fase05aMisVentasTest` (KPI clicable → conjunto correcto; convivencia con filtros y alcance).
+
+### 42.20 PAG-C validada por Camilo y PAG-D: Cartera del cliente + abono general multipedido — IMPLEMENTADO (2026-10-06, sin commit)
+
+**PAG-C VALIDADA MANUALMENTE por Camilo (desarrollo).** Sobre `#BYL-00000045-CO` registró dos abonos reales, uno por
+transferencia y uno en efectivo. Resultado visible: Total $184.000 · Aplicado $134.000 · Sin revisar $134.000 · Verificado $0 ·
+Saldo $50.000 (pago parcial / sin revisar). La lógica de PAG-C no se modificó.
+
+**Alcance PAG-D.** Pantalla «Cartera del cliente» y un abono multipedido de UN cliente. **No** hay bandeja global, confirmar,
+rechazar ni reversar (PAG-E); **no** hay menú global de Cartera; **no** se crean `order_transactions`, no se toca `Invoice` ni
+`orders.status`; `cartera.fecha_corte` y `moneytransfer` no cambian (PAG-F).
+
+**Servicio `Services\Cartera\RegistrarAbonoClienteService::registrarAbono(actor, customerId, datos, distribucion, idempotencyKey, mecanismo)`.**
+Extiende `RegistrarPagoService` **sin modificarlo**: hereda la normalización (monto, medio de `MediosCobro`, referencia según su
+política, fecha), la resolución de repeticiones de idempotencia y los rechazos tipados (`RegistroPagoInvalidoException`, con tres
+códigos nuevos: `cliente_inexistente`, `distribucion_invalida`, `pedido_de_otro_cliente`). Controlador delgado
+(`CarteraClienteController`), forma en `RegistrarAbonoClienteRequest`.
+
+Flujo (una sola transacción, hasta 3 intentos ante deadlock):
+
+1. **Autorización:** `ventas_asesor.cartera.abono_general` **más** alcance de cartera sobre **cada pedido** de la distribución
+   (`view_all` = todos; `view_own` = solo pedidos atribuidos al actor; sin atribución se niega, RA-6). Poder ver al cliente no basta:
+   un pedido fuera de alcance rechaza todo el abono con la misma respuesta 404 que un pedido inexistente.
+2. Falla cerrado sin `cartera.fecha_corte` (antes de tocar las tablas de pagos); cliente existente; clave de idempotencia válida.
+3. **Distribución explícita** (lista de `{pedido_id, monto}`): pedidos únicos, cada línea > 0 con máximo 2 decimales y **suma exacta
+   = monto** del pago (aritmética en centavos). No se acepta una distribución implícita: el FIFO depende del saldo del momento y haría
+   que un reintento con la misma clave pareciera otra solicitud.
+4. **Huella** SHA-256 de cliente, medio, fecha, referencia normalizada, monto y distribución (`order_id:monto` ordenada por pedido):
+   misma clave + misma huella → devuelve el pago existente (`duplicado`, HTTP 200; el orden de las líneas no cambia la huella);
+   misma clave + otra distribución o datos → 409. Una carrera con la misma clave la resuelve el `UNIQUE` (error 1062).
+5. **Bloqueos:** `INSERT` del pago (reserva la clave) → `SELECT … FOR UPDATE` de **todos** los pedidos en orden de id ascendente.
+6. **Bajo el bloqueo se recalcula el saldo real** de cada pedido (`CarteraConsultaService`) y se valida: pedido del mismo cliente, en
+   Cartera, sin `requiere_revision`, con saldo, y **cada línea ≤ su saldo** (`monto_excede_saldo`). Como la suma es igual al monto,
+   el abono nunca supera la deuda elegible total: no existe saldo a favor.
+7. Un `Pago` `sin_revisar` + **N `AplicacionPago`** (posición por id ascendente) + un evento `registrado` con la distribución y el
+   saldo antes/después de cada pedido. Cualquier fallo → **rollback total** (nunca un pago parcialmente aplicado; probado).
+
+**Propuesta FIFO editable.** `Support\Cartera\DistribucionFifo` (pedido elegible más antiguo primero; elegible = en Cartera, con saldo
+y sin revisión) calcula la propuesta; la interfaz la replica en el navegador para responder al teclear y el usuario puede editar cada
+línea. Es solo una ayuda: el backend revalida todo. Ejemplo probado: A $50.000 · B $100.000, abono $120.000 → A $50.000 + B $70.000;
+manual A $20.000 + B $100.000 también válido.
+
+**Consulta (`CarteraConsultaService`).** `carteraDelCliente()` ya existía (PAG-B, FIFO, acotada por alcance, sin N+1); el DTO
+`CarteraCliente` suma `totalPedidos()`, `aplicadoTotal()`, `sinRevisarTotal()`, `verificadoTotal()`, `pedidosConSaldo()` y
+`pedidosPorRevisar()`. Nuevo `fichaDelCliente()` (solo lectura, acotado al actor): datos del cliente, cartera, pedidos elegibles,
+deuda elegible, fechas y el resumen del abono recién registrado. Con `view_own` un cliente sin pedidos propios responde 404 (no se
+revela su ficha). Con Cartera inactiva no toca las tablas de pagos.
+
+**Rutas y ACL.** `GET ventas-asesor/cartera?cliente=ID` (`admin.ventas_asesor.cartera.index`, mismo patrón que `pedidos?pedido=ID`;
+el controlador exige `view_own` o `view_all`; sin cliente redirige al inicio) y `POST ventas-asesor/cartera/clientes/{cliente}/abonos`
+(`admin.ventas_asesor.cartera.abonos.store`, hoja `abono_general`). **Cambio de ACL:** la agrupadora `ventas_asesor.cartera` pasa de
+apuntar a `$inicio` a la ruta `cartera.index` (string, regla 3); el árbol sigue en 30 claves y ningún rol recibió permisos. Para
+habilitar a un rol personalizado: marcar `abono_general` y `view_own` o `view_all`.
+
+**Accesos contextuales (sin menú global ni tocar Webkul).** (1) Detalle del pedido: botón «Ver cartera del cliente» (con alcance de
+cartera sobre ese pedido). (2) Ficha **nativa** del cliente: tarjeta «Pago / Cartera» (deuda, sin revisar, «Ver cartera») inyectada con
+el hook propio de Bagisto `bagisto.admin.customers.customers.view.card.orders.before` mediante el listener
+`MostrarCarteraEnFichaCliente`; solo se muestra con módulo y alcance de cartera.
+
+**Interfaz.** Cabecera (cliente, teléfono, grupo), 4 KPI (Deuda total · Sin revisar · Verificado · Pedidos con saldo), banner de «Abono
+registrado» tras guardar (servidor, vía `?abono=ID`), tabla de pedidos con saldo o en revisión (Pedido/Fecha · Total · Aplicado · Sin
+revisar · Verificado · Saldo · Pago · Acción) con los mismos pills de «Mis ventas» (cada pedido con la regla
+`EstadoPagoPedido::desdeCartera`), tarjetas apiladas bajo 1024 px (2 columnas en tablet, 1 en móvil), y la modal «Registrar abono»:
+monto (por defecto la deuda elegible), medio, fecha, referencia (requerida u opcional según `MediosCobro`, reflejada en la UI y
+validada en el servidor), observación y la distribución FIFO editable con contador «Asignado / Falta / Sobra»; el botón se habilita
+solo si la distribución cuadra. Sin fecha de corte la pantalla informa que Cartera no está activa y no ofrece el botón.
+Duda abierta de estilo: el CSS de los pills está duplicado en `admin/cartera/estilos.blade.php` y en «Mis ventas»; unificar después.
+
+**Pruebas (dirigidas, secuenciales, `lpz_saas_testing`).** `PagDAbonoClienteTest` (nuevo): 4 passed (52 aserciones) — FIFO 50k+70k
+con un pago, 2 aplicaciones, 1 evento, saldos y sin Transactions; distribución manual válida y rechazos (suma distinta, línea sobre
+saldo, pedido ajeno o repetido, deuda superada) con rollback total; idempotencia (misma solicitud no duplica, otra distribución →
+409); ACL y alcance (`registrar` sin `abono_general` → 401; `view_own` con pedido ajeno → 404 sin escribir; pantalla 200/401/403/404
+según alcance). Regresión dirigida: `AclYMenuConfiguracionTest` 11, `PagBCarteraConsultaTest` 14, `PagCRegistrarPagoTest` 4, todas
+verdes. Pint: sin hallazgos. No se ejecutó Playwright, Chromium, JS, 03G ni Corte; la modal y el responsive los valida Camilo a mano.
+
+**Pendiente.** PAG-E: bandeja central y Confirmar / Rechazar (la Transaction nativa nace solo al confirmar). PAG-F: configuración de
+`moneytransfer`, fecha de corte definitiva y roles. Entrada de menú de Cartera cuando exista la bandeja.
+
+### 42.21 PAG-E: bandeja central + Confirmar / Rechazar — IMPLEMENTADO (2026-10-06, sin commit)
+
+**Microauditoría de Transactions en Bagisto 2.4.9 (código real, antes de implementar).**
+
+| Punto | Hallazgo |
+|---|---|
+| Tabla `order_transactions` | `id` (int), `transaction_id` (string, **no único**), `status`/`type` (string null), `amount` decimal(12,4) default 0, `payment_method` (string null), `data` (json null), `invoice_id` (int unsigned, **NOT NULL**, sin FK a `invoices`), `order_id` (int unsigned, FK a `orders`, cascade), timestamps |
+| Modelo / repositorio | `Webkul\Sales\Models\OrderTransaction` (`$guarded` = id y fechas) y `OrderTransactionRepository` (sin lógica ni eventos propios: `create()` plano). Relación `Order::transactions()` |
+| Flujo nativo (`TransactionController::store`) | Exige factura existente; rechaza si la factura ya está `paid`, si `amount <= 0` o si Σ Transactions + monto supera `invoice.base_grand_total`; crea con `transaction_id = bin2hex(random_bytes(20))`, `type = payment_method`, `status = 'paid'`, `data = json_encode(['paidAmount'])`; si Σ ≥ total de la factura → `InvoiceRepository::updateState('paid')` y `OrderRepository::updateOrderStatus($order, processing|completed)` |
+| Sin / una / varias facturas | **Sin factura: imposible** (`invoice_id` NOT NULL y el flujo la exige). Una factura: caso normal. Varias: la Transaction se asigna a UNA factura con capacidad; cada Transaction pertenece a un solo pedido |
+| Monto | Un único `amount` (sin `base_amount`); la capacidad se mide contra `invoice.base_grand_total` (moneda base) |
+| `transaction_id` vs PK | `transaction_id` es una referencia externa libre (no única); la PK es `id`. ByLopez usa `BYL-PAGO-{pago}-AP-{aplicación}`; el vínculo real es `aplicaciones.order_transaction_id` (UNIQUE) |
+| Eventos / efectos | `create()` no dispara eventos de dominio; `updateOrderStatus` dispara `sales.order.update-status.before/after`. El listener `Admin\Listeners\Invoice` solo crea Transactions al crear una factura con `can_create_transaction` (casilla de la UI de facturas), no aplica aquí |
+| Consumidores | `OrderTransactionDataGrid` (pantalla nativa de Transactions), `TransactionResource` (detalle nativo) y pasarelas de pago. **Hallazgo:** el accesor `payment_title` hace `config('payment_methods')[$payment_method]['title']` y **revienta** con un código que no sea un método de Bagisto (`transferencia` → `Undefined array key`) |
+
+**Integración decidida (sin contradicción con la arquitectura; un único refinamiento de D-50).**
+- Una **Transaction nativa por aplicación**, cada una en el pedido de su aplicación (una Transaction no puede abarcar varios pedidos), enlazada en `aplicaciones.order_transaction_id` e `invoice_id`. No hay segunda tabla de Transactions.
+- **Elección de factura:** la de menor id, abierta (no `paid`) y con capacidad para **toda** la aplicación (Σ de sus Transactions + monto ≤ `base_grand_total`, como el flujo nativo). Nunca se parte una aplicación entre facturas: no podría enlazarse 1:1 y la segunda Transaction contaría doble como «ajena». Sin factura utilizable (sin factura, todas `paid`, o sin capacidad) **no se confirma** (`sin_factura_disponible`, con motivo) y no se crean facturas. En desarrollo 28 de 29 pedidos tienen factura y ninguno tiene más de una.
+- **Refinamiento de D-50 / §42.7:** `payment_method` de la Transaction es el **método de pago del pedido** (código que Bagisto conoce; si el pedido no tiene uno reconocido se rechaza con `metodo_pago_pedido_invalido`); el **medio de cobro real** (`transferencia`, `efectivo`…) va en `type` y en `data` (origen, pago, aplicación, referencia, quién registró y confirmó). Es reversible en un solo método (`ConfirmarPagoService::confirmar`).
+- Igual que el flujo nativo: si la factura queda cubierta → `InvoiceRepository::updateState('paid')` y `OrderRepository::updateOrderStatus($order)` **sin estado explícito** (por cantidades; jamás un UPDATE directo, I-12).
+
+**Servicios (`Services\Cartera\`).** Base común `RevisionPagoService` (permiso `ventas_asesor.cartera.revisar` **más** alcance de cartera sobre el pago, bloqueo del pago y de sus aplicaciones activas, `Support\Cartera\AlcanceDePagos`: `view_all` = todos; `view_own` = todos los pedidos del pago atribuidos al actor; fuera de alcance = 404 sin revelar). Errores tipados en `RevisionPagoInvalidaException` (código estable y estado HTTP); resultado en `ResultadoRevisionPago`.
+
+*`ConfirmarPagoService::confirmar`* (una transacción; orden de bloqueos **pago → aplicaciones → pedidos id↑ → facturas id↑**): guarda de estado (ya `confirmado` → resultado estable sin escribir; solo `sin_revisar` es confirmable); falla cerrado sin fecha de corte; revalida invariantes (≥1 aplicación activa, Σ = monto, ninguna con Transaction enlazada, pedidos del cliente del pago, en Cartera y sin `requiere_revision`); crea las Transactions y las enlaza; pago → `confirmado` con revisor y fecha; evento `confirmado` con las Transactions. Cualquier fallo → rollback total. **El saldo no se mueve**: la Transaction vinculada sale de las «ajenas» (anti doble conteo), así que solo cambia la composición (Sin revisar ↓ · Verificado ↑). Idempotente por estado bajo bloqueo + `UNIQUE(order_transaction_id)`.
+
+*`RechazarPagoService::rechazar`* (solo `sin_revisar → rechazado`): categoría de `ventasasesor.pagos.motivos_rechazo` (`no_encontrado`, `monto_no_coincide`, `referencia_incorrecta`, `duplicado`, `efectivo_no_entregado`, `otro`) **más** detalle obligatorio (5 a 500 caracteres); anula **lógicamente** las aplicaciones (`anulada_en`, `anulada_por_admin_id`; nada se borra), pago → `rechazado` con `motivo_revision`, evento `rechazado` (actor, mecanismo, motivo y categoría). No crea ni toca Transactions, Invoice ni Order. La deuda vuelve por derivación (no existe saldo guardado). Idempotente; un pago `confirmado` **no** se rechaza (sería un reverso: PAG-I).
+
+**Pantalla.** Entrada de menú **Cartera / Pagos** (clave `ventas_asesor.cartera`, ruta `admin.ventas_asesor.cartera.index`, sin parámetros): la misma ruta sirve la bandeja, el detalle (`?pago=ID`) y la cartera de un cliente (`?cliente=ID`, PAG-D). POST `cartera/pagos/{pago}/confirmar` y `/rechazar` van a la hoja `ventas_asesor.cartera.revisar` (el árbol sigue en 30 claves; ningún rol recibió permisos; el rol «all» funciona). Bandeja: KPI clicables (Sin revisar · Monto sin revisar · Confirmados hoy · Rechazados) con `?resumen=` (`sin_revisar`, `confirmados_hoy`, `rechazados`; cifra y filtro comparten el mismo criterio en `BandejaPagosService::resumen`), filtros GET (buscar cliente/teléfono/referencia, estado, medio, desde, hasta, registrado por —solo `view_all`—), tabla compacta (Pago/Fecha · Cliente · Registrado por · Medio · Monto · Aplicaciones «2 pedidos · #45 · #50» · Estado · Acción Ver/Confirmar/Rechazar) y tarjetas bajo 1024 px. Detalle: datos del pago, aplicaciones con total, monto, saldo antes/después (del evento `registrado`), estado actual del pedido y de su pago, Transaction enlazada, e historial append-only. **Confirmar** pide una modal de confirmación; **Rechazar** exige categoría y detalle. Sin fecha de corte la bandeja informa que Cartera no está activa y no consulta las tablas de pagos.
+
+**Estado de pago de Mis ventas** sigue derivándose de Cartera sin otra fórmula: pago completo sin revisar → «Pagado» + señal «Sin revisar»; tras confirmar → «Pagado» + «Verificado»; tras rechazar el pago deja de contar.
+
+**Pruebas (dirigidas, secuenciales, `lpz_saas_testing`).** `PagEConfirmarRechazarTest` (nuevo): 4 passed (98 aserciones): confirmar (Transaction con `type`/`payment_method`/`transaction_id`, aplicación enlazada, saldo 200.000 antes y después, sin revisar → verificado, factura aún pendiente, doble confirmación sin duplicar); multipedido (una Transaction por pedido, facturas `paid`, pedido sin factura rechazado sin escribir nada); rechazar (aplicación anulada, deuda 184.000 restaurada, 0 Transactions, motivo y categoría obligatorios, idempotente, confirmado no se rechaza y rechazado no se confirma); ACL y alcance (sin `revisar` o sin alcance → `sin_permiso`, `view_own` con pedido ajeno → 404, bandeja/detalle/rutas confirmar y rechazar). Regresión dirigida: `PagDAbonoClienteTest` 4, `PagCRegistrarPagoTest` 4, `PagBCarteraConsultaTest` 14, `AclYMenuConfiguracionTest` 11, todas verdes. Pint aplicado. No se ejecutó Playwright, Chromium, JS, 03G ni Corte; la modal y el responsive los valida Camilo a mano. Los pagos reales de Camilo (#BYL-00000045-CO) no se confirmaron ni rechazaron.
+
+**Pendiente.** PAG-F: configuración objetivo de `moneytransfer` (con ella sus facturas nacerán `pending` y la confirmación podrá cubrirlas; hoy `moneytransfer` crea la factura `paid` y esos pedidos salen «a revisar»), fecha de corte definitiva y roles (P-12). PAG-G: evidencias. PAG-I: reversar. Aviso: una factura `paid`, sin capacidad o sin factura rechaza la confirmación por diseño.
+
+### 42.22 PAG-F: configuración operativa de pagos, fecha de corte y roles — PARCIAL (2026-10-07, sin commit; cerrada en desarrollo en §42.23)
+
+**Estado:** configuración de `moneytransfer` **aplicada y verificada en desarrollo**; **fecha de corte** y **asignación de roles**
+**detenidas a la espera de decisión de Camilo** (no se cambió ni el corte ni ningún rol).
+
+**1. Auditoría real (Bagisto 2.4.9 + desarrollo `lpz_saas`).**
+- La factura automática la crea `Webkul\Payment\Listeners\GenerateInvoice` en `checkout.order.save.after` (el mismo evento al
+  confirmar una venta de VentasAsesor): si el pedido es `cashondelivery` o `moneytransfer` y su `generate_invoice` está activo, llama
+  `InvoiceRepository::create($datos, invoice_status, order_status)`. Ese `create` guarda la factura con ese estado (si no hay estado,
+  `paid`) y aplica `OrderRepository::updateOrderStatus($order, order_status)`.
+- Valores permitidos por la configuración de Bagisto (`Admin/Config/system.php`): `invoice_status` ∈ {`pending`, `paid`};
+  `order_status` ∈ {`pending`, `pending_payment`, `processing`}. Los tres campos son **por canal** y viven en `core_config`
+  (canal `default`); el archivo `payment-methods.php` solo da el valor por defecto (`generate_invoice = false`).
+- **No nace ninguna Transaction automática:** el listener de facturas (`Admin\Listeners\Invoice`) solo crea una si la petición trae
+  la casilla `can_create_transaction` de la pantalla nativa de facturas; al confirmar una venta no viene. El listener de la tienda
+  solo envía el correo si `new_invoice` = 1 (hoy 0; además marca `email_sent` en todas las facturas con `query()->update`: deuda de
+  Bagisto, irrelevante mientras siga en 0).
+- Valores **antes** del cambio (efectivos y en `core_config`, sin caché de configuración): `moneytransfer` = `generate_invoice 1`,
+  `invoice_status paid`, `order_status processing` (desde 2025-10-01); `cashondelivery` = `1`, `pending`, `pending_payment`
+  (desde 2025-10-16). Efecto real: **los 14 pedidos por transferencia** del entorno tienen factura `paid` y 0 Transactions.
+- **Sin contradicción con PAG-E:** la configuración objetivo de transferencia es idéntica a la que contra entrega ya usaba (pedido 45),
+  y es justo la que PAG-E necesita (factura abierta con capacidad; al confirmar, Transaction → factura `paid` → `updateOrderStatus`).
+
+**2. Configuración aplicada en DESARROLLO** (2026-10-07 08:20:34, filas existentes de `core_config`, canal `default`):
+`sales.payment_methods.moneytransfer.invoice_status` = `pending` y `…order_status` = `pending_payment` (`generate_invoice` ya
+era `1`). Se limpió solo la caché de configuración y de aplicación. Valores **efectivos** leídos con `core()->getConfigData()`:
+`moneytransfer` 1 / pending / pending_payment; `cashondelivery` 1 / pending / pending_payment (sin cambios). `new_invoice` sigue en
+`0` (deuda: PDF/correo de factura). Producción no se tocó.
+
+**3. Contra entrega:** no se cambió. Ya estaba en `pending` / `pending_payment`; PAG-E no depende de alterarlo. Sigue sin existir la
+regla «pedido sin pagar = no despachar» (P-11).
+
+**4. Fecha de corte — DETENIDA (sin cambio; sigue `VENTASASESOR_CARTERA_FECHA_CORTE=2026-10-06`, temporal de desarrollo).**
+`FechaCorteCartera` interpreta el valor en la zona horaria de la aplicación (America/Bogota) y acepta `Y-m-d` o `Y-m-d H:i:s`; un pedido
+entra si `created_at ≥ corte`. Pedidos desde el 2026-10-05:
+
+| Pedido | Creado | Método | Factura | Transactions | Pagos ByLopez | Con corte actual (2026-10-06) |
+|---|---|---|---|---|---|---|
+| 41 `BYL-00000025-CO` | 2026-10-05 14:40 | transferencia | paid | 0 | — | Fuera (histórico) |
+| 42 `BYL-00000042-CO` | 2026-10-05 14:55 | transferencia | paid | 0 | — | Fuera |
+| 44 `BYL-00000043-CO` | 2026-10-05 21:32 | transferencia | paid | 0 | — | Fuera |
+| 45 `BYL-00000045-CO` | 2026-10-06 13:20 | **contra entrega** | pending | 0 | **#1 y #2 `sin_revisar` (84.000 + 50.000)** | Dentro |
+| 46 `BYL-00000046-CO` | 2026-10-06 21:11 | transferencia | **paid** | 0 | — | Dentro, «revisar: factura pagada sin evidencia» |
+
+- §42.8 pide que el corte sea **posterior** al momento en que el flujo nuevo está vigente (2026-10-07 08:20:34). Ese corte dejaría
+  **fuera el pedido 45**, que tiene dos pagos reales: dejarían de contar en su saldo y no podrían confirmarse. Por la regla de este
+  bloque **no se cambió sin decisión de Camilo**.
+- No existe un corte que incluya el 45 y excluya el 46 (el 46 es posterior).
+- **Opción A (recomendada):** mantener `2026-10-06` como corte definitivo. El 45 (contra entrega, que ya tenía la configuración correcta)
+  sigue en Cartera con sus pagos; el 46 aparece como «a revisar» (factura pagada sin evidencia, creado con la configuración antigua) y
+  no recibe pagos hasta resolverlo a mano. Todo lo anterior queda histórico.
+- **Opción B:** `2026-10-07 08:20:34` (o `2026-10-08`). Cumple §42.8 al pie de la letra, pero saca de Cartera al 45 y a sus pagos.
+- Ninguna opción crea pagos, Transactions ni modifica facturas históricas.
+
+**5. Roles (P-12) — DETENIDA (ningún rol modificado).**
+
+| Rol | Tipo | Usuarios | Permisos de Ventas Asesor |
+|---|---|---|---|
+| #1 Administrador | all | Admin (1), Administradora (cuenta 2) (2) | Todos (permiso «all») |
+| #2 ASESOR VENTAS | custom (18) | **ninguno** | **ninguno** (`sales.*` nativos, incluidos `sales.transactions` y `sales.transactions.view`, `sales.refunds.create`, `sales.invoices.create`; `catalog.products`) |
+| #4 BODEGA | custom | KAREN PRUEBA (53) | ninguno |
+| #52 TALLER CONFECCION · #12050 CORTADOR | custom | talleres / cortador | ninguno |
+| Roles de QA (#12059…#12071) | all/custom | usuarios de prueba | — |
+
+Además el usuario ASESOR_PRUEBA (52) apunta a un rol inexistente (#3). No hay rol de supervisor: la supervisión la hace hoy el rol «all», válido
+para el primer rollout. «ASESOR VENTAS» **no es un rol inequívoco ya usado por VentasAsesor** (sin usuarios ni claves del módulo; una prueba
+fija que sus 18 permisos actuales no abren el módulo) y conserva `sales.transactions`, que P-12 pide retirar a los asesores. Propuesta
+exacta para cuando Camilo lo apruebe: **agregar** `ventas_asesor`, `ventas_asesor.operar_como_asesor`, `ventas_asesor.pedidos`,
+`ventas_asesor.pedidos.create`, `ventas_asesor.pedidos.view_own`, `ventas_asesor.cartera`, `ventas_asesor.cartera.view_own`,
+`ventas_asesor.cartera.registrar`, `ventas_asesor.cartera.abono_general`; **quitar** `sales.transactions` y `sales.transactions.view`
+(P-12); **no** dar `pedidos.view_all`, `cartera.view_all`, `cartera.revisar` ni `cartera.reversar`. La clave `cartera.reversar` no se
+asigna a nadie y no tiene servicio ni acción en pantalla (PAG-I).
+
+**6. Menú.** Inicio · Mis ventas / Pedidos (con Nueva venta) · Cartera / Pagos. Cada entrada se filtra con su clave ACL: quien no tenga
+cartera no ve el enlace; un asesor con `cartera.view_own` vería la bandeja solo con sus pagos y sin botones de confirmar/rechazar; el
+rol «all» ve todo.
+
+**7. Pruebas (dirigidas, `lpz_saas_testing`).** `PagFFlujoTransferenciaTest` (nuevo): 2 passed (26 aserciones). (1) Transferencia con la
+configuración objetivo, factura generada por el listener **real** de Bagisto: pedido `pending_payment`, factura `pending`, 0 Transactions,
+sin «revisar»; registrar 120.000 → `sin_revisar`, saldo 0, sin revisar 120.000; confirmar → 1 Transaction `moneytransfer`, factura `paid`,
+pedido `processing`, saldo 0 sin cambio, verificado 120.000. (2) Contra entrega sigue igual (`pending_payment`, `pending`, 0
+Transactions, saldo completo). No recorre la pantalla de Nueva venta (03G fuera de alcance). Pint sin hallazgos.
+
+**Pendiente para cerrar PAG-F:** decisión de Camilo sobre el corte (A o B) y sobre el rol de asesor (aprobar la propuesta o indicar otro
+rol); qué hacer con el pedido 46; replicar la configuración en producción con autorización explícita (D-48); `new_invoice` y el PDF.
+
+### 42.23 PAG-F: cierre en desarrollo — CERRADA EN DESARROLLO / PENDIENTE ROLLOUT PRODUCCIÓN (2026-10-07, sin commit)
+
+**Decisiones de Camilo (2026-10-07):** opción A de corte; rol existente `#2 ASESOR VENTAS` como rol operativo inicial de los asesores;
+supervisión financiera por el rol **Administrador (`all`)** sin crear un rol Supervisor; el pedido 46 no se toca; producción no se toca
+hasta que Camilo valide PAG-E a mano.
+
+**Fecha de corte — corte definitivo inicial del rollout en desarrollo:** `VENTASASESOR_CARTERA_FECHA_CORTE=2026-10-06` (sin cambio de
+valor). Razones: mantiene dentro el pedido 45 y sus pagos reales, deja históricos los anteriores y muestra el 46 como excepción de
+transición sin manipular datos. Sin excepciones por id en el código.
+
+| Pedido | Situación con el corte | Verificado (lectura, 2026-10-07) |
+|---|---|---|
+| 41 · 42 · 44 | **Fuera** (históricos, `anterior_a_fecha_corte`) | 0 Transactions |
+| 45 `BYL-00000045-CO` (contra entrega) | **Dentro** | Saldo 50.000 · sin revisar 134.000 (pagos #1 84.000 y #2 50.000, `sin_revisar`) · 0 Transactions |
+| 46 `BYL-00000046-CO` (transferencia, configuración antigua) | **Dentro + `requiere_revision`** (`factura_pagada_sin_evidencia`) | Saldo 103.500 · factura `paid` · 0 Transactions · no recibe pagos |
+
+**Pedido 46 — tratamiento aprobado:** incidencia de transición visible para revisión posterior. No se cambia la factura, no se crea
+Transaction ni Pago, no se anula ni se saca del corte y no hay excepción en el código.
+
+**Configuración de pagos (lectura de valores efectivos):** `moneytransfer` = `generate_invoice 1` / `invoice_status pending` /
+`order_status pending_payment` (aplicado el 2026-10-07 08:20:34, §42.22); `cashondelivery` = `1` / `pending` / `pending_payment` (sin
+cambios; contra entrega puede despacharse sin pago confirmado, P-11). `new_invoice` = `0` (deuda técnica: PDF/correo de factura).
+
+**Rol `#2 ASESOR VENTAS` (desarrollo, 0 usuarios; ningún usuario reasignado).** Auditoría de rutas y controladores reales de los
+permisos nativos que tenía:
+
+| Permiso nativo | Qué autoriza en Bagisto 2.4.9 | Decisión |
+|---|---|---|
+| `sales.transactions` | `admin.sales.transactions.index` y **`.store`**: `TransactionController::store` crea una Transaction y, si cubre la factura, la pasa a `paid` y cambia el estado del pedido | **Retirado** (P-12): saltaba la revisión; las Transactions nacen solo en `ConfirmarPagoService` |
+| `sales.transactions.view` | Detalle nativo de una Transaction | **Retirado** (P-12) |
+| `sales.invoices.create` | `admin.sales.invoices.store`: `InvoiceRepository::create` **sin estado → factura `paid`**; con la casilla `can_create_transaction` además crea una Transaction | **Retirado**: convertiría una venta en «pagada» por fuera de Cartera |
+| `sales.refunds.create` | `admin.sales.refunds.store` y `update_totals`: crea Refunds | **Retirado**: Refund ≠ reverso de pago (PAG-I) |
+| `sales.orders.cancel` | `OrderController::cancel`, solo si hay unidades sin facturar (`qty_to_cancel`); con factura automática no hay | Se mantiene (no financiero) |
+| `sales`, `sales.orders`, `sales.orders.view`, `sales.invoices`, `sales.invoices.view`, `sales.shipments`(`.view`), `sales.refunds`, `sales.refunds.view` | Listados y detalles nativos; `send_duplicate_email` no envía nada con `new_invoice = 0` | Se mantienen (solo lectura) — ver riesgo abajo |
+| `sales.orders.create` | Creación nativa de pedidos desde el panel (con el adaptador RT-03 de VentasAsesor) | Se mantiene |
+| `sales.shipments.create` | Registrar envíos (logística) | Se mantiene |
+| `catalog`, `catalog.products` | Listado de productos (consulta) | Se mantienen (consulta de catálogo) |
+
+**Claves agregadas** (primero en la lista: tras el login Bagisto redirige al primer permiso, así el asesor entra a Ventas Asesor ›
+Inicio): `ventas_asesor`, `ventas_asesor.operar_como_asesor`, `ventas_asesor.pedidos`, `ventas_asesor.pedidos.create`,
+`ventas_asesor.pedidos.view_own`, `ventas_asesor.cartera`, `ventas_asesor.cartera.view_own`, `ventas_asesor.cartera.registrar`,
+`ventas_asesor.cartera.abono_general`. **No** se agregaron `pedidos.view_all`, `cartera.view_all`, `cartera.revisar` ni
+`cartera.reversar`. Resultado: 23 permisos (antes 18), 0 usuarios.
+
+**Comportamiento del asesor:** entra al módulo; opera como asesor; crea ventas; ve y abre solo sus pedidos; ve en «Cartera / Pagos» solo
+pagos de sus pedidos y su cartera; registra pagos y abonos generales (todo nace `sin_revisar`); **no** ve Confirmar ni Rechazar (dependen
+de la ACL `revisar`, no del nombre del rol) y el Bouncer bloquea esas rutas; no usa Transactions, facturas manuales ni Refunds nativos.
+Menú: Inicio · Mis ventas / Pedidos · Nueva venta · Cartera / Pagos.
+
+**Supervisión:** el rol Administrador (`all`: Admin y la cuenta 2) ve todo, abre la bandeja y confirma o rechaza. No se creó rol Supervisor.
+**Reversar:** ningún rol tiene `cartera.reversar`; no hay servicio ni acción (PAG-I).
+
+**Riesgo residual — CERRADO el 2026-10-07 en §42.24 (se retiró toda la rama `sales` del rol):** los permisos nativos de solo lectura que conserva el rol (`sales.orders.view`,
+`sales.invoices.view`, etc.) dejan ver en las pantallas **nativas** de Bagisto pedidos y facturas de otros asesores (el alcance `view_own`
+solo rige en las pantallas de VentasAsesor). Si se quiere cerrar, el siguiente paso es retirar también la rama `sales` del rol (el asesor
+no la necesita para Nueva venta, Mis ventas ni Cartera). **Hallazgo separado:** el usuario ASESOR_PRUEBA (52) apunta a un rol inexistente (#3);
+fuera de PAG-F.
+
+**Pruebas (dirigidas).** `PagFRolAsesorVentasTest` (nuevo): 2 passed (29 aserciones) con la copia literal de los 23 permisos: alcance propio
+de pedidos y cartera, registrar y abonar sí; `view_all`, `revisar`, `reversar` no; Inicio, Mis ventas, Nueva venta y bandeja responden
+(sin botones de revisión); confirmar/rechazar, Transactions nativas, factura manual y Refund → 401; el menú muestra las 4 entradas. No se
+corrieron las suites de PAG-B…PAG-F ni 03G (por instrucción). Pint sin hallazgos.
+
+**Estado:** DESARROLLO = preparado. PRODUCCIÓN = pendiente de autorización (no se replicaron `moneytransfer`, fecha de corte, roles ni
+migraciones). **Siguiente acción:** prueba manual de PAG-E por Camilo (Cartera / Pagos → abrir el pago del pedido 45 → Confirmar).
+
+### 42.24 Riesgo residual de Sales nativo CERRADO — el asesor trabaja solo desde Ventas Asesor (2026-10-07, sin commit)
+
+**Riesgo (detectado en §42.23):** el rol `#2 ASESOR VENTAS` conservaba permisos nativos de lectura y operación de Sales; las pantallas
+nativas de Bagisto **no** respetan `ventas_asesor.pedidos.view_own`, así que un asesor podía ver pedidos y facturas de otros asesores,
+crear pedidos y registrar envíos desde el módulo nativo.
+
+**Verificación previa en código (sin suposiciones):** ninguna función propia depende de una ACL `sales.*`. En
+`packages/ByLopez/VentasAsesor/src` no hay ninguna comprobación de permiso (`hasPermission`, `tienePermiso`, `bouncer()`) sobre claves
+`sales.*` y las vistas y el JavaScript del módulo no llaman rutas nativas `admin.sales.*`. Las únicas lecturas `sales.*` son de
+**configuración** (`sales.carriers.pickup.title/description`), no de permisos. Nueva venta, Mis ventas, Cartera, registrar pago y abono se
+autorizan con claves `ventas_asesor.*`; la creación del pedido usa los repositorios de Bagisto por dentro, sin pasar por rutas nativas.
+
+**Cambio en DESARROLLO (rol #2, 0 usuarios, con guardas de entorno, nombre y tipo de rol):** se retiró **toda la rama nativa `sales`**
+(12 claves): `sales`, `sales.orders`, `sales.orders.create`, `sales.orders.view`, `sales.orders.cancel`, `sales.invoices`,
+`sales.invoices.view`, `sales.shipments`, `sales.shipments.view`, `sales.shipments.create`, `sales.refunds`, `sales.refunds.view`. Se
+**conservan** `catalog` y `catalog.products` (consulta de catálogo). Permisos finales del rol (11):
+`ventas_asesor`, `ventas_asesor.operar_como_asesor`, `ventas_asesor.pedidos`, `ventas_asesor.pedidos.create`,
+`ventas_asesor.pedidos.view_own`, `ventas_asesor.cartera`, `ventas_asesor.cartera.view_own`, `ventas_asesor.cartera.registrar`,
+`ventas_asesor.cartera.abono_general`, `catalog`, `catalog.products`. Sin `pedidos.view_all`, `cartera.view_all`, `cartera.revisar` ni
+`cartera.reversar`. **0 usuarios asignados** (los asigna Camilo).
+
+**Comportamiento final del asesor.** SÍ: entrar a Ventas Asesor, crear ventas (con su consulta de productos y clientes propia del módulo),
+ver solo sus pedidos, registrar pagos y abonos, ver solo su cartera. NO: módulo Sales nativo (pedidos globales, facturas, envíos,
+refunds, Transactions), confirmar, rechazar, reversar ni `view_all`. La logística propia se cerrará en una fase posterior.
+
+**Administrador (`all`)** no se modificó: sigue como supervisor inicial (toda la cartera, confirmar, rechazar y pantallas nativas).
+
+**Pruebas (dirigidas).** `PagFRolAsesorVentasTest` actualizado a la copia literal de los 11 permisos: 2 passed (40 aserciones). El
+asesor responde 200 en Inicio, Mis ventas, Nueva venta y Cartera / Pagos (sin botones de revisión) y 401 en pedidos, detalle, creación de
+pedido, facturas, envíos (listado y creación), refunds y Transactions nativos, y en confirmar/rechazar; el menú muestra las 4 entradas del
+módulo; el Administrador sigue entrando a Sales nativo y a la bandeja con revisión. No se corrieron otras suites. Pint sin hallazgos.
+
+**Listo para la prueba manual de PAG-E (lectura, 2026-10-07):** pedido 45 dentro de Cartera, factura `pending`, saldo 50.000, sin revisar
+134.000, pagos #1 y #2 `sin_revisar`, 0 Transactions; el Administrador abre «Cartera / Pagos» y el detalle de los pagos #1 y #2 con
+**Confirmar** y **Rechazar** disponibles (no se pulsaron). Pedido 46 sigue `requiere_revision` (`factura_pagada_sin_evidencia`); pedido 41
+intacto. Configuración sin cambios: `moneytransfer` y contra entrega `1 / pending / pending_payment`, corte `2026-10-06`, `new_invoice` 0.
+
+**Producción:** sigue pendiente de autorización (nada de PAG-B…PAG-F se replicó).
+
+## 43. ASESOR-01: identidad del asesor + pantalla «Asesores» (2026-10-07, sin commit)
+
+### 43.1 Arquitectura encontrada (auditoría previa)
+
+- **No existía una entidad de asesor.** La identidad comercial es el **usuario de Bagisto** (`admins.id`): un usuario «es asesor» si su rol
+  tiene la clave ACL `ventas_asesor.operar_como_asesor` (`AutorizacionVentasAsesor::esAsesor()`); recibe la venta automáticamente solo
+  con rol `custom` + esa clave (`esAsesorParaAtribucionAutomatica()`, D-27). El administrador `all` no recibe ventas automáticamente
+  (queda «sin asignar» salvo selección explícita).
+- La atribución (`bylopez_va_order_attributions.advisor_id`) guarda **ese `admins.id`** (sin FK) más `advisor_name_snapshot`;
+  `ResolverAtribucionService` decide la propiedad (reglas A–D); la reasignación tiene su historial en `bylopez_va_advisor_assignment_logs`.
+- `view_own` (pedidos, cartera, pagos) compara `advisor_id` con el id del usuario en sesión (`puedeVerRegistroDe`,
+  `puedeVerCarteraDe`, `AlcanceDePagos`).
+- **Faltaba:** nombre comercial, teléfono, estado activo/inactivo y una regla de «falla cerrado» para un usuario que vende como asesor
+  sin perfil. En desarrollo no había ninguna atribución con asesor (todas `unassigned`/`company`), así que no hay histórico que migrar.
+
+### 43.2 Decisión: perfil mínimo propio, sin segunda identidad
+
+- **Tabla `bylopez_va_asesores`** (migración `2026_10_07_000014`): `id`, `admin_id` (int unsigned, **UNIQUE**, FK `admins` RESTRICT),
+  `nombre` (120), `telefono` (30, null), `activo` (bool, default true), `creado_por_admin_id` (null, sin FK), timestamps; índice `activo`.
+  Modelo `Models\Asesor` (scope `activos`). Aplicada en `lpz_saas_testing` y en desarrollo `lpz_saas` (aditiva, vacía).
+- **La identidad sigue siendo el usuario**: `advisor_id` no cambia de significado ni se reescriben pedidos. El perfil se asocia 1:1 al
+  usuario; `admin_id` es **único e inmutable** (un usuario tiene como mucho un perfil en toda su vida y un perfil nunca cambia de usuario).
+  Por eso una venta atribuida sigue apuntando siempre al mismo asesor. Nombre, correo y rol se leen de Bagisto; el perfil solo agrega
+  nombre visible, teléfono y estado.
+- **Nunca se borra:** se inactiva.
+
+### 43.3 Asesor en sesión y «falla cerrado»
+
+- **`Services\Asesores\AsesorActualService`** es la fuente única: `asesorDe($admin)` (perfil **activo** o null; un inactivo no resuelve),
+  `requierePerfil($admin)` (rol `custom` + `operar_como_asesor`, por ACL), `operable($admin)` (puede vender).
+- **Falla cerrado:** si el usuario requiere perfil y no tiene uno activo, `BorradorVentaService` y `ConfirmarVentaService` rechazan con
+  `asesor_sin_asociacion` («Tu usuario no tiene un asesor comercial asociado. Contacta al administrador.»). Nunca se degrada a
+  «sin asignar» ni a «empresa». El aviso se ve en Inicio, Nueva venta y Asesores. Inactivar un asesor bloquea nuevas ventas también
+  entre el borrador y la confirmación.
+- **Administrador `all`:** no requiere perfil (D-27 sin cambios).
+- **No se tocó `ResolverAtribucionService`** (la atribución sigue igual: el asesor con perfil activo recibe la venta con su `admins.id`).
+- **`view_own`** sigue comparando `advisor_id` con el usuario en sesión: como `admin_id` es único e inmutable en el perfil, «mis pedidos
+  como usuario» y «mis pedidos como asesor» son el mismo conjunto. No se rompió ninguna regla existente.
+- **Históricos:** sin backfill ni reasignación; `unassigned`/`company` no se convierten en asesores.
+
+### 43.4 Servicios, rutas y ACL
+
+- `ConsultaAsesoresService` (lectura por lote: métricas agrupadas por `advisor_id` — ventas de hoy con
+  `ConsultaPedidosAsesorService::soloVentasDeHoy()` (nuevo método público, mismo criterio que el KPI de Mis ventas), última venta, pedidos
+  abiertos, clientes atendidos, cartera con `CarteraConsultaService` (sin Refund, como la cartera del cliente) y pagos sin revisar con las
+  aplicaciones activas de pagos `sin_revisar`; sin N+1), `GuardarAsesorService` (alta, edición de nombre/teléfono, activar/inactivar;
+  `AsesorInvalidoException` con códigos estables) y `AsesoresController` (delgado).
+- **Elegibles para asociar:** usuarios activos cuyo rol tiene `operar_como_asesor` y sin perfil (sin nombres de rol). Activar exige que el
+  usuario siga activo y elegible. Esta pantalla **asocia**; los usuarios y contraseñas siguen en Bagisto.
+- **Rutas:** `GET ventas-asesor/asesores` (`admin.ventas_asesor.asesores.index`; sin parámetros = listado; `?asesor=ID` = ficha; con
+  `view_own` siempre la ficha propia), `POST asesores` (alta), `POST asesores/{asesor}` (edición), `POST asesores/{asesor}/estado`.
+- **ACL** (árbol 30 → 34 claves): agrupadora `ventas_asesor.asesores` (sort 8, ruta string de la pantalla) y hojas `view_own`, `view_all`
+  y `manage` (alta, edición y estado). **Menú:** «Asesores» (sort 4) entre Cartera / Pagos y el resto.
+- **Rol `#2 ASESOR VENTAS` (desarrollo, 0 usuarios):** se le agregaron solo `ventas_asesor.asesores` y `ventas_asesor.asesores.view_own`
+  (ve su ficha); queda con 13 permisos, sin `view_all` ni `manage`. Administrador `all` gestiona todo.
+
+### 43.5 Interfaz
+
+- **Listado (view_all):** cabecera con icono, subtítulo y «+ Crear asesor» (modal: usuario elegible, nombre visible, teléfono, activo);
+  KPI informativos sobre todos los asesores (Asesores activos · Ventas de hoy · Cartera pendiente con «sin revisar» · Pagos sin revisar);
+  filtros GET (buscar nombre/usuario/correo/teléfono, estado); tabla compacta (Asesor/Usuario con iniciales · Actividad = última venta ·
+  Ventas hoy · Cartera con señal «sin revisar» · Pagos por revisar · Estado · Ver) y tarjetas bajo 1024 px (2 columnas en tablet, 1 en
+  móvil).
+- **Ficha:** cabecera (nombre, estado, usuario asociado, rol, correo, teléfono; Editar y Activar/Inactivar solo con `manage`), 4 KPI del
+  asesor (Ventas hoy · Pedidos abiertos · Cartera pendiente · Pagos sin revisar), y secciones con datos reales: Resumen, Pedidos (el mismo
+  listado y semántica de Mis ventas, con enlace a Mis ventas filtrado), Clientes atendidos (clientes con pedidos atribuidos; no existe
+  «dueño» permanente de un cliente) y Cartera / Pagos (saldo, sin revisar, verificado y pagos recientes enlazados a la bandeja; sin
+  confirmar/rechazar aquí).
+- Sin perfil y con `view_own`: pantalla con el aviso, sin listado ni datos ajenos.
+
+### 43.6 Pruebas (dirigidas)
+
+`Asesor01IdentidadTest` (nuevo): 3 passed (35 aserciones): alta y unicidad (un usuario, un asesor), usuario sin marcador no elegible,
+sin `manage` no crea, usuario inmutable al editar; asesor en sesión (activo resuelve; inactivo y sin perfil fallan cerrado con
+`asesor_sin_asociacion`; el `all` no requiere perfil; aviso en Inicio); `view_own` solo su ficha (aunque pida otra), sin perfil ve el
+aviso, no crea; `view_all` lista con métricas por lote y abre cualquier ficha. `AclYMenuConfiguracionTest` 11 passed (34 claves, menú con
+Asesores) y `PagFRolAsesorVentasTest` 2 passed (13 permisos). Pint aplicado. **No se corrieron** otras suites (PAG, 03G, Corte) por
+instrucción; para que los escenarios de venta existentes con asesor sigan siendo válidos, el helper de pruebas `f03b_admin` crea el perfil
+cuando el rol `custom` lleva el marcador. Riesgo a vigilar: pruebas antiguas que creen asesores sin ese helper y luego vendan.
+
+**Producción:** pendiente (no se replicó la migración ni los permisos). No se asignaron usuarios.

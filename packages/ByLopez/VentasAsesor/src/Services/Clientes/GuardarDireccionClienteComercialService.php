@@ -75,9 +75,10 @@ class GuardarDireccionClienteComercialService
     /** @return array<string, mixed> columnas de addresses */
     private function validar(DireccionComercial $d): array
     {
-        // Reglas compartidas con el borrador de venta (03D); aqui el codigo postal sigue
-        // siendo obligatorio (decision de RT-04).
-        return $this->validador->validar($d, exigirCodigoPostal: true)
+        // Reglas compartidas con el borrador de venta (03D). Codigo postal (D-58, 2026-10-05):
+        // obligatorio solo si la configuracion dinamica de Bagisto lo exige
+        // (customer.address.requirements.postcode, la misma que usa su checkout), no fijo.
+        return $this->validador->validar($d, exigirCodigoPostal: core()->isPostCodeRequired())
             + ['default_address' => $d->predeterminada ? 1 : 0];
     }
 }

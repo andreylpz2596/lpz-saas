@@ -11,6 +11,8 @@ namespace ByLopez\VentasAsesor\DataObjects;
  *   tarifa vigente. Es lo que 03F exigira (y revalidara) antes de crear el pedido.
  * - avisos: stock_insuficiente (una linea supera el stock actual), metodos_por_calcular
  *   (hay direccion de envio pero las tarifas se invalidaron, p. ej. tras cambiar lineas).
+ * - domiciliario (cierre F1, D1): solo si la entrega es un domicilio LOCAL (lo decide Logistica): zona, opciones,
+ *   sugerido (ultimo usado en la zona) y elegido por el asesor. null = no se muestra selector.
  */
 final class VistaEntregaBorrador
 {
@@ -32,6 +34,7 @@ final class VistaEntregaBorrador
         public readonly bool $requiereEnvio,
         public readonly bool $entregaCompleta,
         public readonly array $avisos,
+        public readonly ?array $domiciliario = null,
     ) {}
 
     public function toArray(): array
@@ -46,6 +49,7 @@ final class VistaEntregaBorrador
             'requiere_envio' => $this->requiereEnvio,
             'entrega_completa' => $this->entregaCompleta,
             'avisos' => $this->avisos,
+            'domiciliario' => $this->domiciliario,
         ];
     }
 }

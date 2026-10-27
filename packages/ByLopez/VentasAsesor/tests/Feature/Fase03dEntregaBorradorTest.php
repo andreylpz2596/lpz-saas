@@ -69,7 +69,7 @@ function f03d_direccion(array $extra = []): DireccionComercial
 function f03d_activarCarriers(?string $tarifaDomicilio = '8000'): void
 {
     config([
-        'carriers.recogida_bodega.active' => true,
+        'carriers.pickup.active' => true,
         'carriers.domicilio_local.active' => true,
         'carriers.domicilio_local.default_rate' => $tarifaDomicilio,
         'carriers.envio_nacional.active' => true,
@@ -187,7 +187,7 @@ test('RECOGIDA: el lugar es la bodega REAL (inventory_sources) y la persona, qui
     $this->entrega->establecerFacturacion($this->borrador->id, OrigenDireccion::puntual(f03d_direccion()), $this->asesor);
 
     $vista = $this->entrega->establecerEnvio($this->borrador->id, OrigenDireccion::puntoRecogida(), $this->asesor);
-    $recogida = collect($vista->metodosDisponibles)->firstWhere('codigo', 'recogida_bodega');
+    $recogida = collect($vista->metodosDisponibles)->firstWhere('codigo', 'pickup');
 
     expect($vista->envio->origen)->toBe('punto_recogida')
         ->and($vista->envio->inventorySourceId)->toBe($this->bodega->id)
@@ -196,15 +196,15 @@ test('RECOGIDA: el lugar es la bodega REAL (inventory_sources) y la persona, qui
         ->and($vista->envio->empresa)->toBe($this->bodega->name)
         ->and($vista->envio->nombre)->toBe('Ana')
         ->and($vista->envio->telefono)->toBe('+573001234567')
-        ->and(f03d_codigos($vista))->toContain('recogida_bodega')
+        ->and(f03d_codigos($vista))->toContain('pickup')
         ->and(f03d_codigos($vista))->not->toContain('domicilio_local')
         ->and(f03d_codigos($vista))->not->toContain('envio_nacional')
         ->and($recogida->precio)->toBe(0.0)
         ->and($recogida->descuento)->toBe(0.0);
 
-    $elegido = $this->entrega->seleccionarMetodo($this->borrador->id, 'recogida_bodega', $this->asesor);
+    $elegido = $this->entrega->seleccionarMetodo($this->borrador->id, 'pickup', $this->asesor);
 
-    expect($elegido->metodoSeleccionado->codigo)->toBe('recogida_bodega')
+    expect($elegido->metodoSeleccionado->codigo)->toBe('pickup')
         ->and($elegido->entregaCompleta)->toBeTrue()
         ->and($elegido->borrador->totales['shipping_amount'])->toBe(0.0);
 });
@@ -224,8 +224,8 @@ test('recogida: bodega inexistente o ambigua (varias activas) se rechaza; la rec
 
     expect($inexistente)->toBe(EntregaInvalida::PUNTO_RECOGIDA_INEXISTENTE)
         ->and($ambigua)->toBe(EntregaInvalida::PUNTO_RECOGIDA_AMBIGUO)
-        ->and(f03d_codigos($domicilio))->not->toContain('recogida_bodega')
-        ->and(f03d_codigo(fn () => $this->entrega->seleccionarMetodo($this->borrador->id, 'recogida_bodega', $this->asesor)))
+        ->and(f03d_codigos($domicilio))->not->toContain('pickup')
+        ->and(f03d_codigo(fn () => $this->entrega->seleccionarMetodo($this->borrador->id, 'pickup', $this->asesor)))
         ->toBe(EntregaInvalida::METODO_NO_DISPONIBLE);
 });
 
@@ -309,11 +309,11 @@ test('metodo inexistente o sin destino se rechaza; sin productos fisicos no hay 
 });
 
 test('los carriers de ByLopez nacen INACTIVOS: sin activarlos, Bagisto no los ofrece', function () {
-    config(['carriers.recogida_bodega.active' => false, 'carriers.domicilio_local.active' => false, 'carriers.envio_nacional.active' => false]);
+    config(['carriers.pickup.active' => false, 'carriers.domicilio_local.active' => false, 'carriers.envio_nacional.active' => false]);
 
     $vista = f03d_conDomicilio($this);
 
-    expect(array_intersect(f03d_codigos($vista), ['recogida_bodega', 'domicilio_local', 'envio_nacional']))->toBe([]);
+    expect(array_intersect(f03d_codigos($vista), ['pickup', 'domicilio_local', 'envio_nacional']))->toBe([]);
 });
 
 test('EXTENSIBILIDAD: un carrier nuevo registrado en Bagisto aparece y se puede elegir sin tocar VentasAsesor', function () {
@@ -339,7 +339,7 @@ test('cambiar la direccion de envio INVALIDA el metodo elegido y recalcula las t
 
     expect($vista->metodoSeleccionado)->toBeNull()
         ->and(CartModel::query()->find($this->borrador->cart_id)->shipping_method)->toBeNull()
-        ->and(f03d_codigos($vista))->toContain('recogida_bodega')
+        ->and(f03d_codigos($vista))->toContain('pickup')
         ->and(f03d_codigos($vista))->not->toContain('domicilio_local')
         ->and($vista->entregaCompleta)->toBeFalse();
 });

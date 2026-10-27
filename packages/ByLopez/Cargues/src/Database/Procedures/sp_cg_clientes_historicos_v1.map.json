@@ -1,0 +1,113 @@
+{
+    "tabla": "bylopez_cgi_clientes_historicos",
+    "acciones": [
+        "importar_historico"
+    ],
+    "extension": "clientes_historicos",
+    "campos": [
+        {
+            "nombre": "destinatario",
+            "etiqueta": "Destinatario (nombre completo)",
+            "tipo": "texto",
+            "longitud": 191,
+            "nulo": false,
+            "sinonimos": ["Destinatario", "nombre_destinatario"]
+        },
+        {
+            "nombre": "telefono",
+            "etiqueta": "Teléfono",
+            "tipo": "identificador",
+            "longitud": 40,
+            "nulo": false,
+            "sinonimos": ["Teléfono", "Telefono", "telefono_destinatario"]
+        },
+        {
+            "nombre": "direccion",
+            "etiqueta": "Dirección",
+            "tipo": "texto",
+            "longitud": 255,
+            "nulo": true,
+            "vacio": "nulo",
+            "sinonimos": ["Dirección", "Direccion", "direccion_destinatario"]
+        },
+        {
+            "nombre": "ciudad",
+            "etiqueta": "Ciudad",
+            "tipo": "texto",
+            "longitud": 191,
+            "nulo": true,
+            "vacio": "nulo",
+            "sinonimos": ["Ciudad", "ciudad_destino"]
+        },
+        {
+            "nombre": "departamento",
+            "etiqueta": "Departamento (opcional)",
+            "tipo": "texto",
+            "longitud": 100,
+            "nulo": true,
+            "vacio": "nulo",
+            "sinonimos": ["Departamento"]
+        },
+        {
+            "nombre": "numero_de_guia",
+            "etiqueta": "Número de guía",
+            "tipo": "identificador",
+            "longitud": 60,
+            "nulo": false,
+            "sinonimos": ["Nº Guía", "N° Guía", "Número de guía", "numero_de_guia"]
+        },
+        {
+            "nombre": "transportadora",
+            "etiqueta": "Transportadora (código o nombre de 99 Envíos, opcional)",
+            "tipo": "identificador",
+            "longitud": 120,
+            "nulo": true,
+            "vacio": "nulo"
+        },
+        {
+            "nombre": "estado_envio",
+            "etiqueta": "Estado del envío (texto del proveedor)",
+            "tipo": "texto",
+            "longitud": 191,
+            "nulo": false,
+            "sinonimos": ["Estado Envío", "Estado Envio", "estado_del_envio"]
+        },
+        {
+            "nombre": "fecha_estado",
+            "etiqueta": "Fecha del estado (opcional)",
+            "tipo": "fecha_hora",
+            "nulo": true,
+            "vacio": "nulo",
+            "formato": {
+                "formatos": [
+                    "Y-m-d H:i:s",
+                    "Y-m-d"
+                ]
+            }
+        }
+    ],
+    "derivados": [
+        {"nombre": "telefono_e164", "etiqueta": "Teléfono E.164", "tipo": "identificador", "longitud": 16},
+        {"nombre": "telefono_estado", "etiqueta": "Estado del teléfono", "tipo": "texto", "longitud": 60},
+        {"nombre": "nombre_clave", "etiqueta": "Clave del nombre", "tipo": "texto", "longitud": 191},
+        {"nombre": "nombre_pila", "etiqueta": "Nombre", "tipo": "texto", "longitud": 191},
+        {"nombre": "apellido", "etiqueta": "Apellido", "tipo": "texto", "longitud": 191},
+        {"nombre": "cliente_id", "etiqueta": "Cliente existente", "tipo": "entero"},
+        {"nombre": "cliente_estado", "etiqueta": "Estado del cliente existente", "tipo": "texto", "longitud": 30},
+        {"nombre": "municipio_codigo", "etiqueta": "Municipio DIVIPOLA", "tipo": "identificador", "longitud": 5},
+        {"nombre": "geo_estado", "etiqueta": "Estado de la ubicación", "tipo": "texto", "longitud": 30},
+        {"nombre": "transportadora_clave", "etiqueta": "Transportadora efectiva", "tipo": "identificador", "longitud": 40},
+        {"nombre": "transportadora_estado", "etiqueta": "Estado de la transportadora", "tipo": "texto", "longitud": 30}
+    ],
+    "llaves": {
+        "primaria": [
+            "numero_de_guia"
+        ],
+        "unicas": [],
+        "indices": []
+    },
+    "duplicados": "rechazar_todas",
+    "transaccion": "motor",
+    "reanudable": false,
+    "tablas_negocio": []
+}

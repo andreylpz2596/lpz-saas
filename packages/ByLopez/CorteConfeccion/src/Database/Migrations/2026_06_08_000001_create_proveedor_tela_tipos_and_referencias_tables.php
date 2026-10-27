@@ -70,7 +70,7 @@ return new class extends Migration
                     DB::table('bylopez_cc_proveedor_tela_tipos')->updateOrInsert(
                         [
                             'proveedor_tela_id' => $proveedor->id,
-                            'tipo_tela_id'      => $tipoTelaId,
+                            'tipo_tela_id' => $tipoTelaId,
                         ],
                         [
                             'created_at' => $now,

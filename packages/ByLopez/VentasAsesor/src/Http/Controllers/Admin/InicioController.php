@@ -2,13 +2,17 @@
 
 namespace ByLopez\VentasAsesor\Http\Controllers\Admin;
 
+use ByLopez\VentasAsesor\Services\Asesores\AsesorActualService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use Illuminate\Routing\Controller;
 use Illuminate\View\View;
 
 class InicioController extends Controller
 {
-    public function __construct(protected AutorizacionVentasAsesor $autorizacion) {}
+    public function __construct(
+        protected AutorizacionVentasAsesor $autorizacion,
+        protected AsesorActualService $asesorActual,
+    ) {}
 
     /**
      * Pantalla inicial del modulo. El Bouncer de Bagisto exige la clave
@@ -24,6 +28,8 @@ class InicioController extends Controller
         return view('ventasasesor::admin.inicio.index', [
             'esAsesor' => $this->autorizacion->esAsesor($admin),
             'alcance' => $this->autorizacion->alcanceDeVisibilidad($admin),
+            // ASESOR-01: quien vende como asesor sin perfil activo ve el aviso (no puede crear ventas).
+            'asesorSinAsociacion' => ! $this->asesorActual->operable($admin),
         ]);
     }
 }

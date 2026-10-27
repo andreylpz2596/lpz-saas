@@ -45,15 +45,15 @@ class CompraTelaController extends Controller
 
         session()->flash('success', trans('corteconfeccion::app.messages.created'));
 
-        return redirect()->route('admin.corte_confeccion.compras_tela.show', $compra->id);
+        return redirect()->route('admin.corte_confeccion.compras_tela.edit', $compra->id);
     }
 
     public function referencias(Request $request)
     {
         $validated = $request->validate([
             'proveedor_tela_id' => ['required', 'integer', 'exists:bylopez_cc_proveedores_tela,id'],
-            'tipo_tela_id'      => ['required', 'integer', 'exists:attribute_options,id'],
-            'search'            => ['nullable', 'string', 'max:255'],
+            'tipo_tela_id' => ['required', 'integer', 'exists:attribute_options,id'],
+            'search' => ['nullable', 'string', 'max:255'],
         ]);
 
         $search = trim($validated['search'] ?? '');
@@ -75,26 +75,26 @@ class CompraTelaController extends Controller
             ->limit(20)
             ->get()
             ->map(fn (ProveedorTelaReferencia $referencia) => [
-                'id'                    => $referencia->id,
-                'label'                 => $this->referenciaLabel($referencia),
-                'color'                 => $referencia->color,
-                'referencia'            => $referencia->referencia,
-                'gramaje'               => $referencia->gramaje,
+                'id' => $referencia->id,
+                'label' => $this->referenciaLabel($referencia),
+                'color' => $referencia->color,
+                'referencia' => $referencia->referencia,
+                'gramaje' => $referencia->gramaje,
                 'valor_kilo_referencia' => $referencia->valor_kilo_referencia,
             ]);
     }
 
     public function show(int $id)
     {
-        $compra = $this->compraTelaRepository->with(['proveedor', 'rollos.tipoTela', 'rollos.referenciaTela.tipoTela'])->findOrFail($id);
+        $compra = $this->compraTelaRepository->findOrFail($id);
 
-        return view('corteconfeccion::admin.compras-tela.show', compact('compra'));
+        return redirect()->route('admin.corte_confeccion.compras_tela.edit', $compra->id);
     }
 
     public function edit(int $id)
     {
         $compra = $this->compraTelaRepository
-            ->with(['proveedor', 'rollos.ordenesCorte', 'rollos.tipoTela', 'rollos.referenciaTela.tipoTela'])
+            ->with(['proveedor', 'rollos.tipoTela', 'rollos.referenciaTela.tipoTela'])
             ->findOrFail($id);
 
         $proveedores = $this->proveedoresParaFormulario($compra);
@@ -109,7 +109,7 @@ class CompraTelaController extends Controller
 
         session()->flash('success', trans('corteconfeccion::app.messages.updated'));
 
-        return redirect()->route('admin.corte_confeccion.compras_tela.show', $compra->id);
+        return redirect()->route('admin.corte_confeccion.compras_tela.edit', $compra->id);
     }
 
     protected function proveedoresParaFormulario(?CompraTela $compra = null)
@@ -141,8 +141,12 @@ class CompraTelaController extends Controller
 
     protected function codigoSugerido(): string
     {
+        // Corto: CT-AAMMDD-NN (consecutivo del dia). Los rollos derivan de este codigo (-R001).
+        $prefijo = 'CT-'.now()->format('ymd').'-';
+        $consecutivo = CompraTela::query()->where('codigo', 'like', $prefijo.'%')->count() + 1;
+
         do {
-            $codigo = 'CT-'.now()->format('YmdHis').'-'.random_int(100, 999);
+            $codigo = $prefijo.str_pad((string) $consecutivo++, 2, '0', STR_PAD_LEFT);
         } while (CompraTela::query()->where('codigo', $codigo)->exists());
 
         return $codigo;
