@@ -3,6 +3,7 @@
 namespace ByLopez\VentasAsesor\Providers;
 
 use ByLopez\VentasAsesor\Listeners\AtribuirPedidoCreado;
+use ByLopez\VentasAsesor\Listeners\CantidadVarianteConfigurable;
 use ByLopez\VentasAsesor\Listeners\CapturarCostoAlCrearPedido;
 use ByLopez\VentasAsesor\Listeners\CercoCreacionPedido;
 use ByLopez\VentasAsesor\Listeners\ClasificarOperacionPedido;
@@ -12,6 +13,7 @@ use ByLopez\VentasAsesor\Listeners\FijarContextoPrecioEnRutasDelPanel;
 use ByLopez\VentasAsesor\Listeners\MostrarAntecedentesEnviosEnFichaCliente;
 use ByLopez\VentasAsesor\Listeners\MostrarCarteraEnFichaCliente;
 use ByLopez\VentasAsesor\Listeners\MostrarTipoOperacionEnPedido;
+use ByLopez\VentasAsesor\Listeners\ProtegerReservasEnDespachoLegado;
 use ByLopez\VentasAsesor\Listeners\RegistrarRentabilidadYComision;
 use ByLopez\VentasAsesor\Listeners\RegistrarSnapshotGrupoPedido;
 use ByLopez\VentasAsesor\Listeners\SolicitarReevaluacionComision;
@@ -44,6 +46,13 @@ class EventServiceProvider extends ServiceProvider
          */
         Event::listen(CercoCreacionPedido::EVENTO, CercoCreacionPedido::class.'@handle');
         Event::listen(EnlazarPedidoConBorrador::EVENTO, EnlazarPedidoConBorrador::class.'@handle');
+
+        // F5: la hija de un configurable lleva su cantidad (razon 1) antes de cada calculo de totales, para que la reserva
+        // NATIVA del pedido confirmado exista (Bagisto 2.4.9 la dejaba en 0). Global: tienda, panel y Nueva venta.
+        Event::listen(CantidadVarianteConfigurable::EVENTO, CantidadVarianteConfigurable::class.'@handle');
+        // F5 (transicion): despachar un pedido anterior sin reserva no consume las reservas de los pedidos nuevos.
+        Event::listen(ProtegerReservasEnDespachoLegado::ANTES, ProtegerReservasEnDespachoLegado::class.'@antes');
+        Event::listen(ProtegerReservasEnDespachoLegado::DESPUES, ProtegerReservasEnDespachoLegado::class.'@despues');
 
         // G-11 (COM-D-15): clasificacion comercial del pedido de Nueva venta, en la misma transaccion y tras el enlace.
         Event::listen(ClasificarOperacionPedido::EVENTO, ClasificarOperacionPedido::class.'@handle');

@@ -3,6 +3,7 @@
 namespace ByLopez\VentasAsesor\Support\Venta;
 
 use ByLopez\VentasAsesor\Exceptions\PedidoRechazadoPorCercoException as Rechazo;
+use ByLopez\VentasAsesor\Services\Venta\VentasSimultaneasService;
 use Illuminate\Support\Facades\DB;
 use Webkul\Product\Models\ProductProxy;
 
@@ -31,11 +32,11 @@ use Webkul\Product\Models\ProductProxy;
  * Fuera de alcance (riesgo residual conocido, D-54): Shipment concurrente, ajustes directos
  * de inventario y operaciones que no pasan por OrderRepository no toman este bloqueo.
  *
- * LIMITACION CONOCIDA (Doc. 05 §39.4 y §40; decidida por Camilo Gaitan: no se corrige): la
- * proteccion es efectiva donde Bagisto RESERVA. Para las variantes de un configurable, Bagisto
- * 2.4.9 reserva 0 (hijo con cantidad 0), asi que un pedido anterior no descuenta nada del
- * vendible y el cerco no puede verlo. Este cerco no promete "sin sobreventa" en esas
- * variantes ni crea reservas propias. Bagisto sigue siendo la autoridad de inventario.
+ * F5 (2026-10-26, regla aprobada: el pedido confirmado compromete sus unidades). Antes Bagisto 2.4.9 reservaba 0 para las
+ * variantes de un configurable (hijo con cantidad 0, Doc. 05 §39.4) y este cerco no podia verlas. Ahora la hija lleva su
+ * cantidad (CantidadVarianteConfigurable) y la reserva NATIVA existe; ademas, lo pendiente de los pedidos anteriores sin
+ * reserva se descuenta aqui (pendienteSinReserva) mientras no se despachen. Sigue sin crear reservas propias: Bagisto es la
+ * autoridad de inventario.
  */
 class CercoInventario
 {
@@ -184,12 +185,40 @@ class CercoInventario
             ->where('channel_id', $canalId)
             ->pluck('qty', 'product_id');
 
+        $legado = $this->pendienteSinReserva($ids, $canalId);
         $vendible = [];
 
         foreach ($ids as $id) {
-            $vendible[$id] = (int) ($fisico[$id] ?? 0) - (int) ($reservado[$id] ?? 0);
+            $vendible[$id] = (int) ($fisico[$id] ?? 0) - (int) ($reservado[$id] ?? 0) - (int) ($legado[$id] ?? 0);
         }
 
         return $vendible;
+    }
+
+    /**
+     * F5, transicion sin backfill: lo que pedidos confirmados ANTES de la correccion (variante de configurable con
+     * `qty_ordered` = 0, que Bagisto no reservo) aun tienen pendiente de despachar. Tambien es compromiso: se descuenta del
+     * vendible para que una venta nueva no prometa esas unidades. Los pedidos nuevos ya reservan (CantidadVarianteConfigurable)
+     * y no entran aqui (hijo con cantidad), asi que nada se cuenta dos veces. Mismo criterio de «pedidos sin despachar» que
+     * la advertencia de Nueva venta (VentasSimultaneasService).
+     *
+     * @param  list<int>  $ids
+     * @return array<int, int>
+     */
+    protected function pendienteSinReserva(array $ids, int $canalId): array
+    {
+        return DB::table('order_items as h')
+            ->join('order_items as l', 'l.id', '=', 'h.parent_id')
+            ->join('orders as o', 'o.id', '=', 'l.order_id')
+            ->whereIn('h.product_id', $ids)
+            ->where('l.type', 'configurable')
+            ->where('h.qty_ordered', 0)
+            ->where('o.channel_id', $canalId)
+            ->whereNotIn('o.status', VentasSimultaneasService::ESTADOS_SIN_DESPACHO)
+            ->groupBy('h.product_id')
+            ->selectRaw('h.product_id, SUM(GREATEST(l.qty_ordered - l.qty_shipped - l.qty_refunded - l.qty_canceled, 0)) AS pendiente')
+            ->pluck('pendiente', 'product_id')
+            ->map(fn ($q) => (int) $q)
+            ->all();
     }
 }

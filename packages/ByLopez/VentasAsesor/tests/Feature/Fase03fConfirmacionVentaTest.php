@@ -218,32 +218,28 @@ test('03F-31/32/33 sin Transaction de dinero, sin custom_price, precio de Bagist
         ->and(DB::table('shipments')->where('order_id', $r->orderId)->count())->toBe(0);
 });
 
-test('LIMITE Bagisto 2.4.9 (preexistente, no causado por 03F): la variante de un configurable se reserva con 0; el producto simple, con su cantidad', function () {
-    // Configurable (fixture base: 30 de 50). Bagisto guarda el hijo con quantity 0 y reserva 0.
+test('F5 (antes LIMITE Bagisto 2.4.9): la variante de un configurable se reserva con su cantidad y otra venta ya no puede prometer las mismas unidades', function () {
+    // Configurable (fixture base: 30 de 50). Desde F5 la hija lleva cantidad (razon 1) y Bagisto reserva la cantidad pedida.
     $r = f03f_confirmar($this);
     $hijo = OrderItem::query()->where('order_id', $r->orderId)->whereNotNull('parent_id')->sole();
 
-    expect((int) $hijo->qty_ordered)->toBe(0)
-        ->and((int) ProductOrderedInventory::query()->where('product_id', $this->variante->id)->sum('qty'))->toBe(0);
+    // Esperado (independiente): 50 fisicas − 30 reservadas = 20 vendibles; el fisico no baja hasta el despacho.
+    expect((int) $hijo->qty_ordered)->toBe(30)
+        ->and((int) ProductOrderedInventory::query()->where('product_id', $this->variante->id)->sum('qty'))->toBe(30)
+        ->and((int) DB::table('product_inventories')->where('product_id', $this->variante->id)->sum('qty'))->toBe(50);
 
-    // Consecuencia: otro borrador de 30 sobre las MISMAS 50 unidades tambien confirma (60 > 50).
-    // El cerco serializa, pero no puede ver una reserva que Bagisto no hizo. Decision pendiente (Doc. 05 §39).
-    $this->borrador = f03f_borradorListo($this->cliente->id, $this->asesor, [[$this->configurable, $this->variante, 30]]);
-    $segundo = f03f_confirmar($this);
+    // Otra venta de 30 sobre las MISMAS 50 unidades: igual que con un simple, Bagisto ya no deja llevarlas (vendible 20).
+    $otro = app(BorradorVentaService::class)->crear($this->cliente->id, $this->asesor, CanalVenta::WHATSAPP);
+    app(SolicitudBorradorService::class)->crear($otro->id, $this->configurable->id, $this->variante->id, 30, $this->asesor);
 
-    // Simple: 30 de 50 reserva 30; el vendible baja a 20 y Bagisto ya no deja llevar otras 30.
-    $simple = f03f_simple();
-    f03b_stock($simple, 50);
-    $this->borrador = f03f_borradorListo($this->cliente->id, $this->asesor, [[$simple, $simple, 30]]);
+    expect(fn () => app(LineasBorradorService::class)->agregar($otro->id, $this->configurable->id, $this->variante->id, 30, $this->asesor))
+        ->toThrow(LineaBorradorInvalidaException::class);
+
+    // 20 si caben y se reservan: 30 + 20 = 50 comprometidas.
+    $this->borrador = f03f_borradorListo($this->cliente->id, $this->asesor, [[$this->configurable, $this->variante, 20]]);
     f03f_confirmar($this);
 
-    $otro = app(BorradorVentaService::class)->crear($this->cliente->id, $this->asesor, CanalVenta::WHATSAPP);
-    app(SolicitudBorradorService::class)->crear($otro->id, $simple->id, $simple->id, 30, $this->asesor);
-
-    expect($segundo->yaExistia)->toBeFalse()
-        ->and((int) ProductOrderedInventory::query()->where('product_id', $simple->id)->sum('qty'))->toBe(30)
-        ->and(fn () => app(LineasBorradorService::class)->agregar($otro->id, $simple->id, $simple->id, 30, $this->asesor))
-        ->toThrow(LineaBorradorInvalidaException::class);
+    expect((int) ProductOrderedInventory::query()->where('product_id', $this->variante->id)->sum('qty'))->toBe(50);
 });
 
 // ------------------------------------------------------------------ idempotencia: 03F-02, 03, 04, 46

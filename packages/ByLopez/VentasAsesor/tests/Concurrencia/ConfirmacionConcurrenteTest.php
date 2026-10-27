@@ -112,6 +112,10 @@ function f03fc_limpiar(array $c): void
     DB::table('bylopez_va_attribution_incidents')->whereIn('order_id', $pedidos)->delete();
     DB::table('bylopez_va_advisor_assignment_logs')->whereIn('order_id', $pedidos)->delete();
     DB::table('bylopez_va_order_attributions')->whereIn('order_id', $pedidos)->delete();
+    // Tablas posteriores a 03F (G-11 clasificacion, GRP-01, COM, R2/R3, comisiones...) con FK RESTRICT hacia `orders`: sin esto el
+    // DELETE del pedido fallaba DESPUES de las aserciones y dejaba los datos confirmados en lpz_saas_testing. Se leen del esquema
+    // para no volver a quedarse atras; varias pasadas por dependencias entre ellas.
+    f03fc_limpiarHijosDePedidos($pedidos);
     DB::table('bylopez_va_borradores_venta')->whereIn('id', $c['borradores'])->delete();
     DB::table('orders')->whereIn('id', $pedidos)->delete();
     DB::table('cart')->whereIn('id', $c['carritos'])->delete();
@@ -120,6 +124,42 @@ function f03fc_limpiar(array $c): void
     DB::table('products')->whereIn('id', $c['productos'])->delete();
     DB::table('admins')->whereIn('id', $c['admins'])->delete();
     DB::table('roles')->whereIn('id', $c['roles'])->delete();
+}
+
+/** @param  list<int>  $pedidos */
+function f03fc_limpiarHijosDePedidos(array $pedidos): void
+{
+    foreach (f03fc_referencias('orders') as [$tabla, $columna]) {
+        if (str_starts_with($tabla, 'bylopez') && $tabla !== 'bylopez_va_borradores_venta') {
+            f03fc_borrarFilas($tabla, $columna, $pedidos);
+        }
+    }
+
+    DB::table('bylopez_va_comision_reevaluaciones')->whereIn('order_id', $pedidos ?: [0])->delete();
+}
+
+/** @return list<array{0: string, 1: string}> tablas y columnas con FK (no CASCADE) hacia $tabla.id */
+function f03fc_referencias(string $tabla): array
+{
+    return array_map(fn ($f) => [$f->t, $f->c], DB::select("SELECT k.TABLE_NAME AS t, k.COLUMN_NAME AS c FROM information_schema.KEY_COLUMN_USAGE k
+        JOIN information_schema.REFERENTIAL_CONSTRAINTS r ON r.CONSTRAINT_NAME = k.CONSTRAINT_NAME AND r.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA
+        WHERE k.TABLE_SCHEMA = DATABASE() AND k.REFERENCED_TABLE_NAME = ? AND k.REFERENCED_COLUMN_NAME = 'id' AND r.DELETE_RULE NOT IN ('CASCADE', 'SET NULL')", [$tabla]));
+}
+
+/** Borra las filas de $tabla con $columna en $valores, y antes (recursivo) sus hijas por FK RESTRICT. */
+function f03fc_borrarFilas(string $tabla, string $columna, array $valores, int $nivel = 0): void
+{
+    if ($valores === [] || $nivel > 4) {
+        return;
+    }
+
+    $ids = DB::table($tabla)->whereIn($columna, $valores)->pluck('id')->all();
+
+    foreach (f03fc_referencias($tabla) as [$hija, $col]) {
+        f03fc_borrarFilas($hija, $col, $ids, $nivel + 1);
+    }
+
+    DB::table($tabla)->whereIn($columna, $valores)->delete();
 }
 
 // ------------------------------------------------------------------ procesos y sincronizacion
@@ -423,4 +463,35 @@ test('03F-34 (arquitectura) dentro de una transaccion exterior, un fallo de Orde
     // El exterior ya no existe y su INSERT es visible desde OTRA conexion: fue confirmado.
     expect(DB::transactionLevel())->toBe(0)
         ->and(DB::connection('f03f_observador')->table('customer_groups')->where('id', $marca)->exists())->toBeTrue();
+});
+
+test('03F-37d F5 ultima unidad de una VARIANTE de configurable: A y B piden 1 al mismo tiempo → 1 pedido, 1 stock_insuficiente, reserva 1', function () {
+    // Antes de F5 la variante se reservaba con 0 y los DOS pedidos se creaban sobre la misma unidad.
+    $configurable = f03b_configurable(10000.0);
+    $variante = $configurable->variants()->first();
+    f03b_stock($variante, 1);
+    $this->creados['productos'] = [...$this->creados['productos'], (int) $variante->id, (int) $configurable->id];
+
+    $borradores = [];
+    foreach (['A', 'B'] as $_) {
+        $b = f03f_borradorListo($this->cliente->id, $this->asesor, [[$configurable, $variante, 1]]);
+        $this->creados['borradores'][] = $b->id;
+        $this->creados['carritos'][] = $b->cart_id;
+        $borradores[] = $b;
+    }
+
+    $barrera = $this->prefijo.'_barrera';
+    f03fc_tomar($barrera);
+    $procesos = array_map(fn ($b) => f03fc_lanzar($this, f03fc_confirmacion($this, $b, ['barrera' => $barrera])), $borradores);
+    f03fc_soltar($barrera);
+
+    $resultados = array_map('f03fc_resultado', $procesos);
+    $ok = array_values(array_filter($resultados, fn ($r) => $r['ok']));
+    $fallo = array_values(array_filter($resultados, fn ($r) => ! $r['ok']));
+
+    expect($ok)->toHaveCount(1)
+        ->and($fallo)->toHaveCount(1)
+        ->and($fallo[0]['codigo'])->toBe('stock_insuficiente')
+        ->and(Order::query()->whereIn('cart_id', array_map(fn ($b) => $b->cart_id, $borradores))->count())->toBe(1)
+        ->and((int) ProductOrderedInventory::query()->where('product_id', $variante->id)->sum('qty'))->toBe(1);
 });

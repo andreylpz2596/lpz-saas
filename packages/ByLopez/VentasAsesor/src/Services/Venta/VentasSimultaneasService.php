@@ -246,8 +246,9 @@ class VentasSimultaneasService
 
     /**
      * qty_to_ship nativo por variante. `no_descontado` = lo vendido a traves de un
-     * configurable (reserva nativa 0: el stock Bagisto aun lo cuenta). Lo vendido como
-     * simple ya esta reservado y descontado del stock Bagisto.
+     * configurable en pedidos ANTERIORES a F5 (hijo con qty_ordered 0: reserva nativa 0, el
+     * stock Bagisto aun lo cuenta). Desde F5 la hija lleva cantidad y ese pendiente ya esta
+     * reservado y descontado, igual que lo vendido como simple.
      *
      * @return array<int, array{total: int, no_descontado: int}>
      */
@@ -262,7 +263,7 @@ class VentasSimultaneasService
             ->where('l.type', 'configurable')
             ->where('o.channel_id', $canalId)
             ->whereNotIn('o.status', self::ESTADOS_SIN_DESPACHO)
-            ->selectRaw("h.product_id as variante_id, 1 as via_configurable, {$pendiente} as pendiente");
+            ->selectRaw("h.product_id as variante_id, CASE WHEN h.qty_ordered = 0 THEN 1 ELSE 0 END as via_configurable, {$pendiente} as pendiente");
 
         // qty_to_ship es 0 para tipos no almacenables (virtual, descargable): solo `simple`.
         $simples = DB::table('order_items as l')
