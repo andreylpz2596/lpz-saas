@@ -66,7 +66,12 @@ class ConsultaCuentasService
 
         foreach ($transportadoras as $t) {
             $filas = $abiertos->get($t->id, collect());
-            $suma = fn (array $conceptos) => round((float) $filas->whereIn('concepto', $conceptos)->sum('total'), 2);
+            // F10: `concepto` llega con el cast al enum; agrupar con el mismo criterio que el detalle (Concepto::grupo(), via
+            // LiquidarCuentaService::totales) en vez de comparar el enum contra su texto, que daba siempre 0.
+            $grupos = ['recaudos' => 0.0, 'servicios' => 0.0, 'ajustes' => 0.0, 'pagos' => 0.0];
+            foreach ($filas as $fila) {
+                $grupos[$fila->concepto->grupo()] += (float) $fila->total;
+            }
             $saldo = round((float) $filas->sum('total'), 2);
             $pendientes = (int) $filas->sum('n');
             $d = SaldoCuenta::describir($saldo, (string) $t->nombre);
@@ -77,8 +82,10 @@ class ConsultaCuentasService
                 'liquida' => (bool) $t->liquida_cuenta_corriente,
                 'activo' => (bool) $t->activo,
                 'ultimo' => isset($ultimo[$t->id]) ? CarbonImmutable::parse($ultimo[$t->id])->toDateString() : null,
-                'recaudado' => $suma([Concepto::RECAUDO->value]),
-                'servicios' => abs($suma([Concepto::SERVICIO->value, Concepto::COSTO_DEVOLUCION->value])),
+                'recaudado' => round($grupos['recaudos'], 2),
+                'servicios' => abs(round($grupos['servicios'], 2)),
+                // Firmado como en el detalle: recaudado − servicios + ajustes (+ pagos abiertos, normalmente 0) = saldo.
+                'ajustes' => round($grupos['ajustes'] + $grupos['pagos'], 2),
                 'saldo' => $d,
                 'pendientes' => $pendientes,
                 'revision' => (int) ($revisiones[$t->id] ?? 0),

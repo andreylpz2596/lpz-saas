@@ -868,6 +868,7 @@ return [
         'col-ultimo' => 'Last entry',
         'col-recaudado' => 'Recorded collection',
         'col-servicios' => 'Services',
+        'col-ajustes' => 'Adjustments',
         'col-saldo' => 'Pending balance',
         'col-situacion' => 'Status',
         'ver-cuenta' => 'View account',
@@ -1066,6 +1067,8 @@ return [
         ],
     ],
     'errores' => [
+        'error_inesperado' => 'We could not complete the operation because of an unexpected error. Check the current state before trying again. Reference: :referencia.',
+        'operacion_concurrente' => 'Someone else was recording an operation on the same item at this moment. Reload and check the state before trying again.',
         'sin_permiso' => 'You do not have permission for this action.',
         'retorno_anulado' => 'The return is voided: it cannot be received.',
         'recepcion_ya_registrada' => 'This return was already received at the warehouse.',

@@ -866,6 +866,7 @@ return [
         'col-ultimo' => 'Último movimiento',
         'col-recaudado' => 'Recaudo registrado',
         'col-servicios' => 'Servicios',
+        'col-ajustes' => 'Ajustes',
         'col-saldo' => 'Saldo pendiente',
         'col-situacion' => 'Situación',
         'ver-cuenta' => 'Ver cuenta',
@@ -1064,6 +1065,8 @@ return [
         ],
     ],
     'errores' => [
+        'error_inesperado' => 'No pudimos completar la operación por un error inesperado. Revisa el estado antes de volver a intentarlo. Referencia: :referencia.',
+        'operacion_concurrente' => 'Otra persona estaba registrando una operación sobre lo mismo en este momento. Recarga y revisa el estado antes de intentarlo de nuevo.',
         'sin_permiso' => 'No tienes permiso para esta acción.',
         'retorno_anulado' => 'La devolución está anulada: no se puede recibir.',
         'recepcion_ya_registrada' => 'Esta devolución ya fue recibida en Bodega.',

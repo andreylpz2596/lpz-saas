@@ -53,6 +53,7 @@
                             <th>@lang('logistica::app.cuentas.col-ultimo')</th>
                             <th class="lg-num">@lang('logistica::app.cuentas.col-recaudado')</th>
                             <th class="lg-num">@lang('logistica::app.cuentas.col-servicios')</th>
+                            <th class="lg-num">@lang('logistica::app.cuentas.col-ajustes')</th>
                             <th class="lg-num">@lang('logistica::app.cuentas.col-saldo')</th>
                             <th>@lang('logistica::app.cuentas.col-situacion')</th>
                             <th></th>
@@ -70,6 +71,7 @@
                                 <td class="lg-sub">{{ $c['ultimo'] ? \Carbon\Carbon::parse($c['ultimo'])->locale(app()->getLocale())->translatedFormat('j M Y') : trans('logistica::app.cuentas.sin-movimiento') }}</td>
                                 <td class="lg-num">{{ Moneda::formatear($c['recaudado']) }}</td>
                                 <td class="lg-num">{{ Moneda::formatear($c['servicios']) }}</td>
+                                <td class="lg-num" data-ajustes="{{ $c['ajustes'] }}">{{ Moneda::formatear($c['ajustes']) }}</td>
                                 <td class="lg-num"><span class="lgc-monto" data-saldo="{{ $c['saldo']['valor'] }}">{{ $c['saldo']['valor_texto'] }}</span></td>
                                 <td>
                                     <div class="lg-estados">

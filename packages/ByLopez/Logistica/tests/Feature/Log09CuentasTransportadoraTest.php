@@ -236,8 +236,9 @@ test('CC-12 BODEGA ve la cuenta pero no registra ajustes ni liquida', function (
 
     $ctx = app(ConsultaCuentasService::class)->contexto($bodega, (int) $c['jeison']->id);
 
+    // C6 (2026-10-26) agrego `cobrar` (reportar el cobro de la transportadora, solo quien liquida): BODEGA tampoco puede.
     expect($ctx['saldo']['valor'])->toBe(41000.0)
-        ->and($ctx['permisos'])->toBe(['liquidar' => false, 'ajustar' => false])
+        ->and($ctx['permisos'])->toBe(['liquidar' => false, 'ajustar' => false, 'cobrar' => false])
         ->and(log2_error(fn () => app(AjusteCuentaService::class)->registrarAjuste($bodega, (int) $c['jeison']->id, ['tipo' => 'a_favor_bylopez', 'valor' => '1000', 'motivo' => 'x', 'idempotency_key' => 'aj-'.Str::uuid()])))->toBe(Invalida::SIN_PERMISO)
         ->and(log2_error(fn () => log9_liquidar($c['jeison'], '41000', [], $bodega)))->toBe(Invalida::SIN_PERMISO)
         ->and(log2_error(fn () => app(ConsultaCuentasService::class)->contexto(log2_bodega(), (int) $c['jeison']->id)))->toBe(Invalida::SIN_PERMISO);
@@ -380,7 +381,9 @@ function log9_envio_lineas(Transportadora $t, array $lineas, string $recaudo): a
         }
     }
 
-    $guia = log6_despachar($e, $t, ['recaudoEsperado' => $recaudo]);
+    // C1 (2026-10-23): el recaudo de estas fixtures es el de la mercancia (sin el flete de 10.000 que suma el total del pedido),
+    // distinto del sugerido por guia; la regla vigente exige motivo para registrarlo. El escenario (recaudo escrito) no cambia.
+    $guia = log6_despachar($e, $t, ['recaudoEsperado' => $recaudo, 'motivoRecaudo' => 'Fixture CC-20/21/22: recaudo de la mercancia sin el flete']);
     $porLinea = DB::table('shipment_items')->where('shipment_id', $guia->shipment_id)->pluck('id', 'order_item_id');
 
     return [
@@ -459,4 +462,34 @@ test('CC-22 un valor distinto al sugerido exige motivo (servidor); con motivo se
     app(AjusteCuentaService::class)->confirmarRevision(log9_admin(), $e['envio'], 'recaudo', '15000', 'El cliente pago 1.000 menos', 'rev-'.Str::uuid());
 
     expect(log9_movs($e['envio'])['recaudo'])->toBe(15000.0);
+});
+
+test('CC-23 F10 listado y detalle cuadran: recaudado − servicios + ajustes = saldo (con saldo, con diferencia abierta y liquidada)', function () {
+    $c = log9_preparar();
+    $fila = fn () => collect(app(ConsultaCuentasService::class)->listado()['cuentas'])->firstWhere('id', (int) $c['jeison']->id);
+    $detalle = fn () => app(ConsultaCuentasService::class)->contexto(log9_admin(), (int) $c['jeison']->id)['resumen'];
+
+    // Con saldo: recaudo 51.000 y servicio 10.000 de la fixture (calculo esperado independiente: 51.000 − 10.000 = 41.000).
+    log9_entregar(log9_envio($c['jeison']));
+    $l1 = $fila();
+    $d1 = $detalle();
+
+    expect([$l1['recaudado'], $l1['servicios'], $l1['ajustes'], $l1['saldo']['valor']])->toBe([51000.0, 10000.0, 0.0, 41000.0])
+        ->and([$d1['recaudos'], abs($d1['servicios']), $d1['ajustes'], $d1['saldo']])->toBe([51000.0, 10000.0, 0.0, 41000.0])
+        ->and(round($l1['recaudado'] - $l1['servicios'] + $l1['ajustes'], 2))->toBe($l1['saldo']['valor']);
+
+    // Liquidacion con diferencia: entrega 31.000; quedan abiertos solo los 10.000 de diferencia (grupo ajustes).
+    log9_liquidar($c['jeison'], '31000', ['observacion' => 'Entrego 31.000']);
+    $l2 = $fila();
+    $d2 = $detalle();
+
+    expect([$l2['recaudado'], $l2['servicios'], $l2['ajustes'], $l2['saldo']['valor']])->toBe([0.0, 0.0, 10000.0, 10000.0])
+        ->and([$d2['recaudos'], abs($d2['servicios']), $d2['ajustes'], $d2['saldo']])->toBe([0.0, 0.0, 10000.0, 10000.0]);
+
+    // Cuenta liquidada por completo: todo en cero y «Cuenta al dia» en los dos lados.
+    log9_liquidar($c['jeison'], '10000');
+    $l3 = $fila();
+
+    expect([$l3['recaudado'], $l3['servicios'], $l3['ajustes'], $l3['saldo']['valor'], $l3['saldo']['sentido']])->toBe([0.0, 0.0, 0.0, 0.0, SaldoCuenta::AL_DIA])
+        ->and($detalle()['saldo'])->toBe(0.0);
 });
