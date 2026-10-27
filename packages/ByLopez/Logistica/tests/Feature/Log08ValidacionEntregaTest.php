@@ -106,15 +106,17 @@ test('VD-1 solo se valida una entrega completa: sin entregas, con pendientes o c
     vd_evento(RegistrarRetornoTransportadoraService::class, $e, 4, 'ret');
     expect(vd_error(fn () => vd_validar($e)))->toBe(Invalida::VALIDACION_DEVOLUCION_SIN_RECIBIR)
         ->and(vd_estado($e))->toBe('registrada')
-        ->and(ValidacionEntrega::query()->count())->toBe(0);
+        ->and(ValidacionEntrega::query()->where('shipment_id', $e['envio']->id)->count())->toBe(0);
 });
 
 test('VD-2 entrega completa: pasa de «por validar» a «validada», es idempotente y no escribe pagos ni toca la factura', function () {
     $e = vd_envio(10);
+    // Indicador global: se mide la diferencia que produce ESTA entrega, no el total de la base de pruebas.
+    $porValidarAntes = app(ConsultaEntregaService::class)->indicadores()['por_validar'];
     vd_entregar($e);
 
     expect(vd_estado($e))->toBe('pendiente_confirmar')
-        ->and(app(ConsultaEntregaService::class)->indicadores()['por_validar'])->toBe(1);
+        ->and(app(ConsultaEntregaService::class)->indicadores()['por_validar'])->toBe($porValidarAntes + 1);
 
     $clave = 'vd-val-'.Str::uuid();
     $admin = vd_admin();
@@ -124,19 +126,19 @@ test('VD-2 entrega completa: pasa de «por validar» a «validada», es idempote
         ->and($r['validacion']->entregadas)->toBe(10)
         ->and($r['validacion']->actor_admin_id)->toBe((int) $admin->id)
         ->and(vd_estado($e))->toBe('confirmado')
-        ->and(app(ConsultaEntregaService::class)->indicadores()['por_validar'])->toBe(0)
+        ->and(app(ConsultaEntregaService::class)->indicadores()['por_validar'])->toBe($porValidarAntes)
         // Validar NO es cobrar: la factura y el pedido siguen pendientes de pago, y no hay pagos ni transacciones.
         ->and(DB::table('invoices')->where('id', $e['factura'])->value('state'))->toBe('pending')
         ->and(DB::table('orders')->where('id', $e['pedido']->id)->value('status'))->toBe('pending_payment')
         ->and(DB::table('order_transactions')->where('order_id', $e['pedido']->id)->count())->toBe(0)
-        ->and(DB::table('bylopez_va_pagos')->count())->toBe(0);
+        ->and(DB::table('bylopez_va_pagos')->where('customer_id', $e['pedido']->customer_id)->count())->toBe(0);
 
     // Reintento / doble clic con la misma clave: el mismo registro. Otra clave: ya validada.
     $otra = vd_validar($e, $admin, $clave, 'Confirmado con el cliente');
     expect($otra['ya_existia'])->toBeTrue()->and($otra['validacion']->id)->toBe($r['validacion']->id)
         ->and(vd_error(fn () => vd_validar($e, $admin, $clave, 'Otro texto')))->toBe(Invalida::IDEMPOTENCIA_CONFLICTO)
         ->and(vd_error(fn () => vd_validar($e, $admin)))->toBe(Invalida::VALIDACION_YA_REGISTRADA)
-        ->and(ValidacionEntrega::query()->count())->toBe(1);
+        ->and(ValidacionEntrega::query()->where('shipment_id', $e['envio']->id)->count())->toBe(1);
 });
 
 test('VD-3 permiso: sin logistica.entregas.validar no se valida ni se cobra', function () {
@@ -146,7 +148,7 @@ test('VD-3 permiso: sin logistica.entregas.validar no se valida ni se cobra', fu
 
     expect(vd_error(fn () => vd_validar($e, $sin)))->toBe(Invalida::SIN_PERMISO)
         ->and(vd_error(fn () => app(CobrarEntregaService::class)->cobrar($sin, (int) $e['envio']->id, '100', 'efectivo', null, null, 'vd-cobro-'.Str::uuid())))->toBe(Invalida::SIN_PERMISO)
-        ->and(ValidacionEntrega::query()->count())->toBe(0);
+        ->and(ValidacionEntrega::query()->where('shipment_id', $e['envio']->id)->count())->toBe(0);
 });
 
 test('VD-4 anular la validacion: motivo obligatorio, queda «por validar», se puede validar de nuevo y mientras estuvo validada no se anula la entrega', function () {
@@ -194,7 +196,7 @@ test('VD-5 cobro contra entrega por Cartera: la factura pasa a pagada, el pedido
 
     expect($otra['duplicado'])->toBeTrue()->and($otra['pago_id'])->toBe($r['pago_id'])
         ->and(DB::table('order_transactions')->where('order_id', $e['pedido']->id)->count())->toBe(1)
-        ->and(DB::table('bylopez_va_pagos')->count())->toBe(1);
+        ->and(DB::table('bylopez_va_pagos')->where('customer_id', $e['pedido']->customer_id)->count())->toBe(1);
 });
 
 test('VD-6 el cobro exige una entrega y respeta los permisos de Cartera: sin registrar en Cartera queda rechazado y sin pago', function () {
@@ -206,7 +208,7 @@ test('VD-6 el cobro exige una entrega y respeta los permisos de Cartera: sin reg
     vd_entregar($e);
 
     expect(vd_error(fn () => app(CobrarEntregaService::class)->cobrar($sinCartera, (int) $e['envio']->id, '100', 'efectivo', null, null, 'vd-cobro-'.Str::uuid())))->toBe(Invalida::COBRO_RECHAZADO)
-        ->and(DB::table('bylopez_va_pagos')->count())->toBe(0)
+        ->and(DB::table('bylopez_va_pagos')->where('customer_id', $e['pedido']->customer_id)->count())->toBe(0)
         ->and(DB::table('order_transactions')->where('order_id', $e['pedido']->id)->count())->toBe(0);
 });
 

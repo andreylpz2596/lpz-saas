@@ -61,7 +61,8 @@ class SugerenciaDomiciliario
             ->whereNotNull('zona_id')->whereIn('transportadora_codigo', $validas)
             ->groupBy('zona_id')->selectRaw('MAX(id)');
 
-        return DB::table('bylopez_lg_guias')->whereIn('id', $ultimas)
+        // Orden determinista por zona: sin ORDER BY el motor decide el orden segun el plan (cambia con el volumen de datos).
+        return DB::table('bylopez_lg_guias')->whereIn('id', $ultimas)->orderBy('zona_id')
             ->pluck('transportadora_codigo', 'zona_id')
             ->mapWithKeys(fn ($codigo, $zona) => [(int) $zona => (string) $codigo])
             ->all();

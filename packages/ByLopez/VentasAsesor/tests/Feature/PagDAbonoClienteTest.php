@@ -22,6 +22,7 @@ uses(TestCase::class);
 const PAGD_PERMISOS = ['ventas_asesor', 'ventas_asesor.cartera', 'ventas_asesor.cartera.abono_general', 'ventas_asesor.cartera.view_all'];
 
 beforeEach(function () {
+    pag_linea_base();
     pagb_corte('2000-01-01');
 });
 
@@ -101,9 +102,9 @@ test('distribucion manual valida; suma distinta, linea sobre el saldo, pedido aj
     $rechaza('100000', [pagd_linea($a->id, '50000'), pagd_linea($a->id, '50000')], Rechazo::DISTRIBUCION_INVALIDA, 'clave-abono-idempotencia-06');      // pedido repetido
     $rechaza('150001', [pagd_linea($a->id, '50000'), pagd_linea($b->id, '100001')], Rechazo::MONTO_EXCEDE_SALDO, 'clave-abono-idempotencia-07');        // supera la deuda: sin saldo a favor
 
-    expect(Pago::query()->count())->toBe(0)
-        ->and(DB::table('bylopez_va_aplicaciones_pago')->count())->toBe(0)
-        ->and(DB::table('bylopez_va_pagos_eventos')->count())->toBe(0);
+    expect(pag_nuevos('bylopez_va_pagos'))->toBe(0)
+        ->and(pag_nuevos('bylopez_va_aplicaciones_pago'))->toBe(0)
+        ->and(pag_nuevos('bylopez_va_pagos_eventos'))->toBe(0);
 
     // Distribucion manual valida (no FIFO): A 20k + B 100k = 120k.
     $r = pagd_abonar($actor, $cliente->id, pagd_datos('120000'), [pagd_linea($b->id, '100000'), pagd_linea($a->id, '20000')], 'clave-abono-idempotencia-08');
@@ -125,14 +126,14 @@ test('idempotencia: misma clave y misma distribucion no duplica; otra distribuci
 
     expect($segundo->duplicado)->toBeTrue()
         ->and($segundo->pagoId)->toBe($primero->pagoId)
-        ->and(Pago::query()->count())->toBe(1)
-        ->and(DB::table('bylopez_va_aplicaciones_pago')->count())->toBe(2)
-        ->and(DB::table('bylopez_va_pagos_eventos')->count())->toBe(1);
+        ->and(pag_nuevos('bylopez_va_pagos'))->toBe(1)
+        ->and(pag_nuevos('bylopez_va_aplicaciones_pago'))->toBe(2)
+        ->and(pag_nuevos('bylopez_va_pagos_eventos'))->toBe(1);
 
     expect(fn () => pagd_abonar($actor, $cliente->id, pagd_datos('120000'), [pagd_linea($a->id, '20000'), pagd_linea($b->id, '100000')]))
         ->toThrow(fn (Rechazo $e) => $e->codigo === Rechazo::IDEMPOTENCIA_EN_CONFLICTO && $e->estadoHttp() === 409);
 
-    expect(Pago::query()->count())->toBe(1);
+    expect(pag_nuevos('bylopez_va_pagos'))->toBe(1);
 });
 
 test('ACL y alcance: exige abono_general; view_own solo opera sus pedidos; la pantalla de cartera respeta view_own / view_all', function () {
@@ -155,7 +156,7 @@ test('ACL y alcance: exige abono_general; view_own solo opera sus pedidos; la pa
         ->postJson($url, $cuerpo([pagd_linea($mio->id, '10000'), pagd_linea($ajeno->id, '20000')], '30000'))
         ->assertNotFound()->assertJsonPath('codigo', 'pedido_inexistente');
 
-    expect(Pago::query()->count())->toBe(0);
+    expect(pag_nuevos('bylopez_va_pagos'))->toBe(0);
 
     $this->actingAs($asesor, 'admin')
         ->postJson($url, $cuerpo([pagd_linea($mio->id, '10000')], '10000'))

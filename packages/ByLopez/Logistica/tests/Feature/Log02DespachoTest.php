@@ -146,7 +146,8 @@ test('DSP-4 validaciones: guia, catalogo, flete estructurado, recaudo, stock, re
         ->and(log2_error(fn () => $s->despachar($bodega, log2_s($recogida))))->toBe(Invalida::ES_RECOGIDA)
         ->and(log2_error(fn () => $s->despachar($bodega, log2_s(['pedido' => (object) ['id' => 999999999]]))))->toBe(Invalida::PEDIDO_INEXISTENTE)
         ->and(DB::table('shipments')->whereIn('order_id', [$e['pedido']->id, $sinStock['pedido']->id, $recogida['pedido']->id])->count())->toBe(0)
-        ->and(Guia::query()->count())->toBe(0);
+        // Solo las guias de ESTOS pedidos: un conteo global depende de los datos que ya tenga la base de pruebas.
+        ->and(Guia::query()->whereIn('order_id', [$e['pedido']->id, $sinStock['pedido']->id, $recogida['pedido']->id])->count())->toBe(0);
 
     // Flete pagado por ByLopez con valor: queda estructurado (Finanzas podra medirlo).
     $otroPedido = log2_pedido(1);
@@ -355,10 +356,12 @@ test('DSP-9 bandeja: cola de trabajo con acciones contextuales segun el estado y
         ->and($html)->not->toContain('Margen')->and($html)->not->toContain('Comisión')->and($html)->not->toContain('Utilidad');
 
     // Por defecto solo lo pendiente (la cola); el despachado aparece al pedir el historial.
-    $cola = $this->actingAs($bodega, 'admin')->get(route('admin.logistica.despachos.index'))->assertOk()->getContent();
+    // La cola pagina lo MAS ANTIGUO primero: con los datos de la base de pruebas, los pedidos nuevos de la prueba no caen en la
+    // primera pagina. Se busca cada pedido por su numero en la cola por defecto (mismo filtro de estado que antes).
+    $cola = fn (array $e) => $this->actingAs($bodega, 'admin')->get(route('admin.logistica.despachos.index', ['q' => $e['pedido']->increment_id]))->assertOk()->getContent();
 
-    expect($cola)->toContain('data-pedido="'.$pendiente['pedido']->id.'"')
-        ->and($cola)->not->toContain('data-pedido="'.$despachado['pedido']->id.'"');
+    expect($cola($pendiente))->toContain('data-pedido="'.$pendiente['pedido']->id.'"')
+        ->and($cola($despachado))->not->toContain('data-pedido="'.$despachado['pedido']->id.'"');
 });
 
 test('DSP-10 listado de Pedidos: el Administrador despacha desde la fila con el MISMO componente; el asesor solo ve la guia de lo suyo', function () {

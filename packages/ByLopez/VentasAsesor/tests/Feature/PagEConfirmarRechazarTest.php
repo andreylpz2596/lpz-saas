@@ -237,8 +237,13 @@ test('ACL y alcance: exige cartera.revisar y cartera; view_own no revisa un pago
     $bandeja = $this->actingAs($revisor, 'admin')->get(route('admin.ventas_asesor.cartera.index', ['resumen' => 'sin_revisar']))->assertOk()
         ->assertSee('data-resumen-activo="sin_revisar"', false)->assertSee('v-revision-pago', false);
 
-    expect($bandeja->viewData('pagos')->total())->toBe($bandeja->viewData('indicadores')['sin_revisar'])->toBe(1)
-        ->and($bandeja->viewData('indicadores')['monto_sin_revisar'])->toBe(40000.0);
+    // La base de pruebas ya trae pagos sin revisar (pedidos clonados): el KPI se compara con un conteo independiente de la
+    // base y este pago debe estar en la lista filtrada (antes se exigia exactamente 1, que solo valia con la base vacia).
+    $sinRevisar = DB::table('bylopez_va_pagos')->where('estado', 'sin_revisar');
+    expect($bandeja->viewData('pagos')->total())->toBe($bandeja->viewData('indicadores')['sin_revisar'])
+        ->and($bandeja->viewData('indicadores')['sin_revisar'])->toBe((clone $sinRevisar)->count())
+        ->and($bandeja->viewData('indicadores')['monto_sin_revisar'])->toBe(round((float) (clone $sinRevisar)->sum('monto'), 2))
+        ->and(DB::table('bylopez_va_pagos')->where('id', $pagoId)->value('estado'))->toBe('sin_revisar');
 
     $this->actingAs($revisor, 'admin')->get(route('admin.ventas_asesor.cartera.index', ['pago' => $pagoId]))->assertOk()->assertSee('data-aplicacion', false);
     $this->actingAs($propio, 'admin')->get(route('admin.ventas_asesor.cartera.index'))->assertOk();   // view_own ve la bandeja con lo suyo

@@ -21,6 +21,7 @@ uses(TestCase::class);
 const PAGC_PERMISOS = ['ventas_asesor', 'ventas_asesor.cartera', 'ventas_asesor.cartera.registrar', 'ventas_asesor.cartera.view_all'];
 
 beforeEach(function () {
+    pag_linea_base();
     pagb_corte('2000-01-01');
 });
 
@@ -81,14 +82,14 @@ test('la misma clave con la misma solicitud no duplica; con otra solicitud falla
     expect($segundo->duplicado)->toBeTrue()
         ->and($segundo->pagoId)->toBe($primero->pagoId)
         ->and($segundo->saldo->saldo)->toBe(200000.0)
-        ->and(Pago::query()->count())->toBe(1)
-        ->and(DB::table('bylopez_va_aplicaciones_pago')->count())->toBe(1)
-        ->and(DB::table('bylopez_va_pagos_eventos')->count())->toBe(1);
+        ->and(pag_nuevos('bylopez_va_pagos'))->toBe(1)
+        ->and(pag_nuevos('bylopez_va_aplicaciones_pago'))->toBe(1)
+        ->and(pag_nuevos('bylopez_va_pagos_eventos'))->toBe(1);
 
     expect(fn () => pagc_registrar($actor, $pedido->id, pagc_datos(['monto' => '100000'])))
         ->toThrow(fn (RegistroPagoInvalidoException $e) => $e->codigo === RegistroPagoInvalidoException::IDEMPOTENCIA_EN_CONFLICTO && $e->estadoHttp() === 409);
 
-    expect(Pago::query()->count())->toBe(1);
+    expect(pag_nuevos('bylopez_va_pagos'))->toBe(1);
 });
 
 test('no se aplica mas que el saldo ni sin referencia requerida ni con Cartera inactiva, y no queda nada escrito', function () {
@@ -109,9 +110,9 @@ test('no se aplica mas que el saldo ni sin referencia requerida ni con Cartera i
     $rechaza(['monto' => '1000'], RegistroPagoInvalidoException::CARTERA_INACTIVA, 'clave-idempotencia-0006');
 
     // Solo el primer pago existe: los rechazos hicieron rollback completo (ni Pago huerfano ni evento).
-    expect(Pago::query()->count())->toBe(1)
-        ->and(DB::table('bylopez_va_aplicaciones_pago')->count())->toBe(1)
-        ->and(DB::table('bylopez_va_pagos_eventos')->count())->toBe(1);
+    expect(pag_nuevos('bylopez_va_pagos'))->toBe(1)
+        ->and(pag_nuevos('bylopez_va_aplicaciones_pago'))->toBe(1)
+        ->and(pag_nuevos('bylopez_va_pagos_eventos'))->toBe(1);
 });
 
 test('la ruta exige cartera.registrar y el alcance de cartera; con ambos registra y el detalle muestra el bloque', function () {
@@ -132,7 +133,7 @@ test('la ruta exige cartera.registrar y el alcance de cartera; con ambos registr
     $this->actingAs(pagb_asesor(['ventas_asesor', 'ventas_asesor.cartera', 'ventas_asesor.cartera.registrar', 'ventas_asesor.cartera.view_own']), 'admin')
         ->postJson($url, $cuerpo)->assertNotFound();
 
-    expect(Pago::query()->count())->toBe(0);
+    expect(pag_nuevos('bylopez_va_pagos'))->toBe(0);
 
     $admin = pagb_asesor(PAGC_PERMISOS);
 
@@ -144,7 +145,7 @@ test('la ruta exige cartera.registrar y el alcance de cartera; con ambos registr
     // Reintento HTTP con la misma clave: 200 y el mismo pago, sin duplicar.
     $this->actingAs($admin, 'admin')->postJson($url, $cuerpo)->assertOk()->assertJsonPath('duplicado', true);
 
-    expect(Pago::query()->count())->toBe(1);
+    expect(pag_nuevos('bylopez_va_pagos'))->toBe(1);
 
     // El detalle (con pedidos.view_all) muestra el bloque Pago / Cartera con las cifras del dominio.
     $lector = pagb_asesor(['ventas_asesor', 'ventas_asesor.pedidos', 'ventas_asesor.pedidos.view_all', ...PAGC_PERMISOS]);

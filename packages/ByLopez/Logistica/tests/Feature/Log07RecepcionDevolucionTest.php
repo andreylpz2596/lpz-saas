@@ -115,14 +115,16 @@ function rd_error(callable $accion): ?string
 }
 
 test('RD-1 una devolucion REGISTRADA no suma inventario y queda pendiente de recibir', function () {
+    // El indicador es global: se mide la diferencia que produce ESTA devolucion, no el total de la base de pruebas.
+    $porRecibirAntes = app(ConsultaEntregaService::class)->indicadores()['devoluciones_por_recibir'];
     $e = rd_envio(10, 10);
     $antes = rd_stock($e['producto']);
 
     expect(rd_stock($e['producto']))->toBe($antes)
         ->and($antes)->toBe(40) // el despacho descontó 10 de 50
-        ->and(RecepcionDevolucion::query()->count())->toBe(0)
+        ->and(RecepcionDevolucion::query()->where('shipment_id', $e['envio']->id)->count())->toBe(0)
         ->and(app(ConsultaEntregaService::class)->envio((int) $e['envio']->id)['estado_devolucion'])->toBe('pendiente_recibir')
-        ->and(app(ConsultaEntregaService::class)->indicadores()['devoluciones_por_recibir'])->toBe(1);
+        ->and(app(ConsultaEntregaService::class)->indicadores()['devoluciones_por_recibir'])->toBe($porRecibirAntes + 1);
 });
 
 test('RD-2 recepcion 10/10/10: el inventario sube +10 en la bodega del despacho y deja el movimiento reingreso_devolucion', function () {
@@ -196,7 +198,7 @@ test('RD-5 validaciones de backend: cantidades incoherentes, exceso, motivo falt
         ->and(rd_error(fn () => $s->recibir($b, rd_recepcion($e, ['recibidas' => 10, 'aptas' => 10, 'novedad' => 0], ['lineas' => [99999 => ['recibidas' => 1, 'aptas' => 1, 'novedad' => 0]]]))))->toBe(Invalida::RECEPCION_LINEAS_INCOMPLETAS)
         ->and(rd_error(fn () => $s->recibir($b, rd_recepcion($e, ['recibidas' => 10, 'aptas' => 10, 'novedad' => 0], ['fecha' => now()->addDay()->toDateString()]))))->toBe(Invalida::FECHA_INVALIDA)
         ->and(rd_stock($e['producto']))->toBe($antes)
-        ->and(RecepcionDevolucion::query()->count())->toBe(0);
+        ->and(RecepcionDevolucion::query()->where('shipment_id', $e['envio']->id)->count())->toBe(0);
 });
 
 test('RD-6 idempotencia: doble clic / reintento no duplica; otra solicitud con la misma clave o una segunda recepcion se rechazan', function () {
@@ -240,8 +242,8 @@ test('RD-7 todo o nada: si el reingreso de una linea falla, la recepcion complet
     });
 
     expect(rd_error(fn () => app(RecibirDevolucionService::class)->recibir(rd_bodega(), rd_recepcion($e, ['recibidas' => 10, 'aptas' => 10, 'novedad' => 0]))))->toBe(Invalida::REINGRESO_FALLIDO)
-        ->and(RecepcionDevolucion::query()->count())->toBe(0)
-        ->and(DB::table('bylopez_lg_recepcion_devolucion_items')->count())->toBe(0)
+        ->and(RecepcionDevolucion::query()->where('shipment_id', $e['envio']->id)->count())->toBe(0)
+        ->and(DB::table('bylopez_lg_recepcion_devolucion_items')->where('shipment_item_id', $e['si'])->count())->toBe(0)
         ->and(rd_stock($e['producto']))->toBe($antes);
 
     // Y la devolucion sigue pendiente: se puede recibir bien despues.
@@ -312,7 +314,7 @@ test('RD-10 permisos: BODEGA con la clave recibe; sin la clave, el asesor o un u
     expect(rd_error(fn () => $s->recibir(rd_bodega(['logistica', 'logistica.entregas', 'logistica.entregas.registrar']), rd_recepcion($e, $linea))))->toBe(Invalida::SIN_PERMISO)
         ->and(rd_error(fn () => $s->recibir(f03b_admin('custom', ['ventas_asesor', 'ventas_asesor.operar_como_asesor']), rd_recepcion($e, $linea))))->toBe(Invalida::SIN_PERMISO)
         ->and(rd_error(fn () => $s->recibir(null, rd_recepcion($e, $linea))))->toBe(Invalida::SIN_PERMISO)
-        ->and(RecepcionDevolucion::query()->count())->toBe(0)
+        ->and(RecepcionDevolucion::query()->where('shipment_id', $e['envio']->id)->count())->toBe(0)
         ->and($s->recibir(rd_bodega(), rd_recepcion($e, $linea))->yaExistia)->toBeFalse();
 });
 

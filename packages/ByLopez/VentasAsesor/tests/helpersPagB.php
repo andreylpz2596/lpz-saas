@@ -134,3 +134,23 @@ if (! function_exists('pagb_estados')) {
         return EstadoPago::cases();
     }
 }
+
+if (! function_exists('pag_linea_base')) {
+    /**
+     * Conteos de lo que la PRUEBA crea: la base de pruebas ya trae miles de pagos (pedidos clonados), asi que un conteo global
+     * no dice nada. Se toma la linea base al empezar (dentro de la transaccion de la prueba) y se compara la diferencia.
+     */
+    function pag_linea_base(): void
+    {
+        foreach (['bylopez_va_pagos', 'bylopez_va_aplicaciones_pago', 'bylopez_va_pagos_eventos', 'order_transactions'] as $tabla) {
+            $GLOBALS['pag_linea_base'][$tabla] = DB::table($tabla)->count();
+        }
+    }
+}
+
+if (! function_exists('pag_nuevos')) {
+    function pag_nuevos(string $tabla): int
+    {
+        return DB::table($tabla)->count() - ($GLOBALS['pag_linea_base'][$tabla] ?? 0);
+    }
+}

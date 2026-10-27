@@ -17,6 +17,7 @@ uses(TestCase::class);
 const PAGG_PERMISOS = ['ventas_asesor', 'ventas_asesor.cartera', 'ventas_asesor.cartera.registrar', 'ventas_asesor.cartera.view_all'];
 
 beforeEach(function () {
+    pag_linea_base();
     pagb_corte('2000-01-01');
 });
 
@@ -47,7 +48,7 @@ test('la transferencia exige una plataforma valida y la guarda; los demas medios
     expect(pagg_codigo(fn () => $servicio->registrar($actor, $pedido->id, pagg_datos(['plataforma' => '']), 'clave-plataforma-0001')))->toBe(Rechazo::PLATAFORMA_REQUERIDA)
         ->and(pagg_codigo(fn () => $servicio->registrar($actor, $pedido->id, pagg_datos(['plataforma' => 'paypal']), 'clave-plataforma-0002')))->toBe(Rechazo::PLATAFORMA_INVALIDA)
         ->and(pagg_codigo(fn () => $servicio->registrar($actor, $pedido->id, pagg_datos(['medio_cobro' => 'efectivo', 'referencia' => null]), 'clave-plataforma-0003')))->toBe(Rechazo::PLATAFORMA_INVALIDA)
-        ->and(Pago::query()->count())->toBe(0);
+        ->and(pag_nuevos('bylopez_va_pagos'))->toBe(0);
 
     $ok = $servicio->registrar($actor, $pedido->id, pagg_datos(['plataforma' => 'bancolombia']), 'clave-plataforma-0004');
 
@@ -103,5 +104,5 @@ test('pago combinado: todo o nada si la suma supera el saldo o una linea es inva
         ->and(pagg_codigo(fn () => $servicio->registrarCombinado($actor, $pedido->id, [
             ['monto' => '150000', 'plataforma' => 'nequi', 'referencia' => 'A-3'],
         ], $comunes, 'clave-combinado-000004')))->toBe(Rechazo::PAGO_COMBINADO_INVALIDO)
-        ->and(Pago::query()->count())->toBe(0);
+        ->and(pag_nuevos('bylopez_va_pagos'))->toBe(0);
 });
