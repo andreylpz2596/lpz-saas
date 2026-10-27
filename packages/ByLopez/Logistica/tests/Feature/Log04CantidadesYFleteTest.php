@@ -198,7 +198,7 @@ test('QTY-5 el backend vuelve a validar al crear el Shipment: formulario viejo, 
         ->and(DB::table('shipments')->where('order_id', $e['pedido']->id)->count())->toBe(2);
 });
 
-test('QTY-6 configurable real (hija con qty_ordered = 0): el maximo mide el stock de la variante que el Shipment descuenta', function () {
+test('QTY-6 configurable real: el maximo mide el stock de la variante que el Shipment descuenta (y desde F5 consume su reserva)', function () {
     Mail::fake();
     f03f_configurarBase();
 
@@ -216,8 +216,12 @@ test('QTY-6 configurable real (hija con qty_ordered = 0): el maximo mide el stoc
     $e = ['pedido' => $pedido];
     $linea = fn () => app(ContextoDespachoService::class)->paraPedido((int) $pedido->id, $bodega)['unidades']['lineas'][0];
 
-    // Caso real del proyecto: la hija no tiene cantidad propia.
-    expect((int) $hija->qty_ordered)->toBe(0)
+    // F5 (2026-10-26): la hija lleva la cantidad pedida (razon hijo/padre 1) y el pedido RESERVA las 3 unidades de la variante.
+    // Antes la hija nacia con 0 y no reservaba; el maximo despachable no cambia (razon 1 en los dos casos).
+    $reservado = fn () => (int) DB::table('product_ordered_inventories')->where('product_id', $variante->id)->sum('qty');
+
+    expect((int) $hija->qty_ordered)->toBe(3)
+        ->and($reservado())->toBe(3)
         ->and($linea())->toMatchArray(['pendientes' => 3, 'disponibles' => 20, 'maximo' => 3]);
 
     // Queda solo 1 unidad de ESA variante: maximo 1 aunque el pedido tenga 3 pendientes.
@@ -234,6 +238,8 @@ test('QTY-6 configurable real (hija con qty_ordered = 0): el maximo mide el stoc
     expect((int) DB::table('order_items')->where('id', $l['id'])->value('qty_shipped'))->toBe(1)
         ->and((int) DB::table('order_items')->where('id', $hija->id)->value('qty_shipped'))->toBe(1)
         ->and((int) DB::table('product_inventories')->where('product_id', $variante->id)->sum('qty'))->toBe(0)
+        // El despacho (DespachoService → Shipment nativo) consume de la reserva SOLO lo despachado: quedan 2 comprometidas.
+        ->and($reservado())->toBe(2)
         ->and($linea())->toMatchArray(['pendientes' => 2, 'disponibles' => 0, 'maximo' => 0]);
 });
 

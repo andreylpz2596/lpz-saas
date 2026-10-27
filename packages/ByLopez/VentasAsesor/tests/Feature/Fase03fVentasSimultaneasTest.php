@@ -102,7 +102,7 @@ function f03fvs_1211($test, $ahora): void
     expect($s->stockBagisto)->toBe(38)
         ->and($s->enOtrasVentasSinConfirmar)->toBe(10)
         ->and($s->enEstaVenta)->toBe(0)
-        ->and((int) $hijo->quantity)->toBe(0) // Bagisto guarda 0 en el hijo; la senal usa el padre
+        ->and((int) $hijo->quantity)->toBe(1) // F5: la hija lleva la razon hijo/padre (1); la senal usa el padre
         ->and((int) $hijo->product_id)->toBe($test->m->id)
         ->and($s->advertencia)->toBeFalse();
 
@@ -236,11 +236,13 @@ test('13-14-15 configurable confirmado: pendiente 30 con stock Bagisto intacto; 
     f03fvs_despachar($pedido, 18);
     $completo = $this->senal->paraVariante($this->m->id, $this->yo);
 
-    expect($antes->stockBagisto)->toBe(38)                         // limitacion nativa: no baja por el pedido
+    // F5: el pedido confirmado RESERVA: el stock vendible de Bagisto baja de 38 a 8 (38 − 30) y ya no queda nada «no descontado».
+    // Despachar 12: fisico 26 y reserva 18 → sigue en 8 (sin doble descuento); completo: fisico 8, reserva 0 → 8.
+    expect($antes->stockBagisto)->toBe(8)
         ->and($antes->confirmadosSinDespachar)->toBe(30)
-        ->and($antes->confirmadosSinDespacharNoDescontados)->toBe(30)
+        ->and($antes->confirmadosSinDespacharNoDescontados)->toBe(0)
         ->and($parcial->confirmadosSinDespachar)->toBe(18)
-        ->and($parcial->stockBagisto)->toBe(26)                      // el Shipment si descuenta el fisico
+        ->and($parcial->stockBagisto)->toBe(8)
         ->and($completo->confirmadosSinDespachar)->toBe(0)
         ->and($completo->confirmadosSinDespacharNoDescontados)->toBe(0)
         ->and($completo->stockBagisto)->toBe(8);
@@ -289,7 +291,7 @@ test('MULTIVARIANTE: un pedido con M=30 y L=20 del mismo configurable → cada p
         ->and($padreL->type)->toBe('configurable')->and((int) $padreL->qty_ordered)->toBe(20)
         ->and((int) $hijos[$this->m->id]->parent_id)->toBe($padreM->id)
         ->and((int) $hijos[$this->l->id]->parent_id)->toBe($padreL->id)
-        ->and((int) $hijos[$this->m->id]->qty_ordered)->toBe(0)
+        ->and((int) $hijos[$this->m->id]->qty_ordered)->toBe(30) // F5: la hija lleva la cantidad pedida y reserva
         ->and($inicial)->toBe([$this->m->id => 30, $this->l->id => 20])
         ->and($parcial)->toBe([$this->m->id => 20, $this->l->id => 20])
         ->and($mCompleto)->toBe([$this->m->id => 0, $this->l->id => 20])
@@ -314,9 +316,10 @@ test('PEDIDOS MULTIPLES: dos pedidos de la misma variante (10 y 15) → 25, sin 
 
     $s = $this->senal->paraVariante($this->m->id, $this->yo);
 
+    // F5: los dos pedidos reservan (10 + 15): stock vendible 38 − 25 = 13 y nada «no descontado».
     expect($s->confirmadosSinDespachar)->toBe(25)
-        ->and($s->confirmadosSinDespacharNoDescontados)->toBe(25)
-        ->and($s->stockBagisto)->toBe(38) // informativa: no alimenta el stock
+        ->and($s->confirmadosSinDespacharNoDescontados)->toBe(0)
+        ->and($s->stockBagisto)->toBe(13)
         ->and(OrderItem::query()->whereIn('order_id', [$a->id, $b->id])->count())->toBe(4);
 });
 
@@ -331,19 +334,23 @@ test('16 pedido cancelado no infla la metrica (qty_canceled nativo)', function (
         ->and((int) OrderItem::query()->where('order_id', $pedido->id)->whereNull('parent_id')->value('qty_canceled'))->toBe(7);
 });
 
-test('advertencia: 38 de stock, 10 confirmados sin despachar y 35 en otras ventas → advertencia, sin publicar -7 ni ningun disponible', function () {
+test('advertencia: 38 fisicas, 10 confirmadas (reservadas) y dos ventas sin confirmar de 20 → advertencia, sin publicar -12 ni ningun disponible', function () {
+    // F5: el pedido de 10 reserva, asi que el vendible de Bagisto es 38 − 10 = 28 y ninguna venta sola puede pedir mas de eso
+    // (Bagisto la rechaza al agregar). La advertencia aparece cuando VARIAS ventas sin confirmar juntas superan el vendible:
+    // 20 + 20 = 40 > 28. Nunca se publica la resta (28 − 40 = −12).
     f03b_stock($this->m, 50);
     f03fvs_pedido($this, $this->configurable, $this->m, 10);
     f03b_stock($this->m, 38);
-    f03fvs_borrador($this->otro, $this->cliente, [[$this->configurable, $this->m, 35]]);
+    f03fvs_borrador($this->otro, $this->cliente, [[$this->configurable, $this->m, 20]]);
+    f03fvs_borrador($this->otro, $this->cliente, [[$this->configurable, $this->m, 20]]);
 
     $s = $this->senal->paraVariante($this->m->id, $this->yo);
 
-    expect($s->stockBagisto)->toBe(38)
-        ->and($s->confirmadosSinDespacharNoDescontados)->toBe(10)
-        ->and($s->enOtrasVentasSinConfirmar)->toBe(35)
+    expect($s->stockBagisto)->toBe(28)
+        ->and($s->confirmadosSinDespacharNoDescontados)->toBe(0)
+        ->and($s->enOtrasVentasSinConfirmar)->toBe(40)
         ->and($s->advertencia)->toBeTrue()
-        ->and(json_encode($s->toArray()))->not->toContain('-7');
+        ->and(json_encode($s->toArray()))->not->toContain('-12');
 });
 
 // ------------------------------------------------------------------ actividad, permisos y lectura pura
