@@ -251,6 +251,10 @@ return [
     ],
 
     'cartera' => [
+        'errores' => [
+            'error_inesperado' => 'No pudimos completar la operación por un error inesperado. Revisa el pedido antes de volver a intentarlo. Referencia: :referencia.',
+            'operacion_concurrente' => 'Otra persona estaba registrando un pago sobre el mismo pedido en este momento. Recarga y revisa el saldo antes de intentarlo de nuevo.',
+        ],
         'plataformas' => [
             'nequi' => 'Nequi',
             'bancolombia' => 'Bancolombia',

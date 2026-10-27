@@ -5,6 +5,7 @@ namespace ByLopez\Logistica\Support\Cobro;
 use ByLopez\Logistica\Contracts\GestionaCobroPedido;
 use ByLopez\Logistica\Exceptions\OperacionLogisticaInvalidaException as Invalida;
 use ByLopez\VentasAsesor\Exceptions\RegistroPagoInvalidoException as Rechazo;
+use ByLopez\VentasAsesor\Exceptions\RevisionPagoInvalidaException as RechazoRevision;
 use ByLopez\VentasAsesor\Services\Cartera\CarteraConsultaService;
 use ByLopez\VentasAsesor\Services\Cartera\ConfirmarPagoService;
 use ByLopez\VentasAsesor\Services\Cartera\RegistrarPagoService;
@@ -78,7 +79,9 @@ class CobroViaCartera implements GestionaCobroPedido
             $this->confirmar->confirmar($actor, $r->pagoId);
 
             return ['pago_id' => $r->pagoId, 'confirmado' => true, 'duplicado' => $r->duplicado, 'aviso' => null];
-        } catch (Rechazo $e) {
+        } catch (Rechazo|RechazoRevision $e) {
+            // F4: confirmar lanza RevisionPagoInvalidaException (p. ej. pedido que requiere revision). Antes no se atrapaba y el
+            // cobro terminaba en HTTP 500 aunque el pago ya estaba registrado: ahora queda sin revisar en Cartera y se avisa.
             return ['pago_id' => $r->pagoId, 'confirmado' => false, 'duplicado' => $r->duplicado, 'aviso' => $e->getMessage()];
         }
     }

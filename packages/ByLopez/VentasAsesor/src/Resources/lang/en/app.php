@@ -251,6 +251,10 @@ return [
     ],
 
     'cartera' => [
+        'errores' => [
+            'error_inesperado' => 'We could not complete the operation because of an unexpected error. Check the order before trying again. Reference: :referencia.',
+            'operacion_concurrente' => 'Someone else was recording a payment on the same order at this moment. Reload and check the balance before trying again.',
+        ],
         'plataformas' => [
             'nequi' => 'Nequi',
             'bancolombia' => 'Bancolombia',

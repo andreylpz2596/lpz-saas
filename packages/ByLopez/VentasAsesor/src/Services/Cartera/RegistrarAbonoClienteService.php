@@ -136,7 +136,7 @@ class RegistrarAbonoClienteService extends RegistrarPagoService
         }
 
         // 3) Validar con el saldo REAL, recalculado ahora y bajo bloqueo.
-        $antes = $this->consulta->saldosDePedidos($ids);
+        $antes = $this->consulta->saldosDePedidos($ids, lecturaActual: true);
 
         foreach ($lineas as $orderId => $monto) {
             $saldo = $antes[$orderId] ?? null;
@@ -164,7 +164,7 @@ class RegistrarAbonoClienteService extends RegistrarPagoService
             ]);
         }
 
-        $despues = $this->consulta->saldosDePedidos($ids);
+        $despues = $this->consulta->saldosDePedidos($ids, lecturaActual: true);
 
         PagoEvento::query()->create([
             'pago_id' => $pago->id,

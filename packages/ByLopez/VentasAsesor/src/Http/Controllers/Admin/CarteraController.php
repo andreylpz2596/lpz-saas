@@ -11,6 +11,7 @@ use ByLopez\VentasAsesor\Services\Cartera\ConfirmarPagoService;
 use ByLopez\VentasAsesor\Services\Cartera\RechazarPagoService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Cartera\FechaCorteCartera;
+use ByLopez\VentasAsesor\Support\Cartera\RespuestaErrorNoControlado;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Controller;
@@ -105,6 +106,12 @@ class CarteraController extends Controller
                 'mensaje' => $e->getMessage(),
                 'detalles' => $e->detalles === [] ? null : $e->detalles,
             ], fn ($v) => $v !== null), $e->estadoHttp());
+        } catch (\Throwable $e) {
+            if (RespuestaErrorNoControlado::esDelFramework($e)) {
+                throw $e;
+            }
+
+            return RespuestaErrorNoControlado::json($e);
         }
 
         return response()->json($resultado->toArray());

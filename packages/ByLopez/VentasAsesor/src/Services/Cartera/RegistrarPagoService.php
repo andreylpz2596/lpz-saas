@@ -192,7 +192,7 @@ class RegistrarPagoService
         }
 
         // 3) Validar con el saldo REAL, recalculado ahora y bajo el bloqueo.
-        $antes = $this->consulta->saldosDePedidos([$orderId])[$orderId] ?? null;
+        $antes = $this->consulta->saldosDePedidos([$orderId], lecturaActual: true)[$orderId] ?? null;
 
         $this->validarPedido($antes, $customerId);
 
@@ -214,7 +214,7 @@ class RegistrarPagoService
             'posicion' => 1,
         ]);
 
-        $despues = $this->consulta->saldosDePedidos([$orderId])[$orderId];
+        $despues = $this->consulta->saldosDePedidos([$orderId], lecturaActual: true)[$orderId];
 
         PagoEvento::query()->create([
             'pago_id' => $pago->id,

@@ -8,9 +8,11 @@ use ByLopez\VentasAsesor\Http\Requests\Cartera\RegistrarPagoRequest;
 use ByLopez\VentasAsesor\Models\PagoEvento;
 use ByLopez\VentasAsesor\Services\Cartera\RegistrarPagoService;
 use ByLopez\VentasAsesor\Support\Cartera\AlcanceDePagos;
+use ByLopez\VentasAsesor\Support\Cartera\RespuestaErrorNoControlado;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 /**
  * Pagos / Cartera (PAG-C). Controlador delgado: toda la logica (autorizacion, bloqueo, saldo, idempotencia)
@@ -65,6 +67,12 @@ class PagosController extends Controller
                 'mensaje' => $e->getMessage(),
                 'detalles' => $e->detalles === [] ? null : $e->detalles,
             ], fn ($v) => $v !== null), $e->estadoHttp());
+        } catch (Throwable $e) {
+            if (RespuestaErrorNoControlado::esDelFramework($e)) {
+                throw $e;
+            }
+
+            return RespuestaErrorNoControlado::json($e);
         }
 
         return response()->json($resultado->toArray(), $resultado->duplicado ? 200 : 201);

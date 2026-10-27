@@ -2,6 +2,7 @@
 
 namespace ByLopez\VentasAsesor\Services\Cartera;
 
+use ByLopez\Logistica\Services\Cuentas\RecaudoDesdeCobro;
 use ByLopez\VentasAsesor\DataObjects\ResultadoRevisionPago;
 use ByLopez\VentasAsesor\Enums\EstadoPago;
 use ByLopez\VentasAsesor\Enums\MecanismoCreacion;
@@ -111,11 +112,11 @@ class ConfirmarPagoService extends RevisionPagoService
         }
 
         $facturas = DB::table('invoices')->whereIn('order_id', $ids)->orderBy('id')->lockForUpdate()->get(['id', 'order_id', 'state', 'base_grand_total']);
-        $pagado = DB::table('order_transactions')->whereIn('invoice_id', $facturas->pluck('id'))
+        $pagado = DB::table('order_transactions')->whereIn('invoice_id', $facturas->pluck('id'))->sharedLock()
             ->groupBy('invoice_id')->selectRaw('invoice_id, SUM(amount) as total')->pluck('total', 'invoice_id');
 
         // 4) Revalidar con el estado REAL de Cartera: en Cartera y sin revision pendiente (Refund, sobreaplicacion...).
-        $saldos = $this->consulta->saldosDePedidos($ids);
+        $saldos = $this->consulta->saldosDePedidos($ids, lecturaActual: true);
 
         foreach ($ids as $orderId) {
             $saldo = $saldos[$orderId] ?? null;
@@ -196,7 +197,7 @@ class ConfirmarPagoService extends RevisionPagoService
         // C6: un cobro hecho por el transportador (pago con guia) deja ese dinero EN CUSTODIA: nace el recaudo de la cuenta corriente
         // por lo COBRADO. No toca Cartera; si falla, se deshace todo el pago.
         if ($pago->guia_id !== null) {
-            app(\ByLopez\Logistica\Services\Cuentas\RecaudoDesdeCobro::class)->reconocer((int) $pago->id, $actor);
+            app(RecaudoDesdeCobro::class)->reconocer((int) $pago->id, $actor);
         }
 
         return new ResultadoRevisionPago((int) $pago->id, EstadoPago::CONFIRMADO->value, false, $creadas);

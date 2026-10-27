@@ -4,8 +4,17 @@ namespace ByLopez\Logistica\Http\Controllers\Concerns;
 
 use ByLopez\Logistica\Exceptions\OperacionLogisticaInvalidaException as Invalida;
 use Closure;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Throwable;
 
 /**
  * Contrato JSON unico del panel de Despachos: `{ok: true, ...}` o `{ok: false, codigo, mensaje, detalles}` con el
@@ -24,7 +33,40 @@ trait ResponderOperacionesLogisticas
                 'mensaje' => trans('logistica::app.errores.'.$e->codigo, $this->parametros($e)),
                 'detalles' => $e->detalles,
             ], $this->estado($e->codigo));
+        } catch (HttpExceptionInterface|ValidationException|AuthorizationException|AuthenticationException|ModelNotFoundException $e) {
+            throw $e; // Laravel ya los responde (403/404/422) sin trazas.
+        } catch (Throwable $e) {
+            return $this->errorNoControlado($e);
         }
+    }
+
+    /**
+     * F4: un error que no es de negocio no se muestra con trazas ni rutas. Bloqueo/espera agotados tras los reintentos de la
+     * transaccion → 409 «vuelve a intentarlo»; cualquier otro → 500 con una referencia que queda en el log con el detalle
+     * para diagnosticar (excepcion, mensaje, ruta, actor y traza).
+     */
+    protected function errorNoControlado(Throwable $e): JsonResponse
+    {
+        $referencia = (string) Str::uuid();
+        $concurrencia = $e instanceof QueryException && in_array((int) ($e->errorInfo[1] ?? 0), [1205, 1213], true);
+
+        Log::error('bylopez.operacion_no_controlada', [
+            'referencia' => $referencia,
+            'excepcion' => $e::class,
+            'mensaje' => $e->getMessage(),
+            'ruta' => request()->method().' '.request()->path(),
+            'actor_admin_id' => auth()->guard('admin')->id(),
+            'traza' => $e->getTraceAsString(),
+        ]);
+
+        $codigo = $concurrencia ? 'operacion_concurrente' : 'error_inesperado';
+
+        return response()->json([
+            'ok' => false,
+            'codigo' => $codigo,
+            'mensaje' => trans('logistica::app.errores.'.$codigo, ['referencia' => $referencia]),
+            'referencia' => $referencia,
+        ], $concurrencia ? 409 : 500);
     }
 
     /**

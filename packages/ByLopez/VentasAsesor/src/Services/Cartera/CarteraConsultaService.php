@@ -60,10 +60,18 @@ class CarteraConsultaService
      * Saldo y composicion de varios pedidos. NO valida alcance: usar solo con ids ya acotados por el llamador.
      * Los ids que no existen se omiten; el orden de entrada se conserva.
      *
+     * LECTURA ACTUAL (F3/F4, auditoria 2026-10-21): quien VALIDA dinero dentro de una transaccion (registrar, confirmar,
+     * abonar) debe pasar `$lecturaActual = true`. En REPEATABLE READ la instantanea de la transaccion nace con su PRIMERA
+     * lectura no bloqueante; si esa lectura ocurrio antes de obtener el bloqueo del pedido (p. ej. el listener de
+     * reevaluacion de comisiones al guardar el Pago), un SELECT normal posterior no ve lo que otra transaccion confirmo
+     * mientras se esperaba el bloqueo y se sobreaplicaba el saldo. Con `true` cada consulta es una lectura BLOQUEANTE
+     * (`LOCK IN SHARE MODE`), que siempre lee lo ultimo confirmado, sin depender de que no haya lecturas anteriores ni
+     * cambiar el aislamiento global. Fuera de una transaccion no aporta nada: las pantallas usan el valor por defecto.
+     *
      * @param  list<int|string>  $orderIds
      * @return array<int, SaldoPedido> indexado por order_id
      */
-    public function saldosDePedidos(array $orderIds): array
+    public function saldosDePedidos(array $orderIds, bool $lecturaActual = false): array
     {
         $ids = array_values(array_unique(array_map('intval', $orderIds)));
 
@@ -71,7 +79,9 @@ class CarteraConsultaService
             return [];
         }
 
-        $pedidos = DB::table('orders')->whereIn('id', $ids)
+        $leer = fn ($consulta) => $lecturaActual ? $consulta->sharedLock() : $consulta;
+
+        $pedidos = $leer(DB::table('orders')->whereIn('id', $ids))
             ->get(['id', 'increment_id', 'customer_id', 'status', 'created_at', 'base_grand_total', 'base_grand_total_refunded'])
             ->keyBy('id');
 
@@ -89,14 +99,14 @@ class CarteraConsultaService
             return $resultado;
         }
 
-        $conReembolso = DB::table('refunds')->whereIn('order_id', $ids)->distinct()->pluck('order_id')->flip();
+        $conReembolso = $leer(DB::table('refunds')->whereIn('order_id', $ids))->distinct()->pluck('order_id')->flip();
 
         // Aplicaciones ACTIVAS agrupadas por pedido y estado del pago.
         $aplicado = [];
 
-        foreach (DB::table('bylopez_va_aplicaciones_pago as a')
+        foreach ($leer(DB::table('bylopez_va_aplicaciones_pago as a')
             ->join('bylopez_va_pagos as p', 'p.id', '=', 'a.pago_id')
-            ->whereIn('a.order_id', $ids)->whereNull('a.anulada_en')
+            ->whereIn('a.order_id', $ids)->whereNull('a.anulada_en'))
             ->groupBy('a.order_id', 'p.estado')
             ->selectRaw('a.order_id, p.estado, SUM(a.monto) AS total')
             ->get() as $fila) {
@@ -104,17 +114,17 @@ class CarteraConsultaService
         }
 
         // Transactions nativas NO vinculadas a ninguna aplicacion: ajenas a ByLopez.
-        $ajenas = DB::table('order_transactions as t')
+        $ajenas = $leer(DB::table('order_transactions as t')
             ->leftJoin('bylopez_va_aplicaciones_pago as a', 'a.order_transaction_id', '=', 't.id')
-            ->whereIn('t.order_id', $ids)->whereNull('a.id')
+            ->whereIn('t.order_id', $ids)->whereNull('a.id'))
             ->groupBy('t.order_id')
             ->selectRaw('t.order_id, SUM(t.amount) AS total')
             ->pluck('total', 'order_id');
 
         // C5: lo devuelto y RECIBIDO en bodega. Se deriva de las recepciones confirmadas (una consulta agrupada por lote).
-        $devuelto = $this->devueltoDePedidos($ids);
+        $devuelto = $this->devueltoDePedidos($ids, $lecturaActual);
 
-        $facturaPagada = DB::table('invoices')->whereIn('order_id', $ids)->where('state', 'paid')->distinct()->pluck('order_id')->flip();
+        $facturaPagada = $leer(DB::table('invoices')->whereIn('order_id', $ids)->where('state', 'paid'))->distinct()->pluck('order_id')->flip();
 
         $resultado = [];
 
@@ -286,13 +296,14 @@ class CarteraConsultaService
      * @param  list<int>  $ids
      * @return array<int, array{valor: float, unidades: int}>
      */
-    private function devueltoDePedidos(array $ids): array
+    private function devueltoDePedidos(array $ids, bool $lecturaActual = false): array
     {
         $salida = [];
-
-        foreach (DB::table('bylopez_lg_recepcion_devolucion_items as i')
+        $consulta = DB::table('bylopez_lg_recepcion_devolucion_items as i')
             ->join('bylopez_lg_recepciones_devolucion as r', 'r.id', '=', 'i.recepcion_id')
-            ->whereIn('r.order_id', $ids)->where('r.estado', 'confirmado')->whereNotNull('i.valor_devuelto')
+            ->whereIn('r.order_id', $ids)->where('r.estado', 'confirmado')->whereNotNull('i.valor_devuelto');
+
+        foreach (($lecturaActual ? $consulta->sharedLock() : $consulta)
             ->groupBy('r.order_id')
             ->selectRaw('r.order_id, SUM(i.valor_devuelto) AS valor, SUM(i.recibidas) AS unidades')
             ->get() as $fila) {
