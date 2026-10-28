@@ -491,6 +491,7 @@ return [
             'opcion-esperar-ayuda' => 'No se despacha todavía. Cuando Cartera confirme el pago, el pedido queda listo para salir.',
             'opcion-cobrar' => 'Cobrar al entregar',
             'opcion-cobrar-ayuda' => 'La guía lleva el saldo como valor a cobrar, repartido por guía sin repetir lo ya comprometido. El método de pago del pedido no cambia.',
+            'opcion-cobrar-ayuda-recogida' => 'Bodega entrega y cobra en el mostrador por Cartera (Entregas › Cobrar). El pedido sale sin transportadora ni guía; la deuda sigue en Cartera hasta que se cobre.',
             'opcion-credito' => 'Entregar a crédito',
             'opcion-credito-ayuda' => 'Sale sin cobro y el saldo sigue en Cartera. Solo con autorización administrativa y motivo.',
             'motivo' => 'Motivo del crédito (quién lo autoriza y por qué)',

@@ -188,4 +188,4 @@ $total = round((float) CartModel::query()->whereKey($b->fresh()->cart_id)->value
 $r = app(ConfirmarVentaService::class)->confirmar($b->id, $umbral, $total);
 $log("Fixture umbral: pedido #{$r->orderId} de 998 unidades (total {$total}), confirmado para la DEMO Asesora Umbral; queda sin despachar.");
 
-$log('Listo. Ver el guion en VentasAsesor/docs/26_JORNADA_F3_F6_DEMO.md');
+$log('Listo. Ver el guion en VentasAsesor/docs/26_JORNADA_F3_F6_CANCELACION_COMISIONES_DEMO.md');

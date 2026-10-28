@@ -2,6 +2,12 @@
 
 Estado consolidado de las fases del módulo `ByLopez\VentasAsesor`.
 
+**2026-10-28 — Jornada F3–F6, cancelación del pendiente, C6, comisiones y demo (commits locales, sin push):** `26_JORNADA_F3_F6_CANCELACION_COMISIONES_DEMO.md`.
+Vigente: F3/F4 y F5 corregidos; F6 (decisión de cobro) también en recogida; cancelación del pendiente sin reintegrar stock físico (la nativa con
+despachos se bloquea en servidor); fix C6 (cobro de transportadora sin cuenta corriente ya no habilita comisión); pruebas del módulo de comisiones
+(`Com04…`) y ACL actualizada. Migraciones F6 y motivos aplicadas en dev; la de cancelaciones **solo** en testing/demo. Pendientes de negocio: D3, D5,
+cambio de umbral a mitad de mes, devolución sin política y remesas sin cuenta corriente. Detalle, guion y limitaciones en el Doc. 26.
+
 **2026-10-24 — Mejoras visuales y de uso tras la auditoría E2E (solo presentación, sin commit):** `25_MEJORAS_VISUALES_TRAS_AUDITORIA_E2E.md`.
 Búsqueda de colores, título y estado coherentes por línea, estados de guardado, errores junto al botón (sin perder cantidades ni duplicar),
 formato único «$ 8.500», máscara en montos de cobro/flete, textos de despacho, cobro y comisiones sin promesas falsas, modal de confirmación

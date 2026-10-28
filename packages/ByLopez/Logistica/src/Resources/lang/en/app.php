@@ -493,6 +493,7 @@ return [
             'opcion-esperar-ayuda' => 'It is not dispatched yet. When Cartera confirms the payment, the order is ready to leave.',
             'opcion-cobrar' => 'Collect on delivery',
             'opcion-cobrar-ayuda' => 'The tracking carries the balance as the amount to collect, split by tracking without repeating what is already committed. The order payment method does not change.',
+            'opcion-cobrar-ayuda-recogida' => 'The warehouse hands it over and collects at the counter through Cartera (Deliveries › Collect). The order leaves without a carrier or tracking; the debt stays in Cartera until collected.',
             'opcion-credito' => 'Deliver on credit',
             'opcion-credito-ayuda' => 'It leaves without collection and the balance stays in Cartera. Only with administrative authorization and a reason.',
             'motivo' => 'Reason for the credit (who authorizes it and why)',

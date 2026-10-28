@@ -478,7 +478,7 @@
                                         </label>
                                         <label class="lgm-opcion">
                                             <input type="radio" value="cobrar_al_entregar" v-model="dispo.tipo" :disabled="! disposicion.permisos.cobrar_al_entregar" data-logistica="disposicion-cobrar">
-                                            <span><b>@{{ textos.disposicion['opcion-cobrar'] }}</b><br><small>@{{ textos.disposicion['opcion-cobrar-ayuda'] }}</small></span>
+                                            <span><b>@{{ textos.disposicion['opcion-cobrar'] }}</b><br><small>@{{ textos.disposicion[vistaModo === 'entregar_bodega' ? 'opcion-cobrar-ayuda-recogida' : 'opcion-cobrar-ayuda'] }}</small></span>
                                         </label>
                                         <label class="lgm-opcion" :class="{ 'lgm-opcion--off': ! disposicion.permisos.credito }">
                                             <input type="radio" value="credito_autorizado" v-model="dispo.tipo" :disabled="! disposicion.permisos.credito" data-logistica="disposicion-credito">
@@ -1498,6 +1498,7 @@
                     this.forzarVer = forzarVer;
                     this.ctx = null;
                     this.dispo = { tipo: 'esperar', motivo: '', enviando: false, error: null };
+                    this.canc = { motivo: '', enviando: false, error: null, confirmar: false };
                     this.errorCarga = null;
                     this.error = null;
                     this.ajustar = false;

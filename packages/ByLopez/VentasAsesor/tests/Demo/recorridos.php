@@ -284,7 +284,7 @@ foreach (glob(__DIR__.'/recorridos/*.php') ?: [] as $archivo) {
     require_once $archivo;
 }
 
-$mapa = ['A' => 'recorrido_a', 'B' => 'recorrido_b', 'C' => 'recorrido_c', 'D' => 'recorrido_d', 'E' => 'recorrido_e', 'F' => 'recorrido_f', 'G' => 'recorrido_g', 'H' => 'recorrido_h', 'PREP' => 'recorrido_prep'];
+$mapa = ['A' => 'recorrido_a', 'B' => 'recorrido_b', 'C' => 'recorrido_c', 'D' => 'recorrido_d', 'E' => 'recorrido_e', 'F' => 'recorrido_f', 'G' => 'recorrido_g', 'H' => 'recorrido_h', 'PREP' => 'recorrido_prep', 'RENDIMIENTO' => 'recorrido_rendimiento', 'V' => 'recorrido_v'];
 $aEjecutar = $cual === 'TODOS' ? array_slice($mapa, 0, 8, true) : [$cual => $mapa[$cual] ?? null];
 
 foreach ($aEjecutar as $letra => $funcion) {
