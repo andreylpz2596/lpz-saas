@@ -5,9 +5,11 @@ module.exports = async (page, h) => {
     const id = process.env.PEDIDO;
     const r = {};
     await page.goto(h.base + '/admin/logistica/despachos', { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector(`[data-logistica-despacho][data-pedido="${id}"]`, { timeout: 30000 });
+    await page.locator(`[data-logistica-despacho][data-pedido="${id}"]`).locator("visible=true").first().waitFor({ timeout: 30000 });
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForTimeout(2500);
     const abrir = async () => {
-        await page.locator(`[data-logistica-despacho][data-pedido="${id}"]`).first().evaluate((e) => e.click());
+        await page.locator(`[data-logistica-despacho][data-pedido="${id}"]`).locator("visible=true").first().evaluate((e) => e.click());
         await page.waitForSelector('[data-logistica="cancelar-pendiente"]', { timeout: 60000 });
         await page.locator('[data-logistica="cancelar-pendiente"] summary').click();
         await page.waitForSelector('[data-logistica="cancelacion-motivo"]');

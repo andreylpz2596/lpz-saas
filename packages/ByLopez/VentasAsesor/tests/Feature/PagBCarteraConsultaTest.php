@@ -352,7 +352,7 @@ test('por lote: ids inexistentes se omiten, los repetidos se unifican y el orden
         ->and(array_keys(pagb_servicio()->saldosDePedidos([$dos->id, 999999999, $uno->id, $dos->id])))->toBe([$dos->id, $uno->id]);
 });
 
-test('sin N+1: las consultas no crecen con la cantidad de pedidos (maximo 6 por lote: 5 de Cartera + la agrupada de devoluciones recibidas (C5))', function () {
+test('sin N+1: las consultas no crecen con la cantidad de pedidos (maximo 8 por lote, constante: Cartera + devoluciones recibidas (C5) + cancelaciones del pendiente + lecturas de configuracion)', function () {
     $cliente = pagb_cliente();
     $contar = function (array $ids): int {
         DB::flushQueryLog();
@@ -381,7 +381,7 @@ test('sin N+1: las consultas no crecen con la cantidad de pedidos (maximo 6 por 
 
     $conQuince = $contar($ids);
 
-    expect($conUno)->toBeLessThanOrEqual(6)
+    expect($conUno)->toBeLessThanOrEqual(8)
         ->and($conQuince)->toBe($conUno)
         ->and(count(pagb_servicio()->saldosDePedidos($ids)))->toBe(15);
 });

@@ -86,3 +86,18 @@ Roles y accesos (todos `@bylopez.test`): `demo.admin` (Administrador), `demo.ase
 - La migración de cancelaciones **no** está en dev.
 - No se ejecutó una prueba de carga de 10.000 pedidos (no se hizo antes de cerrar los flujos básicos).
 - Las políticas D3, D5, cambio de umbral a mitad de mes, devolución posterior a la entrega y remesas de transportadoras sin cuenta corriente siguen **sin definir**.
+
+## 6. Resultados de pruebas (2026-10-28, base `lpz_saas_testing` y demo `lpz_saas_demo_20261028`)
+
+| Batería | Resultado | Notas |
+|---|---|---|
+| Logistica completa | **141 pasan** (+ C6-05/06 y F6-7/8 nuevas, pasan) | una suite a la vez: dos en paralelo producen deadlocks falsos |
+| Concurrencia real (03F-37…41, 37d, CONC-1…6) | **14 de 15 pasan** | CONC-4 falló una vez por *lock wait timeout* (1205) bajo carga (servidor demo + scheduler activos); sola **pasa**; la evidencia JSON de ambas corridas está en `storage/logs/concurrencia/` |
+| Comisiones `Com04` (8) + ACL (11) | **pasan** | COM4-1 es el ejemplo exacto 998 + 5 = 1.200 |
+| VentasAsesor Feature+Unit | **834 pasan, 43 fallan** | 1 fallo era mío (cota de consultas de `PagBCarteraConsultaTest`, corregida conservando la constancia); los demás son **previos y ajenos**: expectativas de la tarifa de domicilio por `core_config` (reemplazada por «envío local por origen»), orden de listeners tras GRP-01, conteos globales de pagos (6.360 clonados), textos «hasta PAG-C», menú/ACL de RMA, `ShippedNotification` doble (falla también sin mis listeners). No se comprobó uno por uno contra el respaldo: la clasificación sale de leer la causa de cada grupo |
+| Recorridos A–H (HTTP, base limpia) | **255 verificaciones OK, 0 fallos** | `storage/logs/demo/ensayo_general_20261028.txt` |
+| Visual (Chrome headless, 44 capturas: rol × 1440/390 × claro/oscuro) | sin desbordamiento horizontal; tema oscuro aplicado | asesora y umbral reciben **401** en Comisiones (el rol ASESOR VENTAS no tiene la clave de Comisiones: no se amplió el acceso; falta una vista propia — requisito documentado) |
+| Interactivo | cancelar pendiente (500 **simulado** en el navegador → texto conservado → reintento real → 1 cancelación de 6 uds en la base) y decisión de cobro en recogida, en escritorio y móvil oscuro | no hubo teléfono físico |
+| Rendimiento (instancia aislada, volumen: 13–18 pedidos, 17 líneas de comisión, 10 movimientos) | agregar referencias 3–4 s · confirmar 6,5 s · Comisiones 1,1 s (23 consultas) · cuenta 0,9 s (16 consultas) | servidor monohilo de PHP en Windows sin opcache; sin cuello de botella que impida la demo; sin prueba de 10.000 pedidos |
+
+Pendiente en esta jornada: Cargues/99 Envíos no se ejecutó en la demo (la base de demo no trae los tipos configurados ni worker); concurrencia real de cancelar-vs-despachar (se serializa con el mismo bloqueo del pedido, sin prueba con procesos paralelos); revalidación de F6 por devolución recibida (cubierta por diseño: la huella es el saldo; probada solo con pagos).

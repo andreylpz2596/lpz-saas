@@ -14,7 +14,7 @@ require_once __DIR__.'/util.php';
 */
 function recorrido_prep(Demo $d): void
 {
-    foreach (DB::table('bylopez_va_comision_lineas')->distinct()->pluck('familia_id')->filter()->all() as $familia) {
+    foreach (DB::table('products')->whereIn('id', [215, 425, 405])->pluck('attribute_family_id')->filter()->unique()->all() as $familia) {
         $vigente = DB::table('bylopez_va_costo_estados')->where('familia_id', $familia)->whereNull('vigente_hasta')->where('estado', 'confirmado')->exists();
 
         if (! $vigente) {

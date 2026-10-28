@@ -3,8 +3,10 @@ module.exports = async (page, h) => {
     const id = process.env.PEDIDO;
     const r = {};
     await page.goto(h.base + '/admin/logistica/despachos', { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector(`[data-logistica-despacho][data-pedido="${id}"]`, { timeout: 30000 });
-    await page.locator(`[data-logistica-despacho][data-pedido="${id}"]`).first().evaluate((e) => e.click());
+    await page.locator(`[data-logistica-despacho][data-pedido="${id}"]`).locator("visible=true").first().waitFor({ timeout: 30000 });
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForTimeout(2500);
+    await page.locator(`[data-logistica-despacho][data-pedido="${id}"]`).locator("visible=true").first().evaluate((e) => e.click());
     await page.waitForSelector('[data-logistica="disposicion-cobro"]', { timeout: 60000 });
     r.panel = (await page.locator('[data-logistica="disposicion-cobro"]').innerText()).replace(/\s+/g, ' ').slice(0, 500);
     r.guardar_habilitado_sin_decision = await page.locator('[data-logistica="guardar"]').isEnabled();
