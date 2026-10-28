@@ -273,8 +273,11 @@ class DespachoService
                 throw new Invalida(Invalida::NO_ES_RECOGIDA);
             }
 
-            // Ni el saldo pendiente ni un pago en validacion impiden entregar: no hay cobro de terceros y Cartera conserva su estado.
             $this->exigirDespachable($pedido);
+
+            // F6 tambien en la recogida: no sale sin cobrar en silencio. Con saldo o pago sin confirmar hay que decidir (esperar, cobrar al retirar o
+            // credito autorizado); no hay transportadora ni guia, el cobro en mostrador va por Cartera (cobrar en Entregas) y la deuda sigue ahi.
+            $this->disposiciones->exigirResuelta((int) $pedido->id);
 
             $unidades = $this->unidades->normalizar($pedido, $s->unidades);
             $bodega = $this->unidades->elegirBodega($pedido, $unidades);

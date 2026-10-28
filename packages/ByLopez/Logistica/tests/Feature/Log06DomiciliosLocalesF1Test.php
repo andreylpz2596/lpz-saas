@@ -405,30 +405,46 @@ function log6_transferencia(array $e, $admin, string $monto = '51000'): int
     ], 'f1-pago-'.Str::uuid())->pagoId;
 }
 
-test('F1-12 recogida con Cartera real: con saldo pendiente SE ENTREGA y la deuda sigue; pago en validacion avisa y NO impide entregar; confirmar/rechazar recalcula', function () {
+test('F1-12 recogida con Cartera real: F6 exige una decision de cobro con saldo o pago sin confirmar; con ella SE ENTREGA y la deuda sigue; confirmar/rechazar recalcula', function () {
     $bodega = log2_bodega();
     $admin = f03b_admin('all');
+    $credito = f03b_admin('custom', array_merge(LOG2_PERMISOS_BODEGA, ['logistica.despachos.autorizar_credito']));
     $servicio = app(DespachoService::class);
+    $decisiones = app(DisposicionCobroService::class);
     $ctx = fn (array $e) => app(ContextoDespachoService::class)->paraPedido((int) $e['pedido']->id, $bodega);
     $entregar = fn (array $e) => $servicio->entregarEnBodega($bodega, new SolicitudRecogida((int) $e['pedido']->id, 'bod-'.Str::uuid()));
 
-    // 1) Debe 51.000 y no hay pagos en revision: BODEGA entrega; nada inventa un pago y el saldo sigue en 51.000.
+    // 1) Debe 51.000 y no hay pagos en revision: F6 (jornada 2026-10-28) tambien aplica a la recogida, asi que NO sale «sin cobrar» en
+    //    silencio. Con la instruccion «cobrar al retirar» BODEGA entrega; nada inventa un pago y el saldo sigue en 51.000.
     $debe = log6_en_cartera(['envio' => 'pickup', 'pago' => 'moneytransfer']);
     $antes = log6_dinero($debe);
 
     expect($ctx($debe)['modo'])->toBe('entregar_bodega')
         ->and($ctx($debe)['envio']['pago_pendiente'])->toBe(['bloquea' => false, 'sin_revisar' => 0.0, 'verificado' => 0.0, 'saldo' => 51000.0, 'estado' => 'pendiente'])
-        ->and($entregar($debe)->entrega)->not->toBeNull()
+        ->and($ctx($debe)['disposicion_cobro']['requiere'])->toBeTrue()
+        ->and(log2_error(fn () => $entregar($debe)))->toBe(Invalida::DISPOSICION_COBRO_REQUERIDA)
+        ->and(DB::table('shipments')->where('order_id', $debe['pedido']->id)->count())->toBe(0);
+
+    $decisiones->registrar($bodega, (int) $debe['pedido']->id, 'cobrar_al_entregar', null);
+
+    expect($entregar($debe)->entrega)->not->toBeNull()
+        ->and(DB::table('bylopez_lg_guias')->where('order_id', $debe['pedido']->id)->count())->toBe(0)
         ->and(log6_saldo($debe))->toBe(51000.0)
         ->and(log6_dinero($debe))->toBe($antes);
 
-    // 2) Pago en validacion: aviso, SE ENTREGA y Cartera conserva el pago sin revisar; al rechazarlo vuelve a deber 51.000.
+    // 2) Pago en validacion: tambien pide decision; «cobrar» no aplica (el valor es incierto) y el credito exige autoridad. SE ENTREGA y
+    //    Cartera conserva el pago sin revisar; al rechazarlo vuelve a deber 51.000.
     $validacion = log6_en_cartera(['envio' => 'pickup', 'pago' => 'moneytransfer']);
     $pago = log6_transferencia($validacion, $admin);
     $antes = log6_dinero($validacion);
 
     expect($ctx($validacion)['envio']['pago_pendiente'])->toBe(['bloquea' => false, 'sin_revisar' => 51000.0, 'verificado' => 0.0, 'saldo' => 0.0, 'estado' => 'en_validacion'])
-        ->and($entregar($validacion)->entrega)->not->toBeNull()
+        ->and(log2_error(fn () => $entregar($validacion)))->toBe(Invalida::DISPOSICION_COBRO_REQUERIDA)
+        ->and(log2_error(fn () => $decisiones->registrar($bodega, (int) $validacion['pedido']->id, 'cobrar_al_entregar', null)))->toBe(Invalida::PAGO_PENDIENTE_CONFIRMAR);
+
+    $decisiones->registrar($credito, (int) $validacion['pedido']->id, 'credito_autorizado', 'Autoriza administracion: el comprobante esta en revision');
+
+    expect($entregar($validacion)->entrega)->not->toBeNull()
         ->and(DB::table('bylopez_va_pagos')->where('id', $pago)->value('estado'))->toBe('sin_revisar')
         ->and(log6_dinero($validacion))->toBe($antes);
 
@@ -436,12 +452,13 @@ test('F1-12 recogida con Cartera real: con saldo pendiente SE ENTREGA y la deuda
 
     expect(log6_saldo($validacion))->toBe(51000.0);
 
-    // 3) Pago en validacion CONFIRMADO: se recalcula a pagado y se entrega.
+    // 3) Pago CONFIRMADO: no hay nada que decidir; se recalcula a pagado y se entrega.
     $pagado = log6_en_cartera(['envio' => 'pickup', 'pago' => 'moneytransfer']);
     app(ConfirmarPagoService::class)->confirmar($admin, log6_transferencia($pagado, $admin));
     $antes = log6_dinero($pagado);
 
     expect($ctx($pagado)['envio']['pago_pendiente']['estado'])->toBe('pagado')
+        ->and($ctx($pagado)['disposicion_cobro']['requiere'])->toBeFalse()
         ->and($entregar($pagado)->entrega)->not->toBeNull()
         ->and(log6_saldo($pagado))->toBe(0.0)
         ->and(log6_dinero($pagado))->toBe($antes);

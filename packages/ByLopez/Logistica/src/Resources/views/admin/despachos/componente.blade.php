@@ -456,7 +456,7 @@
 
                             {{-- F6: pedido que NO es contra entrega con dinero sin confirmar. No sale con «no cobrar nada» sin una decision vigente
                                  (el servidor la exige al despachar). Esperar = no despachar todavia; cobrar al entregar; credito (solo con permiso). --}}
-                            <div v-if="disposicion && disposicion.requiere && vistaModo !== 'entregar_bodega'" class="lgm-sec" data-logistica="disposicion-cobro">
+                            <div v-if="disposicion && disposicion.requiere" class="lgm-sec" data-logistica="disposicion-cobro">
                                 <p v-if="disposicion.vigente" class="lgm-nota lgm-nota--ok" role="status" data-logistica="disposicion-vigente">
                                     @{{ t(textos.disposicion['vigente-' + disposicion.vigente.tipo], { actor: disposicion.vigente.actor, fecha: disposicion.vigente.fecha, motivo: disposicion.vigente.motivo || '' }) }}
                                 </p>
@@ -1053,7 +1053,7 @@
 
                 // F6: falta la decision (o quedo vieja porque el pago cambio): no se despacha. El servidor lo exige igual.
                 bloqueoDisposicion() {
-                    return !! (this.disposicion && this.disposicion.requiere && ! this.disposicion.resuelta && this.vistaModo !== 'entregar_bodega');
+                    return !! (this.disposicion && this.disposicion.requiere && ! this.disposicion.resuelta);
                 },
 
                 // Dinero CONFIRMADO por Cartera (verificado). Valor del servidor; aqui no se calcula nada.
