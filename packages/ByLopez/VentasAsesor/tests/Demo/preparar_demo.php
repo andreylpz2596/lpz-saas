@@ -23,6 +23,7 @@
 use ByLopez\Logistica\Support\PuntosRecogida;
 use ByLopez\VentasAsesor\DataObjects\DatosClienteComercial;
 use ByLopez\VentasAsesor\DataObjects\DireccionComercial;
+use ByLopez\VentasAsesor\DataObjects\OrigenDireccion;
 use ByLopez\VentasAsesor\Enums\CanalVenta;
 use ByLopez\VentasAsesor\Models\Asesor;
 use ByLopez\VentasAsesor\Services\Clientes\CrearClienteComercialService;
@@ -34,7 +35,7 @@ use ByLopez\VentasAsesor\Services\Venta\EntregaBorradorService;
 use ByLopez\VentasAsesor\Services\Venta\LineasBorradorService;
 use ByLopez\VentasAsesor\Services\Venta\PagoBorradorService;
 use ByLopez\VentasAsesor\Services\Venta\SolicitudBorradorService;
-use ByLopez\VentasAsesor\DataObjects\OrigenDireccion;
+use ByLopez\VentasAsesor\Support\Comisiones\MesComercial;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -159,7 +160,7 @@ foreach ([$asesora, $umbral] as $a) {
 // un acuerdo programado «ahora» deja el mes con DOS tramos de umbral y las comisiones quedan bloqueadas por
 // `politica_pendiente_umbral_cambio_mes` (politica de negocio aun sin aprobar; ver el guion). Para que el ejemplo 998 + 5 corra en un mes
 // con UN solo umbral, el acuerdo ficticio se fecha desde el primer dia del mes comercial. Solo toca acuerdos marcados «DEMO:».
-[$inicioMes] = ByLopez\VentasAsesor\Support\Comisiones\MesComercial::rango(date('Y-m'));
+[$inicioMes] = MesComercial::rango(date('Y-m'));
 DB::table('bylopez_va_comision_acuerdos')->whereIn('asesor_admin_id', [$asesora->id, $umbral->id])->where('motivo', 'like', 'DEMO:%')
     ->where('vigente_desde', '>', $inicioMes->toDateTimeString())->update(['vigente_desde' => $inicioMes->toDateTimeString()]);
 $log('Acuerdo DEMO (fixture): 10 %, umbral 1.000 unidades/mes, vigente desde el inicio del mes comercial ('.$inicioMes->toDateString().')');

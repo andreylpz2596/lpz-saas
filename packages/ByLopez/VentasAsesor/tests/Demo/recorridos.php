@@ -290,6 +290,7 @@ $aEjecutar = $cual === 'TODOS' ? array_slice($mapa, 0, 8, true) : [$cual => $map
 foreach ($aEjecutar as $letra => $funcion) {
     if ($funcion === null || ! function_exists($funcion)) {
         fwrite(STDERR, "Recorrido {$letra} no definido.\n");
+
         continue;
     }
 

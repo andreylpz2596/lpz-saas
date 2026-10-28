@@ -14,8 +14,8 @@ require_once __DIR__.'/a.php';
 function recorrido_b(Demo $d): void
 {
     // `recorridos.php B <pedido>` retoma en el cobro de un pedido ya despachado y entregado en dos guias.
-    $o = (int) ($GLOBALS["argv"][2] ?? 0) ?: b_venta_y_entregas($d);
-    if (($GLOBALS["argv"][3] ?? "") !== "liq") {
+    $o = (int) ($GLOBALS['argv'][2] ?? 0) ?: b_venta_y_entregas($d);
+    if (($GLOBALS['argv'][3] ?? '') !== 'liq') {
         b_cobro_y_cuenta($d, $o);
     }
 
@@ -50,6 +50,7 @@ function b_venta_y_entregas(Demo $d): int
     $e2 = (int) $g2['envio_id'];
     registrar_entrega($d, $e1);
     registrar_entrega($d, $e2);
+
     return $o;
 }
 

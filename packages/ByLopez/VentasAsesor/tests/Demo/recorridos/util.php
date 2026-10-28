@@ -1,6 +1,8 @@
 <?php
 
+use ByLopez\VentasAsesor\Services\Comisiones\ConsultaComisionesService;
 use Illuminate\Support\Facades\DB;
+use Webkul\User\Models\Admin;
 
 /** Ids de envio (Shipment) de un pedido, en orden de creacion. */
 function envios_de(int $orderId): array
@@ -85,8 +87,8 @@ function comision_de(int $orderId): array
 /** Lo que muestra el modulo Comisiones para el pedido (lectura por el servicio de consulta del administrador). */
 function pantalla_comision(int $orderId): array
 {
-    $admin = Webkul\User\Models\Admin::query()->where('email', 'demo.admin@bylopez.test')->firstOrFail();
-    $p = app(ByLopez\VentasAsesor\Services\Comisiones\ConsultaComisionesService::class)->detallePedido($admin, $orderId);
+    $admin = Admin::query()->where('email', 'demo.admin@bylopez.test')->firstOrFail();
+    $p = app(ConsultaComisionesService::class)->detallePedido($admin, $orderId);
 
     return [
         'condiciones_pendientes' => $p['condiciones'] ?? [],
