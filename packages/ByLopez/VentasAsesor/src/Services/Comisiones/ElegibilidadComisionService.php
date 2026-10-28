@@ -2,6 +2,8 @@
 
 namespace ByLopez\VentasAsesor\Services\Comisiones;
 
+use ByLopez\Logistica\Models\Guia;
+use ByLopez\Logistica\Services\Cuentas\ModoRecaudo;
 use ByLopez\VentasAsesor\Services\Cartera\CarteraConsultaService;
 use ByLopez\VentasAsesor\Support\Comisiones\MesComercial;
 use Carbon\CarbonImmutable;
@@ -99,7 +101,8 @@ class ElegibilidadComisionService
         // C5: mercancia que Bodega ya recibio devuelta (descuenta el saldo exigible, pero la comision de esas unidades sigue sin politica).
         $devueltaRecibida = DB::table('bylopez_lg_recepciones_devolucion')->where('order_id', $orderId)->where('estado', 'confirmado')->exists();
 
-        if ((int) $reembolsado > 0 || $devueltaRecibida || DB::table('refunds')->where('order_id', $orderId)->exists()) {            $motivos[] = 'devolucion_sin_politica';
+        if ((int) $reembolsado > 0 || $devueltaRecibida || DB::table('refunds')->where('order_id', $orderId)->exists()) {
+            $motivos[] = 'devolucion_sin_politica';
         }
 
         $evidencia['validaciones'] = $validaciones->map(fn ($v) => ['id' => (int) $v->id, 'shipment_id' => (int) $v->shipment_id, 'en' => (string) $v->created_at, 'entregadas' => (int) $v->entregadas, 'devueltas' => (int) $v->devueltas])->values()->all();
@@ -156,7 +159,15 @@ class ElegibilidadComisionService
             }
 
             // Guia C6 sin cobro del transportador: el pago (transferencia, anticipo) lo cubre Cartera; no hay custodia que conciliar.
+            // PERO si hay un cobro CONFIRMADO ligado a esta guia y aun asi no existe el movimiento de recaudo, el transportador no lleva
+            // cuenta corriente con ByLopez: no hay registro que pruebe que el dinero llego, y NO se da por recibido (jornada 2026-10-28).
             if (isset($c6[(int) $g->id])) {
+                $motivo = $this->cobroSinLibro($orderId, $g);
+
+                if ($motivo !== null) {
+                    $motivos[] = $motivo;
+                }
+
                 continue;
             }
 
@@ -213,6 +224,27 @@ class ElegibilidadComisionService
         return $motivos;
     }
 
+    /**
+     * Guia C6 con recaudo esperado y SIN movimiento de recaudo en la cuenta: ¿hay un cobro confirmado que dijo ser del transportador?
+     * En una guia que liquida por cuenta corriente el cobro viene ligado a ella (`guia_id`); en una que no, el cobro llega por un medio de
+     * custodia (o por la observacion del cobro en entrega) y NADA lo concilia: no hay prueba de que el dinero llego a ByLopez.
+     */
+    protected function cobroSinLibro(int $orderId, object $guia): ?string
+    {
+        $ligado = fn ($q) => $q->where('p.guia_id', $guia->id);
+
+        if (! $guia->liquida_cuenta_corriente) {
+            $ligado = fn ($q) => $q->where('p.guia_id', $guia->id)
+                ->orWhereIn('p.medio_cobro', (array) config('ventasasesor.comisiones.medios_custodia_tercero', []))
+                ->orWhere('p.observacion', (string) config('ventasasesor.comisiones.observacion_cobro_en_entrega'));
+        }
+
+        $hay = DB::table('bylopez_va_aplicaciones_pago as a')->join('bylopez_va_pagos as p', 'p.id', '=', 'a.pago_id')
+            ->where('a.order_id', $orderId)->whereNull('a.anulada_en')->where('p.estado', 'confirmado')->where($ligado)->exists();
+
+        return $hay ? ($guia->liquida_cuenta_corriente ? 'recaudo_sin_movimiento' : 'recaudo_sin_cuenta_corriente') : null;
+    }
+
     /** @param  list<int>  $guiaIds @return array<int, true> */
     protected function guiasC6(array $guiaIds): array
     {
@@ -220,7 +252,7 @@ class ElegibilidadComisionService
             return [];
         }
 
-        return app(\ByLopez\Logistica\Services\Cuentas\ModoRecaudo::class)->guiasC6(\ByLopez\Logistica\Models\Guia::query()->whereIn('id', $guiaIds)->get());
+        return app(ModoRecaudo::class)->guiasC6(Guia::query()->whereIn('id', $guiaIds)->get());
     }
 
     /**

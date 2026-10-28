@@ -17,6 +17,8 @@ use ByLopez\VentasAsesor\Models\AplicacionPago;
 use ByLopez\VentasAsesor\Models\Pago;
 use ByLopez\VentasAsesor\Services\Cartera\CajaPedidoService;
 use ByLopez\VentasAsesor\Services\Cartera\CarteraConsultaService;
+use ByLopez\VentasAsesor\Services\Cartera\ConfirmarPagoService;
+use ByLopez\VentasAsesor\Services\Cartera\RegistrarPagoService;
 use ByLopez\VentasAsesor\Services\Comisiones\ElegibilidadComisionService;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -55,13 +57,13 @@ function c6_inicio(): array
 }
 
 /** Pedido contra entrega de `$total`, despachado con la transportadora (una guia C6) y, si `$entregar`, entregado completo. */
-function c6_pedido(array $c, float $total, bool $entregar = false): array
+function c6_pedido(array $c, float $total, bool $entregar = false, array $extra = []): array
 {
     $e = log2_pedido(1, ['envio' => 'domicilio_local', 'pago' => 'cashondelivery', 'total' => $total, 'stock' => 30]);
     pagb_factura($e['pedido'], 'pending', $total);
     $guia = app(DespachoService::class)->despachar(log2_bodega(), log2_s(['pedido' => $e['pedido']], [
         'transportadora' => $c['jeison']->codigo, 'fletePagador' => '', 'unidades' => [$e['item']->id => 1],
-    ]))->guia;
+    ] + $extra))->guia;
 
     if ($entregar) {
         $items = DB::table('shipment_items')->where('shipment_id', $guia->shipment_id)->whereNotNull('order_item_id')->where('qty', '>', 0)->pluck('qty', 'id')->map(fn ($q) => (int) $q)->all();
@@ -382,4 +384,33 @@ test('C6-04 varios pedidos + servicios + diferencia + idempotencia + reasignacio
         ->and((float) $recaudo->importe)->toBe(30000.0)
         ->and([$cajaF['cobrado'], $cajaF['en_custodia']])->toBe([30000.0, 30000.0])
         ->and(c6_saldo($f))->toBe(29000.0);
+});
+
+test('C6-05 un cobro de una transportadora SIN cuenta corriente no prueba que el dinero llego a ByLopez: la comision queda bloqueada de forma explicita', function () {
+    $c = c6_inicio();
+    config(['ventasasesor.comisiones.fecha_inicio' => '2000-01-01']);
+
+    // PICAP (plataforma) no liquida por cuenta corriente: no hay libro de cuenta que registre el recaudo ni liquidacion que lo concilie.
+    $p = c6_pedido(['jeison' => $c['picap']], 51000.0, entregar: true, extra: ['valorFlete' => '10000']);
+    c6_cobrar($p, '51000');
+
+    expect((bool) $p['guia']->fresh()->liquida_cuenta_corriente)->toBeFalse()
+        ->and(DB::table('bylopez_lg_cuenta_movimientos')->where('guia_id', $p['guia']->id)->where('concepto', 'recaudo')->count())->toBe(0)
+        // Cartera si ve el cobro (saldo 0): el cliente pago; lo que falta es la prueba de que el dinero llego a ByLopez.
+        ->and(c6_saldo($p))->toBe(0.0)
+        ->and(c6_motivos($p))->toContain('recaudo_sin_cuenta_corriente');
+});
+
+test('C6-06 un pago directo (transferencia) sobre una guia C6 no lleva custodia que conciliar: no bloquea por dinero', function () {
+    $c = c6_inicio();
+    config(['ventasasesor.comisiones.fecha_inicio' => '2000-01-01']);
+
+    $p = c6_pedido(['jeison' => $c['picap']], 51000.0, entregar: true, extra: ['valorFlete' => '10000']);
+    // Pago confirmado SIN guia (transferencia/anticipo): Cartera lo cubre y no hay recaudo del transportador que probar.
+    $admin = f03b_admin('all');
+    app(ConfirmarPagoService::class)->confirmar($admin, app(RegistrarPagoService::class)->registrar($admin, (int) $p['pedido']->id, [
+        'monto' => '51000', 'medio_cobro' => 'transferencia', 'plataforma' => 'nequi', 'fecha_pago' => now()->toDateString(), 'referencia' => 'TRX-'.Str::random(6),
+    ], 'c6-pago-'.Str::uuid())->pagoId);
+
+    expect(c6_motivos($p))->not->toContain('recaudo_sin_cuenta_corriente');
 });
