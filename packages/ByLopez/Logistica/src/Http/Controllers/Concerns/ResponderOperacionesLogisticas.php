@@ -3,11 +3,11 @@
 namespace ByLopez\Logistica\Http\Controllers\Concerns;
 
 use ByLopez\Logistica\Exceptions\OperacionLogisticaInvalidaException as Invalida;
+use ByLopez\Logistica\Support\ConflictoDeConcurrencia;
 use Closure;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -48,7 +48,7 @@ trait ResponderOperacionesLogisticas
     protected function errorNoControlado(Throwable $e): JsonResponse
     {
         $referencia = (string) Str::uuid();
-        $concurrencia = $e instanceof QueryException && in_array((int) ($e->errorInfo[1] ?? 0), [1205, 1213], true);
+        $concurrencia = ConflictoDeConcurrencia::es($e);
 
         Log::error('bylopez.operacion_no_controlada', [
             'referencia' => $referencia,

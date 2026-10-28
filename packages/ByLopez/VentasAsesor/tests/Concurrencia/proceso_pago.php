@@ -31,6 +31,7 @@ use ByLopez\VentasAsesor\Exceptions\RegistroPagoInvalidoException;
 use ByLopez\VentasAsesor\Exceptions\RevisionPagoInvalidaException;
 use ByLopez\VentasAsesor\Services\Cartera\ConfirmarPagoService;
 use ByLopez\VentasAsesor\Services\Cartera\RegistrarPagoService;
+use ByLopez\VentasAsesor\Support\Cartera\RespuestaErrorNoControlado;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -65,6 +66,11 @@ DB::listen(function ($q) use (&$consultas, $inicio, $p) {
         pcc_esperarMientrasExista($p['retener']);
     }
 });
+
+// Solo de prueba: acorta la espera de bloqueo de ESTA sesion para provocar el timeout (1205) de forma determinista.
+if (! empty($p['espera_bloqueo_s'])) {
+    DB::statement('SET SESSION innodb_lock_wait_timeout = '.(int) $p['espera_bloqueo_s']);
+}
 
 // El padre observa el estado de ESTA conexion en INNODB_TRX (no el de cualquier otra transaccion de la base).
 if (! empty($p['cid'])) {
@@ -102,9 +108,9 @@ try {
 } catch (OperacionLogisticaInvalidaException $e) {
     $salida = ['ok' => false, 'clase' => 'logistica', 'codigo' => $e->codigo, 'detalles' => $e->detalles];
 } catch (QueryException $e) {
-    $salida = ['ok' => false, 'clase' => 'sql', 'sql_error' => (int) ($e->errorInfo[1] ?? 0), 'mensaje' => substr($e->getMessage(), 0, 200)];
+    $salida = ['ok' => false, 'clase' => 'sql', 'sql_error' => (int) ($e->errorInfo[1] ?? 0), 'mensaje' => substr($e->getMessage(), 0, 200), 'http_del_panel' => RespuestaErrorNoControlado::json($e)->getStatusCode()];
 } catch (Throwable $e) {
-    $salida = ['ok' => false, 'clase' => get_class($e), 'mensaje' => substr($e->getMessage(), 0, 200)];
+    $salida = ['ok' => false, 'clase' => get_class($e), 'mensaje' => substr($e->getMessage(), 0, 200), 'http_del_panel' => RespuestaErrorNoControlado::json($e)->getStatusCode()];
 }
 
 echo json_encode($salida + ['consultas' => $consultas]), "\n";

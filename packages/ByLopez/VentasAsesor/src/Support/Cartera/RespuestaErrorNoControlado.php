@@ -2,10 +2,10 @@
 
 namespace ByLopez\VentasAsesor\Support\Cartera;
 
+use ByLopez\Logistica\Support\ConflictoDeConcurrencia;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -30,7 +30,7 @@ class RespuestaErrorNoControlado
     public static function json(Throwable $e): JsonResponse
     {
         $referencia = (string) Str::uuid();
-        $concurrencia = $e instanceof QueryException && in_array((int) ($e->errorInfo[1] ?? 0), [1205, 1213], true);
+        $concurrencia = ConflictoDeConcurrencia::es($e);
 
         Log::error('bylopez.operacion_no_controlada', [
             'referencia' => $referencia,

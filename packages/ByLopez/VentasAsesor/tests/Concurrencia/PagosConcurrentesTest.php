@@ -121,13 +121,33 @@ function pcc_hayEsperaDeBloqueo(string $archivoCid): bool
 {
     $cid = is_file($archivoCid) ? (int) file_get_contents($archivoCid) : 0;
 
-    return $cid > 0 && DB::table('information_schema.INNODB_TRX')->where('trx_mysql_thread_id', $cid)->where('trx_state', 'LOCK WAIT')->exists();
+    if ($cid <= 0) {
+        return false;
+    }
+
+    return DB::table('information_schema.INNODB_TRX')->where('trx_mysql_thread_id', $cid)->where('trx_state', 'LOCK WAIT')->exists()
+        // Respaldo, con evidencia (CONC-4, 2026-10-28): INNODB_TRX puede NO mostrar «LOCK WAIT» durante decenas de segundos mientras la
+        // sesion sigue bloqueada en su `select ... for update` (la lista de procesos la muestra en «Statistics» con la consulta
+        // detenida). Sin este respaldo el padre no soltaba al primero y el segundo agotaba los 50 s del motor (contencion
+        // ARTIFICIAL del montaje, no concurrencia del negocio).
+        || DB::table('information_schema.PROCESSLIST')->where('id', $cid)->where('time', '>=', 2)->where('info', 'like', '%for update%')->exists();
 }
 
 /** Suma aplicada al pedido segun la base (calculo independiente del servicio). */
 function pcc_aplicado(int $orderId): float
 {
     return (float) DB::table('bylopez_va_aplicaciones_pago')->where('order_id', $orderId)->whereNull('anulada_en')->sum('monto');
+}
+
+/** Estado observable de un pedido, leido de la base (independiente de los servicios que se prueban). */
+function pcc_estado(int $orderId, $test): array
+{
+    return [
+        'pagos_del_cliente' => DB::table('bylopez_va_pagos')->where('customer_id', $test->cliente->id)->count(),
+        'pagos_con_referencia_PCC_T' => DB::table('bylopez_va_pagos')->where('customer_id', $test->cliente->id)->where('referencia', 'like', 'PCC-T%')->count(),
+        'aplicaciones_vivas' => DB::table('bylopez_va_aplicaciones_pago')->where('order_id', $orderId)->whereNull('anulada_en')->count(),
+        'aplicado' => pcc_aplicado($orderId),
+    ];
 }
 
 function pcc_guardarEvidencia(string $nombre, array $datos): void
@@ -143,17 +163,33 @@ function pcc_entrelazar($test, array $primero, array $segundo): array
     $senal = $test->prefijo.'_s';
     $retener = $test->prefijo.'_r';
     touch($retener);
+    $t0 = microtime(true);
+    $ms = fn () => (int) round((microtime(true) - $t0) * 1000);
 
     $p1 = pcc_lanzar($test, $primero + ['retener_tras' => 'insert into `bylopez_va_aplicaciones_pago`', 'senal' => $senal, 'retener' => $retener]);
     pcc_esperar(fn () => file_exists($senal) || ! $p1->isRunning(), 'que el primero escriba su aplicacion');
     expect($p1->isRunning())->toBeTrue('el primero termino antes de retenerse: '.$p1->getOutput().$p1->getErrorOutput());
 
     $cid = $test->prefijo.'_cid2';
+    $linea = ['primero_retenido_ms' => $ms()];
     $p2 = pcc_lanzar($test, $segundo + ['cid' => $cid]);
-    pcc_esperar(fn () => pcc_hayEsperaDeBloqueo($cid) || ! $p2->isRunning(), 'que el segundo quede esperando el bloqueo');
+    $instantaneas = [];
+    $ultima = microtime(true);
+    pcc_esperar(function () use ($cid, $p2, &$instantaneas, &$ultima, $ms) {
+        // Diagnostico: si la espera se alarga, guarda que ve el motor (transacciones y conexiones) cada 10 s.
+        if (microtime(true) - $ultima > 10) {
+            $ultima = microtime(true);
+            $instantaneas[] = ['ms' => $ms(), 'trx' => DB::select('select trx_mysql_thread_id, trx_state, trx_started, trx_wait_started, trx_query from information_schema.INNODB_TRX'), 'procesos' => DB::select('select id, time, state, left(info, 80) as info from information_schema.PROCESSLIST where db = database()')];
+        }
+
+        return pcc_hayEsperaDeBloqueo($cid) || ! $p2->isRunning();
+    }, 'que el segundo quede esperando el bloqueo');
     $segundoEsperaba = pcc_hayEsperaDeBloqueo($cid);
+    $linea += ['instantaneas' => $instantaneas, 'segundo_en_lock_wait_ms' => $ms(), 'segundo_sigue_vivo' => $p2->isRunning()];
 
     unlink($retener);
+    $linea['liberado_ms'] = $ms();
+    $test->linea = $linea;
 
     return [pcc_resultado($p1), pcc_resultado($p2), $segundoEsperaba];
 }
@@ -220,6 +256,7 @@ test('CONC-3 cuatro procesos simultaneos con claves distintas sobre saldo 30.000
 
 test('CONC-4 pago combinado y pago simple en paralelo: la suma nunca supera el saldo y el combinado es todo o nada', function () {
     $pedido = pcc_pedido($this, 30000);
+    $antes = pcc_estado($pedido, $this);
 
     [$r1, $r2, $esperaba] = pcc_entrelazar($this,
         ['order_id' => $pedido, 'admin_id' => $this->actor->id, 'monto' => 20000, 'clave' => 'pcc-conc4-s-'.uniqid()],
@@ -229,7 +266,8 @@ test('CONC-4 pago combinado y pago simple en paralelo: la suma nunca supera el s
         ]],
     );
 
-    pcc_guardarEvidencia('CONC-4', compact('pedido', 'r1', 'r2', 'esperaba'));
+    $despues = pcc_estado($pedido, $this);
+    pcc_guardarEvidencia('CONC-4', compact('pedido', 'antes', 'r1', 'r2', 'esperaba', 'despues') + ['linea_de_tiempo' => $this->linea]);
 
     // Saldo 30.000: el simple (20.000) entra; el combinado (12.000) ya no cabe en los 10.000 restantes y no deja partes.
     expect($r1['ok'])->toBeTrue()
@@ -237,6 +275,57 @@ test('CONC-4 pago combinado y pago simple en paralelo: la suma nunca supera el s
         ->and($r2['codigo'] ?? null)->toBe('monto_excede_saldo')
         ->and(pcc_aplicado($pedido))->toBe(20000.0)
         ->and(DB::table('bylopez_va_pagos')->where('customer_id', $this->cliente->id)->count())->toBe(1);
+});
+
+test('CONC-4b el combinado que AGOTA la espera de bloqueo (1205): 409 controlado, ninguna parte queda y el reintento con la misma clave no duplica', function () {
+    $pedido = pcc_pedido($this, 30000);
+    $clave = 'pcc-conc4b-c-'.uniqid();
+    $partes = [
+        ['monto' => 4000, 'plataforma' => 'nequi', 'referencia' => 'PCC-T1'],
+        ['monto' => 4000, 'plataforma' => 'bancolombia', 'referencia' => 'PCC-T2'],
+    ];
+    $antes = pcc_estado($pedido, $this);
+
+    // El simple (20.000) se retiene con el pedido bloqueado y SIN confirmar; el combinado corre con una espera de 2 s y la agota.
+    $senal = $this->prefijo.'_s';
+    $retener = $this->prefijo.'_r';
+    touch($retener);
+    $p1 = pcc_lanzar($this, ['order_id' => $pedido, 'admin_id' => $this->actor->id, 'monto' => 20000, 'clave' => 'pcc-conc4b-s-'.uniqid(),
+        'retener_tras' => 'insert into `bylopez_va_aplicaciones_pago`', 'senal' => $senal, 'retener' => $retener]);
+    pcc_esperar(fn () => file_exists($senal) || ! $p1->isRunning(), 'que el simple escriba su aplicacion');
+    expect($p1->isRunning())->toBeTrue('el simple termino antes de retenerse');
+
+    $p2 = pcc_lanzar($this, ['modo' => 'combinado', 'order_id' => $pedido, 'admin_id' => $this->actor->id, 'clave' => $clave, 'partes' => $partes, 'espera_bloqueo_s' => 2]);
+    $r2 = pcc_resultado($p2);                    // termina SOLO por la espera agotada: el primero sigue retenido
+    $durante = pcc_estado($pedido, $this);       // lo CONFIRMADO mientras el primero sigue abierto
+    unlink($retener);
+    $r1 = pcc_resultado($p1);
+    $trasTimeout = pcc_estado($pedido, $this);
+
+    // Reintento con la MISMA clave: cabe en los 10.000 restantes (4.000 + 4.000) y se acepta una sola vez.
+    $servicio = app(RegistrarPagoService::class);
+    $reintento = $servicio->registrarCombinado($this->actor, $pedido, $partes, ['fecha_pago' => now()->toDateString()], $clave);
+    $trasReintento = pcc_estado($pedido, $this);
+    $repeticion = $servicio->registrarCombinado($this->actor, $pedido, $partes, ['fecha_pago' => now()->toDateString()], $clave);
+    $trasRepeticion = pcc_estado($pedido, $this);
+
+    pcc_guardarEvidencia('CONC-4b', compact('pedido', 'antes', 'r1', 'r2', 'durante', 'trasTimeout', 'trasReintento', 'trasRepeticion') + [
+        'reintento_duplicado' => collect($reintento['pagos'])->every(fn ($x) => $x->duplicado),
+        'repeticion_duplicado' => collect($repeticion['pagos'])->every(fn ($x) => $x->duplicado),
+    ]);
+
+    expect($r1['ok'])->toBeTrue()
+        ->and($r2['ok'])->toBeFalse()
+        // La espera agotada se clasifica como CONFLICTO DE CONCURRENCIA y el panel responde 409 (no 500).
+        ->and($r2['http_del_panel'])->toBe(409)
+        ->and($durante['pagos_con_referencia_PCC_T'])->toBe(0)
+        // Tras el timeout: solo el simple; ninguna parte del combinado quedo escrita.
+        ->and($trasTimeout)->toMatchArray(['pagos_del_cliente' => 1, 'pagos_con_referencia_PCC_T' => 0, 'aplicaciones_vivas' => 1, 'aplicado' => 20000.0])
+        // El reintento entra completo (todo o nada) y repetirlo no crea nada nuevo.
+        ->and($trasReintento)->toMatchArray(['pagos_del_cliente' => 3, 'pagos_con_referencia_PCC_T' => 2, 'aplicaciones_vivas' => 3, 'aplicado' => 28000.0])
+        ->and(collect($reintento['pagos'])->every(fn ($x) => $x->duplicado))->toBeFalse()
+        ->and(collect($repeticion['pagos'])->every(fn ($x) => $x->duplicado))->toBeTrue()
+        ->and($trasRepeticion)->toBe($trasReintento);
 });
 
 test('CONC-5 F4 dos cobros contra entrega simultaneos (registrar + confirmar): uno se cobra y el otro se rechaza controlado, sin 500', function () {
