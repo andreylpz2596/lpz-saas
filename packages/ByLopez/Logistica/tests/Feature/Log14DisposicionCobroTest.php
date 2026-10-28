@@ -171,3 +171,48 @@ function f6_saldo(int $orderId): float
 {
     return (float) app(CarteraConsultaService::class)->saldosDePedidos([$orderId])[$orderId]->saldo;
 }
+
+test('F6-7 transferencia con pago PARCIAL confirmado: el saldo restante exige decision; cobrar al entregar cobra solo ese saldo y un pago nuevo la invalida', function () {
+    $e = f6_pedido();
+    $id = (int) $e['pedido']->id;
+    $bodega = log2_bodega();
+    $servicio = app(DisposicionCobroService::class);
+
+    pagb_factura($e['pedido']);
+    app(ConfirmarPagoService::class)->confirmar($this->admin, f6_registrarPago($this, $e, '40000'));
+
+    // 100.000 − 40.000 confirmados = 60.000 de saldo, nada reportado sin revisar.
+    $s = $servicio->situacion($id, $bodega);
+    expect($s['requiere'])->toBeTrue()->and($s['por_confirmar'])->toBe(60000.0)
+        ->and(log2_error(fn () => app(DespachoService::class)->despachar($bodega, log2_s($e))))->toBe(Invalida::DISPOSICION_COBRO_REQUERIDA);
+
+    $servicio->registrar($bodega, $id, 'cobrar_al_entregar', null);
+    $guia = app(DespachoService::class)->despachar($bodega, log2_s($e))->guia;
+    expect((float) $guia->recaudo_esperado)->toBe(60000.0);
+
+    // Un pago nuevo confirmado cambia el saldo: la decision anterior ya no vale (se vuelve a decidir si todavia hay saldo).
+    app(ConfirmarPagoService::class)->confirmar($this->admin, f6_registrarPago($this, $e, '10000'));
+    $despues = $servicio->situacion($id, $bodega);
+    expect($despues['por_confirmar'])->toBe(50000.0)->and($despues['vigente'])->toBeNull()->and($despues['anterior']['tipo'])->toBe('cobrar_al_entregar');
+});
+
+test('F6-8 pago TOTAL pendiente de revision (saldo 0 pero sin confirmar): sigue pidiendo decision; cobrar no aplica; credito si, sin cobro', function () {
+    $e = f6_pedido();
+    $id = (int) $e['pedido']->id;
+    $bodega = log2_bodega();
+    $servicio = app(DisposicionCobroService::class);
+
+    f6_registrarPago($this, $e, '100000');
+
+    // Cartera ya descuenta el pago reportado (saldo 0), pero no esta confirmado: por confirmar = 100.000.
+    $s = $servicio->situacion($id, $bodega);
+    expect(f6_saldo($id))->toBe(0.0)->and($s['requiere'])->toBeTrue()->and($s['por_confirmar'])->toBe(100000.0)
+        ->and(log2_error(fn () => $servicio->registrar($bodega, $id, 'cobrar_al_entregar', null)))->toBe(Invalida::PAGO_PENDIENTE_CONFIRMAR)
+        ->and(log2_error(fn () => app(DespachoService::class)->despachar($bodega, log2_s($e))))->toBe(Invalida::DISPOSICION_COBRO_REQUERIDA);
+
+    // Credito autorizado: sale sin recaudo (ese dinero no se cobra otra vez ni se da por confirmado).
+    $servicio->registrar(f6_credito(), $id, 'credito_autorizado', 'Autoriza administracion: el comprobante esta en revision');
+    $guia = app(DespachoService::class)->despachar($bodega, log2_s($e))->guia;
+
+    expect((float) $guia->recaudo_esperado)->toBe(0.0)->and($guia->disposicion_cobro_id)->not->toBeNull();
+});
