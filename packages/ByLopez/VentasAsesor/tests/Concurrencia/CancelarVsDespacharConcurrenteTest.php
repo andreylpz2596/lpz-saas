@@ -168,20 +168,33 @@ function cvd_esperar(callable $condicion, string $que, int $segundos = 150): voi
     }
 }
 
-function cvd_enEspera(string $archivoCid): bool
+function cvd_detectorDeEspera(string $archivoCid): ?string
 {
     $cid = is_file($archivoCid) ? (int) file_get_contents($archivoCid) : 0;
 
     if ($cid <= 0) {
-        return false;
+        return null;
     }
 
-    return DB::table('information_schema.INNODB_TRX')->where('trx_mysql_thread_id', $cid)->where('trx_state', 'LOCK WAIT')->exists()
-        // Respaldo, con evidencia (CONC-4, 2026-10-28): INNODB_TRX puede NO mostrar «LOCK WAIT» durante decenas de segundos mientras la
-        // sesion sigue bloqueada en su `select ... for update` (la lista de procesos la muestra en «Statistics» con la consulta
-        // detenida). Sin este respaldo el padre no soltaba al primero y el segundo agotaba los 50 s del motor (contencion
-        // ARTIFICIAL del montaje, no concurrencia del negocio).
-        || DB::table('information_schema.PROCESSLIST')->where('id', $cid)->where('time', '>=', 2)->where('info', 'like', '%for update%')->exists();
+    if (DB::table('information_schema.INNODB_TRX')->where('trx_mysql_thread_id', $cid)->where('trx_state', 'LOCK WAIT')->exists()) {
+        return 'INNODB_TRX';
+    }
+
+    // Respaldo, con evidencia (CONC-4, 2026-10-28): INNODB_TRX puede NO mostrar «LOCK WAIT» durante decenas de segundos mientras la
+    // sesion sigue bloqueada en su `select ... for update` (la lista de procesos la muestra en «Statistics» con la consulta detenida).
+    // Sin este respaldo el padre no soltaba al primero y el segundo agotaba los 50 s del motor (contencion ARTIFICIAL del montaje,
+    // no concurrencia del negocio).
+    if (DB::table('information_schema.PROCESSLIST')->where('id', $cid)->where('time', '>=', 2)->where('info', 'like', '%for update%')->exists()) {
+        return 'PROCESSLIST';
+    }
+
+    return null;
+}
+
+/** La conexion del proceso (CONNECTION_ID escrito por el hijo) esta esperando un bloqueo. */
+function cvd_enEspera(string $archivoCid): bool
+{
+    return cvd_detectorDeEspera($archivoCid) !== null;
 }
 
 function cvd_guardar(string $nombre, array $datos): void
@@ -229,7 +242,7 @@ function cvd_entrelazar($test, array $primero, string $retenerTras, array $segun
         return cvd_enEspera($cid) || ! $p2->isRunning();
     }, 'que el segundo quede esperando el bloqueo del pedido');
     $esperaba = cvd_enEspera($cid);
-    $linea += ['instantaneas' => $instantaneas, 'segundo_en_lock_wait_ms' => $ms(), 'segundo_sigue_vivo' => $p2->isRunning()];
+    $linea += ['instantaneas' => $instantaneas, 'detector' => cvd_detectorDeEspera($cid), 'segundo_en_lock_wait_ms' => $ms(), 'segundo_sigue_vivo' => $p2->isRunning()];
     unlink($retener);
     $linea['liberado_ms'] = $ms();
     $test->linea = $linea;

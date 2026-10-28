@@ -117,20 +117,33 @@ function pcc_esperar(callable $condicion, string $que, int $segundos = 150): voi
 }
 
 /** La conexion del proceso (CONNECTION_ID escrito por el hijo) esta en LOCK WAIT. */
-function pcc_hayEsperaDeBloqueo(string $archivoCid): bool
+function pcc_detectorDeEspera(string $archivoCid): ?string
 {
     $cid = is_file($archivoCid) ? (int) file_get_contents($archivoCid) : 0;
 
     if ($cid <= 0) {
-        return false;
+        return null;
     }
 
-    return DB::table('information_schema.INNODB_TRX')->where('trx_mysql_thread_id', $cid)->where('trx_state', 'LOCK WAIT')->exists()
-        // Respaldo, con evidencia (CONC-4, 2026-10-28): INNODB_TRX puede NO mostrar «LOCK WAIT» durante decenas de segundos mientras la
-        // sesion sigue bloqueada en su `select ... for update` (la lista de procesos la muestra en «Statistics» con la consulta
-        // detenida). Sin este respaldo el padre no soltaba al primero y el segundo agotaba los 50 s del motor (contencion
-        // ARTIFICIAL del montaje, no concurrencia del negocio).
-        || DB::table('information_schema.PROCESSLIST')->where('id', $cid)->where('time', '>=', 2)->where('info', 'like', '%for update%')->exists();
+    if (DB::table('information_schema.INNODB_TRX')->where('trx_mysql_thread_id', $cid)->where('trx_state', 'LOCK WAIT')->exists()) {
+        return 'INNODB_TRX';
+    }
+
+    // Respaldo, con evidencia (CONC-4, 2026-10-28): INNODB_TRX puede NO mostrar «LOCK WAIT» durante decenas de segundos mientras la
+    // sesion sigue bloqueada en su `select ... for update` (la lista de procesos la muestra en «Statistics» con la consulta detenida).
+    // Sin este respaldo el padre no soltaba al primero y el segundo agotaba los 50 s del motor (contencion ARTIFICIAL del montaje,
+    // no concurrencia del negocio).
+    if (DB::table('information_schema.PROCESSLIST')->where('id', $cid)->where('time', '>=', 2)->where('info', 'like', '%for update%')->exists()) {
+        return 'PROCESSLIST';
+    }
+
+    return null;
+}
+
+/** La conexion del proceso (CONNECTION_ID escrito por el hijo) esta esperando un bloqueo. */
+function pcc_hayEsperaDeBloqueo(string $archivoCid): bool
+{
+    return pcc_detectorDeEspera($archivoCid) !== null;
 }
 
 /** Suma aplicada al pedido segun la base (calculo independiente del servicio). */
@@ -185,7 +198,7 @@ function pcc_entrelazar($test, array $primero, array $segundo): array
         return pcc_hayEsperaDeBloqueo($cid) || ! $p2->isRunning();
     }, 'que el segundo quede esperando el bloqueo');
     $segundoEsperaba = pcc_hayEsperaDeBloqueo($cid);
-    $linea += ['instantaneas' => $instantaneas, 'segundo_en_lock_wait_ms' => $ms(), 'segundo_sigue_vivo' => $p2->isRunning()];
+    $linea += ['instantaneas' => $instantaneas, 'detector' => pcc_detectorDeEspera($cid), 'segundo_en_lock_wait_ms' => $ms(), 'segundo_sigue_vivo' => $p2->isRunning()];
 
     unlink($retener);
     $linea['liberado_ms'] = $ms();
