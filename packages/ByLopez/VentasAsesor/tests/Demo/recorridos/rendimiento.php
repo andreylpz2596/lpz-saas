@@ -1,6 +1,9 @@
 <?php
 
+use ByLopez\Logistica\Services\Cuentas\ConsultaCuentasService;
+use ByLopez\VentasAsesor\Services\Comisiones\ConsultaComisionesService;
 use Illuminate\Support\Facades\DB;
+use Webkul\User\Models\Admin;
 
 require_once __DIR__.'/util.php';
 require_once __DIR__.'/a.php';
@@ -58,8 +61,8 @@ function recorrido_rendimiento(Demo $d): void
         return [$n, $ms];
     };
 
-    $admin = Webkul\User\Models\Admin::query()->where('email', 'demo.admin@bylopez.test')->firstOrFail();
-    $consulta = app(ByLopez\VentasAsesor\Services\Comisiones\ConsultaComisionesService::class);
+    $admin = Admin::query()->where('email', 'demo.admin@bylopez.test')->firstOrFail();
+    $consulta = app(ConsultaComisionesService::class);
     $mes = now()->format('Y-m');
     [$n, $ms] = $consultas(function () use ($consulta, $admin, $mes) {
         $consulta->resumenMes($admin, $mes);
@@ -69,7 +72,7 @@ function recorrido_rendimiento(Demo $d): void
 
     $medir('Comisiones (HTTP completo, vista del administrador)', fn () => $d->s['admin']->http->get('/admin/ventas-asesor/comisiones', ['headers' => ['Accept' => 'text/html']]));
     $brian = (int) DB::table('bylopez_lg_transportadoras')->where('codigo', 'BRIAN')->value('id');
-    $cuentas = app(ByLopez\Logistica\Services\Cuentas\ConsultaCuentasService::class);
+    $cuentas = app(ConsultaCuentasService::class);
     [$n, $ms] = $consultas(fn () => $cuentas->contexto($admin, $brian));
     echo sprintf("  %-70s %6d ms  %d consultas SQL\n", 'Detalle de la cuenta de Brian (servicio)', $ms, $n);
     $medir('Detalle de la cuenta (HTTP completo)', fn () => $d->s['admin']->get("/admin/logistica/cuentas/{$brian}/contexto"));

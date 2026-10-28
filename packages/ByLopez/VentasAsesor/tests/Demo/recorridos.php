@@ -295,5 +295,13 @@ foreach ($aEjecutar as $letra => $funcion) {
     }
 
     echo "\n=== RECORRIDO {$letra} ===\n";
-    $funcion($demo);
+    try {
+        $funcion($demo);
+    } catch (Throwable $e) {
+        fwrite(STDERR, "RECORRIDO {$letra} FALLO: ".$e->getMessage().'
+');
+        echo "RECORRIDO {$letra} FALLO: ".$e->getMessage().'
+';
+        exit(1);
+    }
 }

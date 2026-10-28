@@ -43,8 +43,12 @@ function recorrido_i(Demo $d): void
         'bylopez_lg_cuenta_movimientos', 'bylopez_lg_conciliaciones_movimiento'];
     $checksum = fn () => collect($tablasIntocables)->mapWithKeys(fn ($t) => [$t => (string) DB::selectOne("CHECKSUM TABLE `{$t}`")->Checksum])->all();
     $antes = $checksum();
-    $pedidoD1 = (int) DB::table('bylopez_lg_guias')->where('numero_guia', 'DEMO-SV-665558')->value('order_id');
-    $pedidoD2 = (int) DB::table('bylopez_lg_guias')->where('numero_guia', 'DEMO-IR-569215')->value('order_id');
+    // Los numeros de guia de la demo se generan al azar en C y D: se leen de la base (D1 Servientrega sin cuenta corriente, D2 Inter con cuenta corriente y 30.000, C Inter sin recaudo).
+    $gD1 = (string) DB::table('bylopez_lg_guias')->where('numero_guia', 'like', 'DEMO-SV-%')->orderBy('id')->value('numero_guia');
+    $gD2 = (string) DB::table('bylopez_lg_guias')->where('numero_guia', 'like', 'DEMO-IR-%')->where('numero_guia', '!=', 'DEMO-IR-PENDIENTE')->where('recaudo_esperado', '>', 0)->orderBy('id')->value('numero_guia');
+    $gC = (string) DB::table('bylopez_lg_guias')->where('numero_guia', 'like', 'DEMO-IR-%')->where('numero_guia', '!=', 'DEMO-IR-PENDIENTE')->where('recaudo_esperado', 0)->orderBy('id')->value('numero_guia');
+    $pedidoD1 = (int) DB::table('bylopez_lg_guias')->where('numero_guia', $gD1)->value('order_id');
+    $pedidoD2 = (int) DB::table('bylopez_lg_guias')->where('numero_guia', $gD2)->value('order_id');
     $fotoD1 = foto($pedidoD1);
     $fotoD2 = foto($pedidoD2);
     mostrar_foto('I0 · D1 (Servientrega, sin cuenta corriente) ANTES del cargue', $fotoD1);
@@ -74,11 +78,11 @@ function recorrido_i(Demo $d): void
     @mkdir($ruta, 0777, true);
     $archivo = $ruta.'/envios_completos_FICTICIO_demo.xlsx';
     escribir_xlsx_envios($archivo, [
-        ['g' => 'DEMO-IR-569215', 'tr' => '1', 'est' => 'Entregada', 'vc' => '30000', 'cp' => '1'],
-        ['g' => 'DEMO-IR-480283', 'tr' => '1', 'est' => 'Estado nuevo sin catalogar', 'vc' => '0', 'cp' => ''],
-        ['g' => 'DEMO-SV-665558', 'tr' => '2', 'est' => 'Entregada', 'vc' => '25000', 'cp' => '1'],
+        ['g' => $gD2, 'tr' => '1', 'est' => 'Entregada', 'vc' => '30000', 'cp' => '1'],
+        ['g' => $gC, 'tr' => '1', 'est' => 'Estado nuevo sin catalogar', 'vc' => '0', 'cp' => ''],
+        ['g' => $gD1, 'tr' => '2', 'est' => 'Entregada', 'vc' => '25000', 'cp' => '1'],
         ['g' => 'DEMO-XX-000000', 'tr' => '1', 'est' => 'Entregada', 'vc' => '10000', 'cp' => '1'],
-        ['g' => 'DEMO-IR-480283', 'tr' => '9', 'est' => 'Entregada', 'vc' => '10000', 'cp' => '1', 'nom' => 'otra'],
+        ['g' => $gC, 'tr' => '9', 'est' => 'Entregada', 'vc' => '10000', 'cp' => '1', 'nom' => 'otra'],
         ['g' => 'DEMO-IR-000002', 'tr' => '1', 'est' => '', 'vc' => '10000', 'cp' => '1'],
         ['g' => 'DEMO-IR-000003', 'tr' => '1', 'est' => 'Entregada', 'vc' => '10000', 'cp' => '1', 'fa' => 'no-es-fecha'],
         ['g' => 'DEMO-IR-PENDIENTE', 'tr' => '1', 'est' => 'Entregada', 'vc' => $recaudoP, 'cp' => '1'],
@@ -107,9 +111,9 @@ function recorrido_i(Demo $d): void
     }
     esperar_igual('Estados del proveedor guardados (4 guías)', $yaCargado ? $estadosAntes : $estadosAntes + 4, (int) DB::table('bylopez_lg_guia_estados_proveedor')->count());
     esperar_igual('Eventos del historial (4)', $yaCargado ? $eventosAntes : $eventosAntes + 4, (int) DB::table('bylopez_lg_guia_estado_proveedor_eventos')->count());
-    $d1 = $rep->firstWhere('numero_guia', 'DEMO-SV-665558');
+    $d1 = $rep->firstWhere('numero_guia', $gD1);
     esperar_igual('D1: recaudo reportado 25.000 frente a 20.000 internos → discrepancia registrada, NO conciliada', ['25000.00', '20000.00', '5000.00'], [(string) $d1->recaudo_reportado, (string) $d1->recaudo_interno, (string) $d1->diferencia_recaudo]);
-    esperar_igual('El estado nuevo sin catalogar se guarda literal', 'Estado nuevo sin catalogar', (string) $rep->firstWhere('numero_guia', 'DEMO-IR-480283')->estado_reportado);
+    esperar_igual('El estado nuevo sin catalogar se guarda literal', 'Estado nuevo sin catalogar', (string) $rep->firstWhere('numero_guia', $gC)->estado_reportado);
 
     // Descarga de no cargadas con motivo comprensible.
     $csv = $d->s['admin']->http->get("/admin/cargues/cargas/{$c1}/descargas/rechazadas.csv");

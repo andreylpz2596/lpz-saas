@@ -118,6 +118,25 @@ case "$orden" in
     printf 'CARGUES_VALIDAR_DB_USERNAME=cargues_validar_demo\nCARGUES_VALIDAR_DB_PASSWORD=%s\n' "$CLAVE" > "$CUENTA_CARGUES"
     echo "Cuenta cargues_validar_demo@127.0.0.1 creada (sin permisos; el modulo concede los minimos sobre la base demo al activar el tipo). Clave en $CUENTA_CARGUES (no versionado)."
     ;;
+  crear-base)
+    # Crea la base demo definida en demo.env (estructura + catalogo del origen, sin pedidos ni clientes). No sobrescribe una existente.
+    seguridad_nombre() { case "$DB_DATABASE" in lpz_saas_demo_*) ;; *) echo "BLOQUEADO: DB_DATABASE no es lpz_saas_demo_*" >&2; exit 2 ;; esac; }
+    seguridad_nombre
+    DEMO_DB="$DB_DATABASE" bash "$AQUI/crear_base_demo.sh"
+    ;;
+  preparar-cargues)
+    seguridad; clave
+    bash "$0" cuenta-cargues && "$PHP" "$AQUI/cuenta_cargues_limpiar.php" && "$PHP" "$AQUI/preparar_cargues.php"
+    ;;
+  ensayo)
+    # Ensayo general: PREP, recorridos A-J y preparacion visual V (cada uno imprime su conciliacion y falla si algun numero no coincide).
+    seguridad; clave
+    [ -n "${DEMO_PASSWORD:-}" ] || { echo "Falta DEMO_PASSWORD o DEMO_CLAVE_ARCHIVO" >&2; exit 2; }
+    for r in PREP A B C D E F G H I J V; do
+      echo; echo "######## $r"
+      "$PHP" "$AQUI/recorridos.php" "$r" || { echo "FALLO el recorrido $r" >&2; exit 1; }
+    done
+    ;;
   php) seguridad; clave; "$PHP" "$@" ;;
-  *) echo "Uso: demo.sh <iniciar [--con-worker]|parar|estado|verificar|preparar|recorridos A..H|todos|worker|php script.php>" >&2; exit 1 ;;
+  *) echo "Uso: demo.sh <crear-base|preparar|preparar-cargues|iniciar [--con-worker]|ensayo|recorridos A..J|todos|estado|verificar|parar|worker|php script.php>" >&2; exit 1 ;;
 esac

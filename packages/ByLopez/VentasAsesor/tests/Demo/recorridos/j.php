@@ -64,6 +64,26 @@ function recorrido_j(Demo $d): void
     esperar_igual('J1 · saldo 0 y una sola decision en el historial (nada se reescribio)', [0.0, 1], [$f3['obligacion']['saldo'], DB::table('bylopez_lg_disposiciones_cobro')->where('order_id', $o)->count()]);
 
     // ---------------- J2 (parcial)
+    [$o2, $linea, $e2] = f6_parcial_devuelto($d, $cliente, $dir, $zona);
+    $d->rechazo('J2 · las 4 pendientes NO salen con la decision anterior', $d->s['bodega']->post("/admin/logistica/despachos/pedidos/{$o2}/despachar", $zona + ['unidades' => [$linea => 4], 'idempotency_key' => Demo::clave()]), 'disposicion_cobro_requerida');
+    $ctx2 = $d->paso('J2 · el panel pide decidir otra vez y muestra la decision anterior', $d->s['bodega']->get("/admin/logistica/despachos/pedidos/{$o2}/contexto"))['contexto'];
+    esperar_igual('J2 · contexto del drawer: sin decision vigente, anterior de 100.000', [false, 100000.0], [(bool) $ctx2['disposicion_cobro']['resuelta'], (float) ($ctx2['disposicion_cobro']['anterior']['saldo_referencia'] ?? -1)]);
+    $d->paso('J2 · Bodega decide de nuevo (saldo vigente 80.000)', $d->s['bodega']->post("/admin/logistica/despachos/pedidos/{$o2}/disposicion-cobro", ['tipo' => 'cobrar_al_entregar']));
+    $e3 = (int) despachar($d, $o2, $zona + ['unidades' => [$linea => 4]], 'J2 · ahora si salen las 4')['envio_id'];
+    $g2 = (float) DB::table('bylopez_lg_guias')->where('shipment_id', $e3)->value('recaudo_esperado');
+    esperar_igual('J2 · la guia nueva lleva el valor de SUS 4 unidades (40.000), no el saldo anterior', 40000.0, $g2);
+    mostrar_foto('J2 · final', foto($o2));
+    guardar_evidencia('J', ['pedido_j1' => $o, 'pedido_j2' => $o2, 'j1_recibido' => $f2, 'j1_final' => $f3]);
+}
+
+/**
+ * Deja un pedido por transferencia de 10 unidades con: decision «cobrar al entregar», 6 despachadas, 2 devueltas y RECIBIDAS en bodega
+ * (saldo 100.000 → 80.000) y 4 pendientes. La decision anterior ya no vale. Lo usan J2 y la preparacion visual (V).
+ *
+ * @return array{0: int, 1: int, 2: int} [pedido, linea, envio]
+ */
+function f6_parcial_devuelto(Demo $d, int $cliente, int $dir, array $zona): array
+{
     $v2 = $d->venta($cliente, [[215, [219 => 10]]], ['envio' => ['tipo' => 'guardada', 'address_id' => $dir], 'metodo' => 'flatrate_flatrate'], 'moneytransfer', 9);
     $o2 = $v2['orderId'];
     $d->paso('J2 · Bodega decide «cobrar al entregar»', $d->s['bodega']->post("/admin/logistica/despachos/pedidos/{$o2}/disposicion-cobro", ['tipo' => 'cobrar_al_entregar']));
@@ -78,13 +98,6 @@ function recorrido_j(Demo $d): void
     $d->paso('J2 · Bodega recibe las 2 (aptas)', $d->s['bodega']->post("/admin/logistica/entregas/devoluciones/{$retorno2['id']}/recibir", [
         'fecha' => now()->toDateString(), 'idempotency_key' => Demo::clave(), 'lineas' => [$itemRetorno2 => ['recibidas' => 2, 'aptas' => 2, 'novedad' => 0]],
     ]));
-    $d->rechazo('J2 · las 4 pendientes NO salen con la decision anterior', $d->s['bodega']->post("/admin/logistica/despachos/pedidos/{$o2}/despachar", $zona + ['unidades' => [$linea => 4], 'idempotency_key' => Demo::clave()]), 'disposicion_cobro_requerida');
-    $ctx2 = $d->paso('J2 · el panel pide decidir otra vez y muestra la decision anterior', $d->s['bodega']->get("/admin/logistica/despachos/pedidos/{$o2}/contexto"))['contexto'];
-    esperar_igual('J2 · contexto del drawer: sin decision vigente, anterior de 100.000', [false, 100000.0], [(bool) $ctx2['disposicion_cobro']['resuelta'], (float) ($ctx2['disposicion_cobro']['anterior']['saldo_referencia'] ?? -1)]);
-    $d->paso('J2 · Bodega decide de nuevo (saldo vigente 80.000)', $d->s['bodega']->post("/admin/logistica/despachos/pedidos/{$o2}/disposicion-cobro", ['tipo' => 'cobrar_al_entregar']));
-    $e3 = (int) despachar($d, $o2, $zona + ['unidades' => [$linea => 4]], 'J2 · ahora si salen las 4')['envio_id'];
-    $g2 = (float) DB::table('bylopez_lg_guias')->where('shipment_id', $e3)->value('recaudo_esperado');
-    esperar_igual('J2 · la guia nueva lleva el valor de SUS 4 unidades (40.000), no el saldo anterior', 40000.0, $g2);
-    mostrar_foto('J2 · final', foto($o2));
-    guardar_evidencia('J', ['pedido_j1' => $o, 'pedido_j2' => $o2, 'j1_recibido' => $f2, 'j1_final' => $f3]);
+
+    return [$o2, (int) $linea, $e2];
 }
