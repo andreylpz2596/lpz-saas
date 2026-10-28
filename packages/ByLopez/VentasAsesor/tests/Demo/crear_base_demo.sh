@@ -23,6 +23,10 @@ echo "1/5 estructura de $ORIGEN"; "$BIN/mysqldump" "${AUTH[@]}" --no-data --rout
 echo "2/5 catalogo de $ORIGEN";  "$BIN/mysqldump" "${AUTH[@]}" --no-create-info --skip-triggers --single-transaction "$ORIGEN" $(tr '\r\n' '  ' < packages/ByLopez/VentasAsesor/tests/Demo/tablas_catalogo.txt) > "$TMP/datos.sql"
 echo "3/5 creando $DEMO_DB"; "$BIN/mysql" "${AUTH[@]}" -e "CREATE DATABASE \`$DEMO_DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
 echo "4/5 cargando"; "$BIN/mysql" "${AUTH[@]}" "$DEMO_DB" < "$TMP/estructura.sql"; "$BIN/mysql" "${AUTH[@]}" "$DEMO_DB" < "$TMP/datos.sql"
+# Las tablas intermedias de Cargues (bylopez_cgi_*) vienen del origen sin sus registros del modulo; el modulo las CREA al activar un tipo y se niega a adoptar tablas ajenas.
+for t in $("$BIN/mysql" "${AUTH[@]}" -N -e "SELECT table_name FROM information_schema.tables WHERE table_schema='$DEMO_DB' AND table_name LIKE 'bylopez_cgi\_%'"); do
+  "$BIN/mysql" "${AUTH[@]}" "$DEMO_DB" -e "SET FOREIGN_KEY_CHECKS=0; DROP TABLE IF EXISTS \`$t\`"
+done
 echo "5/5 migraciones propias pendientes en la demo (solo las de Logistica listadas; nunca un migrate general)"
 for m in packages/ByLopez/Logistica/src/Database/Migrations/2026_10_27_100019_*.php packages/ByLopez/Logistica/src/Database/Migrations/2026_10_27_100020_*.php packages/ByLopez/Logistica/src/Database/Migrations/2026_10_28_100021_*.php; do
   DB_DATABASE="$DEMO_DB" php artisan migrate --force --path="$m" | sed 's/\x1b\[[0-9;]*m//g' | grep -E "DONE|Nothing|FAIL" || true
