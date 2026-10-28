@@ -13,6 +13,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Webkul\Sales\Models\Order;
 use Webkul\User\Contracts\Admin as AdminContract;
 
@@ -123,6 +124,8 @@ class CarteraConsultaService
 
         // C5: lo devuelto y RECIBIDO en bodega. Se deriva de las recepciones confirmadas (una consulta agrupada por lote).
         $devuelto = $this->devueltoDePedidos($ids, $lecturaActual);
+        // Cancelacion del pendiente de despacho (Logistica): su valor tambien deja de exigirse, identificado aparte de lo devuelto.
+        $cancelado = $this->canceladoDePedidos($ids, $lecturaActual);
 
         $facturaPagada = $leer(DB::table('invoices')->whereIn('order_id', $ids)->where('state', 'paid'))->distinct()->pluck('order_id')->flip();
 
@@ -141,6 +144,7 @@ class CarteraConsultaService
                 $facturaPagada->has($id),
                 (float) ($devuelto[$id]['valor'] ?? 0),
                 (int) ($devuelto[$id]['unidades'] ?? 0),
+                (float) ($cancelado[$id] ?? 0),
             );
         }
 
@@ -313,7 +317,28 @@ class CarteraConsultaService
         return $salida;
     }
 
-    private function componer(object $pedido, array $aplicadoPorEstado, float $ajenas, bool $tieneRefund, bool $tieneFacturaPagada, float $devuelto = 0.0, int $unidadesDevueltas = 0): SaldoPedido
+    /**
+     * Valor de lo CANCELADO por pedido (historial de Logistica). Sin la migracion de cancelaciones no hay nada que sumar.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, float>
+     */
+    private function canceladoDePedidos(array $ids, bool $lecturaActual = false): array
+    {
+        static $existe = null;
+
+        if (! ($existe ??= Schema::hasTable('bylopez_lg_cancelaciones'))) {
+            return [];
+        }
+
+        $consulta = DB::table('bylopez_lg_cancelaciones')->whereIn('order_id', $ids);
+
+        return ($lecturaActual ? $consulta->sharedLock() : $consulta)->groupBy('order_id')
+            ->selectRaw('order_id, SUM(valor_cancelado) AS valor')->pluck('valor', 'order_id')
+            ->map(fn ($v) => round((float) $v, 2))->all();
+    }
+
+    private function componer(object $pedido, array $aplicadoPorEstado, float $ajenas, bool $tieneRefund, bool $tieneFacturaPagada, float $devuelto = 0.0, int $unidadesDevueltas = 0, float $cancelado = 0.0): SaldoPedido
     {
         $id = (int) $pedido->id;
         $total = round((float) $pedido->base_grand_total, 2);
@@ -353,9 +378,12 @@ class CarteraConsultaService
         $aplicadoTotal = round($verificado + $sinRevisar, 2);
         // C5: lo recibido en bodega deja de ser exigible; el total original no se toca.
         $devuelto = min(max(0.0, round($devuelto, 2)), $total);
-        $totalOperativo = round($total - $devuelto, 2);
+        // Lo cancelado (pendiente que nunca salio) se resta igual, sin superar lo que queda por exigir; ninguna unidad esta en las dos.
+        $cancelado = min(max(0.0, round($cancelado, 2)), round($total - $devuelto, 2));
+        $totalOperativo = round($total - $devuelto - $cancelado, 2);
         $saldo = max(0.0, round($totalOperativo - $aplicadoTotal, 2));
-        $saldoAFavor = $devuelto > 0 ? round(min($devuelto, max(0.0, $aplicadoTotal - $totalOperativo)), 2) : 0.0;
+        $reducido = round($devuelto + $cancelado, 2);
+        $saldoAFavor = $reducido > 0 ? round(min($reducido, max(0.0, $aplicadoTotal - $totalOperativo)), 2) : 0.0;
         $motivos = [];
 
         if ($tieneRefund || (float) $pedido->base_grand_total_refunded > 0) {
@@ -394,6 +422,7 @@ class CarteraConsultaService
             unidadesDevueltas: $unidadesDevueltas,
             totalOperativo: $totalOperativo,
             saldoAFavor: $saldoAFavor,
+            cancelado: $cancelado,
         );
     }
 

@@ -1,10 +1,10 @@
 <?php
 
+use ByLopez\Logistica\Services\Despachos\CancelarPendienteService;
 use ByLopez\VentasAsesor\Services\Venta\ConfirmarVentaService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
-use Webkul\Core\Core;
 use Webkul\Product\Helpers\Indexers\Inventory;
 use Webkul\Product\Models\ProductOrderedInventory;
 use Webkul\Sales\Models\Order;
@@ -78,28 +78,28 @@ test('F5-1 confirmar reserva; despacho parcial consume solo lo despachado (reser
     expect(f5_reservado($this))->toBe(0)->and(f5_fisico($this))->toBe(20);
 });
 
-test('F5-2 cancelar el pendiente libera solo la reserva de lo pendiente (pedido sin factura, unico caso que Bagisto deja cancelar)', function () {
-    // La cancelacion nativa exige qty_to_cancel > 0 (ordenado − cancelado − FACTURADO). Con la factura automatica de los metodos de
-    // ByLopez no hay cancelacion posible; aqui se apaga solo para la prueba.
-    DB::table('core_config')->where('code', 'like', 'sales.payment_methods.%.generate_invoice')->update(['value' => '0']);
-    app(Core::class)->getConfigData('sales.payment_methods.moneytransfer.generate_invoice'); // sin cache previa
-
+test('F5-2 cancelar el pendiente (servicio propio) libera solo la reserva de lo pendiente y NO toca el fisico; la cancelacion nativa queda bloqueada', function () {
     $otro = f5_confirmar($this, 5);
     $pedido = f5_confirmar($this, 30);
-    expect(DB::table('invoices')->where('order_id', $pedido->id)->count())->toBe(0)
-        ->and(f5_reservado($this))->toBe(35);
+    expect(f5_reservado($this))->toBe(35);
 
     f5_despachar($pedido, 10);
     expect(f5_reservado($this))->toBe(25)->and(f5_fisico($this))->toBe(40);
 
-    expect(app(OrderRepository::class)->cancel($pedido->id))->not->toBeFalse();
+    // HALLAZGO NATIVO (jornada 2026-10-27): OrderItemRepository::returnQtyToProductInventory devolveria al fisico lo YA despachado
+    // (40 → 50). En un pedido autofacturado de ByLopez Bagisto ni siquiera permite cancelar (qty_to_cancel descuenta lo facturado):
+    // devuelve false y no cambia nada. Si el pedido no estuviera facturado, el servidor corta la cancelacion antes de cambiar nada
+    // (CAN-4 en Log15CancelarPendienteTest).
+    expect(app(OrderRepository::class)->cancel($pedido->id))->toBeFalse()->and(f5_fisico($this))->toBe(40)->and(f5_reservado($this))->toBe(25);
 
-    // Se libera lo pendiente de ESTE pedido (20); quedan las 5 del otro. El fisico se registra tal cual lo deja Bagisto (ver nota).
-    expect(f5_reservado($this))->toBe(5)
+    // Camino correcto: cancela las 20 pendientes de ESTE pedido (variante de configurable con su reserva); quedan las 5 del otro.
+    $admin = f03b_admin('custom', ['logistica', 'logistica.despachos', 'logistica.despachos.cancelar_pendiente']);
+    $c = app(CancelarPendienteService::class)->cancelar($admin, (int) $pedido->id, 'F5: cancelar lo pendiente');
+
+    expect($c->unidades)->toBe(20)
+        ->and(f5_reservado($this))->toBe(5)
+        ->and(f5_fisico($this))->toBe(40)
         ->and($otro->fresh()->status)->not->toBe('canceled');
-    // HALLAZGO NATIVO (no se cambia aqui): OrderItemRepository::returnQtyToProductInventory devuelve al fisico lo YA despachado
-    // (10) al cancelar: 40 → 50 aunque esas prendas salieron. Inalcanzable hoy en ByLopez (factura automatica = sin cancelacion).
-    expect(f5_fisico($this))->toBe(50);
 });
 
 test('F5-3 transicion sin backfill: lo pendiente de un pedido ANTERIOR (sin reserva) cuenta como comprometido en el cerco', function () {
@@ -139,4 +139,28 @@ test('F5-4 despachar un pedido ANTERIOR (sin reserva) no consume las reservas de
 
     // Sin la proteccion, Bagisto restaria 10 de las 15 reservadas por el pedido nuevo (quedarian 5).
     expect(f5_reservado($this))->toBe(15)->and(f5_fisico($this))->toBe(40);
+});
+
+test('F5-5 cancelar el pendiente de un pedido ANTERIOR (sin reserva) no resta las reservas de los pedidos nuevos y quita su compromiso legado', function () {
+    $viejo = f5_confirmar($this, 10);
+    OrderItem::query()->where('order_id', $viejo->id)->whereNotNull('parent_id')->update(['qty_ordered' => 0]);
+    ProductOrderedInventory::query()->where('product_id', $this->variante->id)->update(['qty' => 0]);
+
+    f5_confirmar($this, 15);
+    expect(f5_reservado($this))->toBe(15);
+
+    $admin = f03b_admin('custom', ['logistica', 'logistica.despachos', 'logistica.despachos.cancelar_pendiente']);
+    $c = app(CancelarPendienteService::class)->cancelar($admin, (int) $viejo->id, 'F5: pedido anterior');
+
+    // Se cancelan las 10 de la linea padre; la hija legada (cantidad 0) no tenia reserva, asi que la de los pedidos nuevos queda igual.
+    $linea = OrderItem::query()->where('order_id', $viejo->id)->whereNull('parent_id')->sole();
+    expect($c->unidades)->toBe(10)->and((int) $linea->qty_canceled)->toBe(10)
+        ->and(f5_reservado($this))->toBe(15)->and(f5_fisico($this))->toBe(50)
+        ->and((bool) DB::table('bylopez_lg_cancelacion_lineas')->where('cancelacion_id', $c->id)->value('libero_reserva'))->toBeFalse();
+
+    // El cerco ya no cuenta esas 10 como compromiso legado: vendible = 50 − 15 reservadas = 35.
+    $borrador = f03f_borradorListo($this->cliente->id, $this->asesor, [[$this->configurable, $this->variante, 35]]);
+    f03f_sinCommitPrematuro(fn () => app(ConfirmarVentaService::class)->confirmar($borrador->id, $this->asesor, f03f_total($borrador)));
+
+    expect(f5_reservado($this))->toBe(50);
 });

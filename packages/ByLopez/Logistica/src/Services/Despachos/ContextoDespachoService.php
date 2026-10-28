@@ -40,6 +40,7 @@ class ContextoDespachoService
         protected CondicionDespacho $condicion,
         protected RecaudoPorGuia $recaudoPorGuia,
         protected DisposicionCobroService $disposiciones,
+        protected CancelarPendienteService $cancelaciones,
     ) {}
 
     /** @return array<string, mixed> */
@@ -116,6 +117,8 @@ class ContextoDespachoService
             // C1: base para proponer el recaudo de ESTA guia segun las unidades elegidas (el servidor lo recalcula al despachar).
             'recaudo_guia' => $recaudoGuia,
             'disposicion_cobro' => $disposicion,
+            // Cancelar lo pendiente de despacho (permiso propio; null en solo lectura).
+            'cancelacion' => $modo === 'ver' ? null : $this->cancelaciones->situacion($orderId, $actor),
             'moneda' => $pedido->base_currency_code,
             // Limite REAL de subida del servidor (puede ser menor que el maximo logico de 5 MB): para el mensaje del drawer.
             'limite_subida' => ['archivo' => (string) ini_get('upload_max_filesize'), 'cuerpo' => (string) ini_get('post_max_size')],

@@ -34,6 +34,7 @@ return [
         'despachos' => 'Despachos',
         'despachar' => 'Registrar guía y despachar',
         'autorizar-credito' => 'Autorizar entrega a crédito (despacho sin cobro con saldo pendiente)',
+        'cancelar-pendiente' => 'Cancelar lo pendiente de despacho (libera la reserva; no devuelve stock físico)',
         'guias' => 'Guías',
         'guia-ver' => 'Ver y descargar guías',
         'guia-archivo' => 'Adjuntar o reemplazar el PDF de la guía',
@@ -474,6 +475,15 @@ return [
 
     'despachos' => [
         // F6: pedido que no es contra entrega con dinero sin confirmar.
+        'cancelacion' => [
+            'titulo' => 'Cancelar lo pendiente',
+            'explicacion' => 'Cancela las :unidades unidades que aún no han salido (:valor). Libera su reserva; el stock físico no cambia y lo ya despachado no se toca. El total del pedido no se modifica ni se devuelve dinero: lo cancelado deja de exigirse en Cartera.',
+            'motivo' => 'Motivo de la cancelación',
+            'confirmar' => 'Cancelar pendiente',
+            'cancelando' => 'Cancelando…',
+            'registrada' => 'Se cancelaron :unidades unidades pendientes y se liberó su reserva.',
+            'historial' => 'Cancelado :unidades uds. (:valor) por :actor, :fecha — :motivo',
+        ],
         'disposicion' => [
             'titulo' => 'Falta decidir cómo se cobra',
             'explicacion' => 'Este pedido no es contra entrega y quedan :monto sin confirmar en Cartera. No sale con «no cobrar nada» sin una decisión.',
@@ -1166,6 +1176,11 @@ return [
         'disposicion_cobro_requerida' => 'Este pedido no es contra entrega y todavía tiene dinero sin confirmar: no sale sin decidir cómo se cobra. Espera el pago confirmado en Cartera, o elige «Cobrar al entregar» o «Crédito autorizado». Si el pago cambió desde la última decisión, hay que decidir de nuevo.',
         'disposicion_cobro_invalida' => 'La forma de cobro elegida no es válida.',
         'motivo_devolucion_invalido' => 'El motivo de devolución elegido no está disponible. Elige otro de la lista.',
+        'motivo_cancelacion_requerido' => 'Escribe el motivo de la cancelación (mínimo 5 caracteres).',
+        'cancelacion_sin_pendiente' => 'Este pedido no tiene unidades pendientes de despachar: no hay nada que cancelar.',
+        'cancelacion_con_pagos' => 'Cancelar todo lo pendiente dejaría el pedido sin unidades pero con dinero ya aplicado. Devolver ese dinero es una decisión que aún no se puede hacer desde aquí: revísalo con administración.',
+        'cancelacion_no_disponible' => 'La cancelación del pendiente no está habilitada en esta base de datos.',
+        'cancelacion_nativa_bloqueada' => 'Este pedido ya tiene unidades despachadas: la cancelación estándar devolvería al stock lo que ya salió. Usa «Cancelar pendiente» en Despachos.',
         'disposicion_no_aplica' => 'Este pedido no necesita una decisión de cobro: es contra entrega, ya está pagado o está fuera de Cartera.',
         'motivo_credito_requerido' => 'Escribe el motivo del crédito (quién lo autoriza y por qué).',
         'pagador_requerido' => 'El método de envío no permite deducir quién paga el flete: elígelo y escribe el motivo.',

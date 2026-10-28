@@ -72,6 +72,12 @@ return [
         'route' => $despachos,
         'sort' => 2,
     ], [
+        // Cancelar lo pendiente de despacho (reserva liberada, historial con motivo). Ningun rol la trae por defecto.
+        'key' => 'logistica.despachos.cancelar_pendiente',
+        'name' => 'logistica::app.acl.cancelar-pendiente',
+        'route' => [$despachos, 'admin.logistica.despachos.cancelar_pendiente'],
+        'sort' => 3,
+    ], [
         'key' => 'logistica.guias.archivo',
         'name' => 'logistica::app.acl.guia-archivo',
         'route' => [$despachos, 'admin.logistica.guias.archivo.guardar'],

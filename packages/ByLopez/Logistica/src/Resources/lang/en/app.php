@@ -34,6 +34,7 @@ return [
         'despachos' => 'Dispatches',
         'despachar' => 'Register tracking and dispatch',
         'autorizar-credito' => 'Authorize delivery on credit (dispatch without collection with a pending balance)',
+        'cancelar-pendiente' => 'Cancel what is pending dispatch (releases the reservation; does not return physical stock)',
         'guias' => 'Tracking labels',
         'guia-ver' => 'View and download labels',
         'guia-archivo' => 'Attach or replace the label PDF',
@@ -476,6 +477,15 @@ return [
 
     'despachos' => [
         // F6: order that is not cash on delivery with unconfirmed money.
+        'cancelacion' => [
+            'titulo' => 'Cancel what is pending',
+            'explicacion' => 'Cancels the :unidades units that have not left yet (:valor). Releases their reservation; physical stock does not change and what was dispatched is untouched. The order total is not modified and no money is returned: what is cancelled stops being owed in Cartera.',
+            'motivo' => 'Cancellation reason',
+            'confirmar' => 'Cancel pending',
+            'cancelando' => 'Cancelling…',
+            'registrada' => ':unidades pending units were cancelled and their reservation released.',
+            'historial' => 'Cancelled :unidades units (:valor) by :actor, :fecha — :motivo',
+        ],
         'disposicion' => [
             'titulo' => 'Collection still to be decided',
             'explicacion' => 'This order is not cash on delivery and :monto is still unconfirmed in Cartera. It cannot leave with «collect nothing» without a decision.',
@@ -1168,6 +1178,11 @@ return [
         'disposicion_cobro_requerida' => 'This order is not cash on delivery and still has unconfirmed money: it cannot leave without deciding how it is collected. Wait for the confirmed payment in Cartera, or choose «Collect on delivery» or «Authorized credit». If the payment changed since the last decision, decide again.',
         'disposicion_cobro_invalida' => 'The selected collection option is not valid.',
         'motivo_devolucion_invalido' => 'The selected return reason is not available. Choose another one from the list.',
+        'motivo_cancelacion_requerido' => 'Write the cancellation reason (at least 5 characters).',
+        'cancelacion_sin_pendiente' => 'This order has no units pending dispatch: there is nothing to cancel.',
+        'cancelacion_con_pagos' => 'Cancelling everything pending would leave the order without units but with money already applied. Returning that money cannot be done from here yet: review it with administration.',
+        'cancelacion_no_disponible' => 'Cancelling the pending part is not enabled in this database.',
+        'cancelacion_nativa_bloqueada' => 'This order already has dispatched units: the standard cancellation would return to stock what already left. Use «Cancel pending» in Dispatches.',
         'disposicion_no_aplica' => 'This order does not need a collection decision: it is cash on delivery, already paid or outside Cartera.',
         'motivo_credito_requerido' => 'Write the reason for the credit (who authorizes it and why).',
         'pagador_requerido' => 'The shipping method does not tell who pays the shipping: choose it and write the reason.',

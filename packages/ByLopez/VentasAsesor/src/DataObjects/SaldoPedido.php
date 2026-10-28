@@ -12,7 +12,7 @@ namespace ByLopez\VentasAsesor\DataObjects;
  *
  * C5 · DEVOLUCIONES: `devuelto` = valor historico de lo que Bodega RECIBIO fisicamente (aptas y defectuosas; no los
  * faltantes), derivado de las recepciones confirmadas. El pedido original no cambia: `total` sigue siendo el original y
- * `totalOperativo` (total − devuelto) lo que realmente se exige. `saldoAFavor` = lo pagado por encima de `totalOperativo`
+ * `totalOperativo` (total − devuelto) lo que realmente se exige. Lo CANCELADO (pendiente de despacho cancelado por Logistica, sin Refund) se resta igual: totalOperativo = total − devuelto − cancelado. `saldoAFavor` = lo pagado por encima de `totalOperativo`
  * que se explica por devoluciones; NO es un reembolso ni un pago aplicable (eso es D10): solo queda identificado. *
  * Si el pedido esta FUERA de Cartera (`enCartera = false`) solo se informa el total y el motivo: Cartera no
  * calcula saldos para el historico, ni cuando esta inactiva, ni para pedidos cancelados, cerrados o fraude.
@@ -58,6 +58,8 @@ final class SaldoPedido
         public readonly int $unidadesDevueltas = 0,
         public readonly ?float $totalOperativo = null,
         public readonly float $saldoAFavor = 0.0,
+        /** Valor de lo CANCELADO (pendiente de despacho que nunca salio): tambien deja de exigirse, aparte de lo devuelto (C5). */
+        public readonly float $cancelado = 0.0,
     ) {}
 
     /** Pedido fuera de Cartera: solo total y motivo. */
@@ -101,6 +103,7 @@ final class SaldoPedido
             'unidades_devueltas' => $this->unidadesDevueltas,
             'total_operativo' => $this->totalOperativo ?? $this->total,
             'saldo_a_favor' => $this->saldoAFavor,
+            'cancelado' => $this->cancelado,
             'devolucion_total' => $this->devolucionTotal(),
         ];
     }

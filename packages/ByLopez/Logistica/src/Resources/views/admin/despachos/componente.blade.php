@@ -183,6 +183,7 @@
     url-despachar="{{ route('admin.logistica.despachos.despachar', ['pedido' => '__ID__']) }}"
     url-bodega="{{ route('admin.logistica.despachos.entregar_bodega', ['pedido' => '__ID__']) }}"
     url-disposicion="{{ route('admin.logistica.despachos.disposicion_cobro', ['pedido' => '__ID__']) }}"
+    url-cancelar-pendiente="{{ route('admin.logistica.despachos.cancelar_pendiente', ['pedido' => '__ID__']) }}"
     url-archivo-ver="{{ route('admin.logistica.guias.archivo', ['guia' => '__ID__', 'modo' => 'ver']) }}"
     url-archivo-descargar="{{ route('admin.logistica.guias.archivo', ['guia' => '__ID__', 'modo' => 'descargar']) }}"
     url-archivo-guardar="{{ route('admin.logistica.guias.archivo.guardar', ['guia' => '__ID__']) }}"
@@ -502,6 +503,22 @@
                                         </button>
                                     </div>
                                 </template>
+                            </div>
+
+                            {{-- Cancelar lo pendiente: libera la reserva, no toca el stock fisico ni lo ya despachado. Solo con permiso y motivo. --}}
+                            <div v-if="cancelacion && cancelacion.disponible && cancelacion.permiso && cancelacion.pendientes > 0 && ! cancelacion.bloqueo" class="lgm-sec" data-logistica="cancelar-pendiente">
+                                <details>
+                                    <summary class="lgm-label" style="cursor:pointer">@{{ textos.cancelacion.titulo }}</summary>
+                                    <p class="lgm-nota">@{{ t(textos.cancelacion.explicacion, { unidades: cancelacion.pendientes, valor: precio(cancelacion.valor_pendiente) }) }}</p>
+                                    <label class="lgm-label" for="lgm-canc-motivo">@{{ textos.cancelacion.motivo }}</label>
+                                    <textarea id="lgm-canc-motivo" rows="2" maxlength="500" v-model="canc.motivo" data-logistica="cancelacion-motivo" :class="clasesInput"></textarea>
+                                    <p v-if="canc.error" class="lgm-error" role="alert" data-logistica="cancelacion-error">@{{ canc.error }}</p>
+                                    <div class="flex justify-end">
+                                        <button type="button" class="secondary-button" :disabled="canc.enviando" data-logistica="cancelacion-confirmar" @click="cancelarPendiente">
+                                            @{{ canc.enviando ? textos.cancelacion.cancelando : textos.cancelacion.confirmar }}
+                                        </button>
+                                    </div>
+                                </details>
                             </div>
 
                             {{-- Recogida en bodega: sin transportadora, guia ni PDF. Ni la deuda ni un pago en validacion impiden entregar. --}}
@@ -903,7 +920,7 @@
         app.component('v-logistica-despacho', {
             template: '#v-logistica-despacho-template',
 
-            props: ['urlContexto', 'urlDespachar', 'urlBodega', 'urlDisposicion', 'urlArchivoVer', 'urlArchivoDescargar', 'urlArchivoGuardar', 'urlCorregir', 'urlStockSolicitar', 'urlStockDirecta', 'urlIncidencia', 'urlIncidenciaRegularizar', 'urlIncidenciaRechazar', 'textos', 'nombres'],
+            props: ['urlContexto', 'urlDespachar', 'urlBodega', 'urlDisposicion', 'urlCancelarPendiente', 'urlArchivoVer', 'urlArchivoDescargar', 'urlArchivoGuardar', 'urlCorregir', 'urlStockSolicitar', 'urlStockDirecta', 'urlIncidencia', 'urlIncidenciaRegularizar', 'urlIncidenciaRechazar', 'textos', 'nombres'],
 
             data() {
                 return {
@@ -938,6 +955,7 @@
                     stockForm: this.stockVacio(),
                     // F6: decision de cobro (esperar / cobrar al entregar / credito). Esperar no se envia: es no despachar todavia.
                     dispo: { tipo: 'esperar', motivo: '', enviando: false, error: null },
+                    canc: { motivo: '', enviando: false, error: null, confirmar: false },
                     clasesInput: 'w-full rounded-md border px-3 py-2 text-sm text-gray-600 transition-all hover:border-gray-400 focus:border-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300',
                 };
             },
@@ -1025,6 +1043,10 @@
                 },
 
                 // F6: situacion de la decision de cobro (null en solo lectura o sin Cartera).
+                cancelacion() {
+                    return (this.ctx && this.ctx.cancelacion) || null;
+                },
+
                 disposicion() {
                     return (this.ctx && this.ctx.disposicion_cobro) || null;
                 },
@@ -1636,6 +1658,28 @@
                         .catch(e => {
                             d.error = this.mensajeDeError(e);
                             d.enviando = false;
+                        });
+                },
+
+                cancelarPendiente() {
+                    const c = this.canc;
+
+                    if (c.enviando) {
+                        return;
+                    }
+
+                    c.enviando = true;
+                    c.error = null;
+
+                    this.$axios.post(this.urlCancelarPendiente.replace('__ID__', this.pedidoId), { motivo: c.motivo })
+                        .then(r => {
+                            this.$emitter.emit('add-flash', { type: 'success', message: r.data.mensaje });
+                            this.canc = { motivo: '', enviando: false, error: null, confirmar: false };
+                            this.recargarContexto();
+                        })
+                        .catch(e => {
+                            c.error = this.mensajeDeError(e);
+                            c.enviando = false;
                         });
                 },
 

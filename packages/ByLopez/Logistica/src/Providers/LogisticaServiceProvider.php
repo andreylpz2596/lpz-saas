@@ -13,6 +13,7 @@ use ByLopez\Logistica\Contracts\ReingresaInventario;
 use ByLopez\Logistica\Contracts\ResuelveMunicipio;
 use ByLopez\Logistica\Contracts\SugiereRecaudo;
 use ByLopez\Logistica\Listeners\AsignarCodigoTransportadoraAlDespacho;
+use ByLopez\Logistica\Listeners\BloquearCancelacionNativaConDespachos;
 use ByLopez\Logistica\Listeners\MostrarEntregasEnPedido;
 use ByLopez\Logistica\Services\Despachos\DomiciliarioDeVentaService;
 use ByLopez\Logistica\Support\AccesoGuiaPorPermiso;
@@ -86,6 +87,9 @@ class LogisticaServiceProvider extends ServiceProvider
 
         // Bloque 11: codigo estable de transportadora en despachos nuevos (sin tocar el formulario de Bagisto).
         Event::listen(AsignarCodigoTransportadoraAlDespacho::EVENTO, AsignarCodigoTransportadoraAlDespacho::class.'@handle');
+
+        // La cancelacion nativa no puede reintegrar al stock fisico lo ya despachado: se corta antes de cambiar nada.
+        Event::listen(BloquearCancelacionNativaConDespachos::EVENTO, BloquearCancelacionNativaConDespachos::class.'@handle');
 
         // Bloque 17: boton «Entregas» en la vista nativa del pedido.
         Event::listen(MostrarEntregasEnPedido::EVENTO, MostrarEntregasEnPedido::class.'@handle');

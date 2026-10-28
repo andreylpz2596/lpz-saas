@@ -216,6 +216,19 @@ class OperacionLogisticaInvalidaException extends RuntimeException
     /** El credito autorizado exige un motivo. */
     public const MOTIVO_CREDITO_REQUERIDO = 'motivo_credito_requerido';
 
+    // Cancelacion de lo pendiente de despacho.
+    /** La cancelacion exige un motivo escrito. */
+    public const MOTIVO_CANCELACION_REQUERIDO = 'motivo_cancelacion_requerido';
+
+    /** El pedido no tiene unidades pendientes de despachar (ya se cancelaron o ya se enviaron). */
+    public const CANCELACION_SIN_PENDIENTE = 'cancelacion_sin_pendiente';
+
+    /** El pedido quedaria totalmente cancelado con dinero ya aplicado: devolver ese dinero es una decision humana (D10). */
+    public const CANCELACION_CON_PAGOS = 'cancelacion_con_pagos';
+
+    /** La base no tiene la migracion del historial de cancelaciones. */
+    public const CANCELACION_NO_DISPONIBLE = 'cancelacion_no_disponible';
+
     /** Metodo de envio desconocido: el pagador del flete no se deduce y hay que elegirlo. */
     public const PAGADOR_REQUERIDO = 'pagador_requerido';
 

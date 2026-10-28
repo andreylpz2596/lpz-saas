@@ -27,6 +27,9 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
         // F6: decision de cobro de un pedido que no es contra entrega con dinero sin confirmar.
         Route::post('disposicion-cobro', [DespachosController::class, 'disposicionCobro'])->name('admin.logistica.despachos.disposicion_cobro');
 
+        // Cancelar lo pendiente de despacho (permiso propio; el servicio vuelve a validarlo bajo el bloqueo del pedido).
+        Route::post('cancelar-pendiente', [DespachosController::class, 'cancelarPendiente'])->name('admin.logistica.despachos.cancelar_pendiente');
+
         // Stock insuficiente: BODEGA solicita autorizacion; el Administrador regulariza en una sola operacion.
         Route::post('stock/solicitar', [IncidenciasStockController::class, 'solicitar'])->name('admin.logistica.stock.solicitar');
         Route::post('stock/regularizar', [IncidenciasStockController::class, 'regularizarDirecto'])->name('admin.logistica.stock.directa');

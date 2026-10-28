@@ -5,6 +5,7 @@ namespace ByLopez\Logistica\Http\Controllers\Admin;
 use ByLopez\Logistica\DataObjects\SolicitudDespacho;
 use ByLopez\Logistica\DataObjects\SolicitudRecogida;
 use ByLopez\Logistica\Http\Controllers\Concerns\ResponderOperacionesLogisticas;
+use ByLopez\Logistica\Services\Despachos\CancelarPendienteService;
 use ByLopez\Logistica\Services\Despachos\ConsultaDespachoService;
 use ByLopez\Logistica\Services\Despachos\ContextoDespachoService;
 use ByLopez\Logistica\Services\Despachos\DespachoService;
@@ -119,6 +120,22 @@ class DespachosController extends Controller
                 'disposicion_id' => (int) $d->id,
                 'situacion' => $servicio->situacion($pedido, $this->actor()),
                 'mensaje' => trans('logistica::app.despachos.disposicion.registrada-'.$d->tipo->value),
+            ];
+        });
+    }
+
+    /** Cancela lo pendiente de despacho del pedido (motivo obligatorio). Libera la reserva; no toca el stock fisico. */
+    public function cancelarPendiente(int $pedido, Request $request, CancelarPendienteService $servicio): JsonResponse
+    {
+        return $this->envolver(function () use ($pedido, $request, $servicio) {
+            $c = $servicio->cancelar($this->actor(), $pedido, $request->input('motivo'));
+
+            return [
+                'cancelacion_id' => (int) $c->id,
+                'unidades' => (int) $c->unidades,
+                'valor' => round((float) $c->valor_cancelado, 2),
+                'situacion' => $servicio->situacion($pedido, $this->actor()),
+                'mensaje' => trans('logistica::app.despachos.cancelacion.registrada', ['unidades' => $c->unidades]),
             ];
         });
     }
