@@ -19,7 +19,10 @@ uses(TestCase::class);
 
 function f03gd_asesor(): Admin
 {
-    return f03b_admin('custom', [AutorizacionVentasAsesor::PERMISO_MODULO, BorradorVentaService::PERMISO]);
+    // La pantalla de Roles marca SIEMPRE la clave agrupadora al marcar una hoja (ventas_asesor.pedidos para ventas_asesor.pedidos.create). Sin ella el
+    // menu de Bagisto no puede armarse (`Undefined array key "key"` en Webkul\Core\Menu) y toda pagina del panel responde 500: causa demostrada del
+    // fallo de esta prueba, que armaba un rol que ninguna persona puede crear desde la pantalla de Roles.
+    return f03b_admin('custom', [AutorizacionVentasAsesor::PERMISO_MODULO, 'ventas_asesor.pedidos', BorradorVentaService::PERMISO]);
 }
 
 test('la pantalla renderiza para un asesor con el permiso operativo del modulo', function () {
