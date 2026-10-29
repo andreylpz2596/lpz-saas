@@ -20,10 +20,24 @@ const correos = { admin: 'demo.admin', asesora: 'demo.asesora', umbral: 'demo.um
     const [esc, rol = 'admin', ancho = '1440', tema = 'claro'] = process.argv.slice(2);
     const w = parseInt(ancho, 10);
     const movil = w < 600;
-    const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+    const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true, args: ['--disable-background-networking', '--no-proxy-server'] });
     const ctx = await browser.newContext({ viewport: { width: w, height: movil ? 844 : 900 }, locale: 'es-CO', isMobile: movil, hasTouch: movil, colorScheme: tema === 'oscuro' ? 'dark' : 'light' });
     if (tema === 'oscuro') await ctx.addCookies([{ name: 'dark_mode', value: '1', domain: new URL(base).hostname, path: '/' }]);
     const page = await ctx.newPage();
+    // `php -S` atiende de a UNA conexion: un socket ocioso de Chrome puede dejar una navegacion sin respuesta. Se reintenta UNA vez y el reintento
+    // queda registrado en el resultado (no se oculta ni se sube el tiempo de espera).
+    let reintentos = 0;
+    const irOriginal = page.goto.bind(page);
+    page.goto = async (url, opciones) => {
+        try {
+            return await irOriginal(url, opciones);
+        } catch (e) {
+            if (!/Timeout/.test(String(e))) throw e;
+            reintentos++;
+            console.log('REINTENTO de navegacion:', url);
+            return await irOriginal(url, opciones);
+        }
+    };
     const errores = [];
     const esperados = [];
     const patrones = [];
@@ -62,6 +76,7 @@ const correos = { admin: 'demo.admin', asesora: 'demo.asesora', umbral: 'demo.um
     try {
         res = await require(path.resolve(esc))(page, h);
     } catch (e) {
+        fallo = true;
         console.log('FALLO', e.message.split('\n').slice(0, 6).join('\n'));
         await h.shot('fallo').catch(() => {});
     }
@@ -69,7 +84,7 @@ const correos = { admin: 'demo.admin', asesora: 'demo.asesora', umbral: 'demo.um
     console.log('RUN', runId, '| esperados:', esperados.length, '| INESPERADOS:', errores.length);
     esperados.forEach((e) => console.log('  (esperado) ' + e));
     errores.forEach((e) => console.log('  (INESPERADO) ' + e));
-    fs.writeFileSync(path.join(carpeta, `${nombre}__${rol}__${w}__${tema}.json`), JSON.stringify({ runId, escenario: nombre, rol, ancho: w, tema, fallo, resultado: res ?? null, esperados, inesperados: errores }, null, 1));
+    fs.writeFileSync(path.join(carpeta, `${nombre}__${rol}__${w}__${tema}.json`), JSON.stringify({ runId, escenario: nombre, rol, ancho: w, tema, fallo, reintentos_navegacion: reintentos, resultado: res ?? null, esperados, inesperados: errores }, null, 1));
     await browser.close();
     process.exit(fallo ? 1 : errores.length ? 2 : 0);
 })();

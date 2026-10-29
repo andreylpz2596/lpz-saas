@@ -37,7 +37,7 @@ function recorrido_d(Demo $d): void
     $inter = (int) DB::table('bylopez_lg_transportadoras')->where('codigo', 'INTER_RAPIDISIMO')->value('id');
 
     if (! DB::table('bylopez_lg_transportadoras')->where('id', $inter)->value('liquida_cuenta_corriente')) {
-        $d->form('D2 · El administrador activa «liquida cuenta corriente» en Inter Rapidisimo (configuracion de la demo)', 'admin', "/admin/logistica/transportadoras/{$inter}/capacidades", ['liquida_cuenta_corriente' => 1, 'genera_guia_interna' => 0], '/admin/logistica/transportadoras');
+        $d->form('D2 · El administrador activa «liquida cuenta corriente» en Inter Rapidisimo (configuracion de la demo)', 'admin', "/admin/logistica/transportadoras/{$inter}/capacidades", ['liquida_cuenta_corriente' => 1, 'genera_guia_interna' => 0], '/admin/logistica/transportadoras', [], fn () => (bool) DB::table('bylopez_lg_transportadoras')->where('id', $inter)->value('liquida_cuenta_corriente'));
     }
 
     $o2 = $d->venta($cliente, [[215, [216 => 2]], [425, [426 => 1]]], $nacional(), 'cashondelivery')['orderId'];

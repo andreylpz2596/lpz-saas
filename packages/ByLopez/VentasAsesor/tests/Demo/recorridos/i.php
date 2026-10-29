@@ -99,11 +99,12 @@ function recorrido_i(Demo $d): void
     echo '  Archivo ficticio: '.basename($archivo).' (8 filas, 28 columnas)'."\n";
 
     // --- Cargue 1: crear → validar (worker) → ejecutar (worker) ---
-    // «Ya cargado» = ESTE archivo (mismo sha256) fue ejecutado antes Y las cuatro guías del caso ya tienen su estado reportado.
+    // «Ya cargado» se decide por las cuatro GUÍAS DEL CASO (cada una ya tiene su estado reportado), no por conteos globales ni por el hash: el xlsx se
+    // regenera en cada corrida (otro sha256) pero reporta las mismas guías. El hash solo identifica el archivo de ESTA corrida (se imprime y se compara entre sus dos cargues).
     $hashArchivo = hash_file('sha256', $archivo);
     $mismoArchivoAntes = (int) DB::table('bylopez_cg_cargas')->where('archivo_hash', $hashArchivo)->where('estado', 'completada')->count();
     $casoAntes = $medirCaso();
-    $yaCargado = $mismoArchivoAntes > 0 && $casoAntes['estados'] === 4;
+    $yaCargado = $casoAntes['estados'] === 4;
     echo '  Archivo '.basename($archivo).' sha256 '.substr($hashArchivo, 0, 16).'… · cargas completadas previas con ese hash: '.$mismoArchivoAntes.' · estados reportados de las 4 guías del caso: '.$casoAntes['estados'].'/4 → '.($yaCargado ? 'YA CARGADO (el cargue 1 debe dar 0 aplicadas)' : 'primera carga del caso')."\n";
     $c1 = cargue_completo($d, $admin, $tipoId, $archivo, 'Cargue 1', 4);
     $filas1 = $d->paso('Resultado por fila del cargue 1', $admin->get("/admin/cargues/cargas/{$c1}/filas", ['estado' => 'todas']));

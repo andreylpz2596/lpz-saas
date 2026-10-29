@@ -25,8 +25,14 @@ echo "ids: envio_devolucion=$E1_ENVIO liquidacion=$LIQ inter=$INTER carga=$CARGA
 cap() { # escenario rol ancho tema [ENV=valor ...]
   local esc="$1" rol="$2" ancho="$3" tema="$4"
   shift 4
-  env "$@" node run_demo.cjs "$esc" "$rol" "$ancho" "$tema" 2>&1 | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-400
-  echo
+  # SALTAR="escenario1.cjs escenario2.cjs": omite escenarios que consumen un pedido ya usado (p. ej. despacho_cancelar) al repetir solo lo demas.
+  if [[ " ${SALTAR:-} " == *" $esc "* ]]; then echo "(omitido $esc)"; return; fi
+  local sal cod
+  sal=$(env "$@" node run_demo.cjs "$esc" "$rol" "$ancho" "$tema" 2>&1)
+  cod=$?
+  echo "$sal" | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-400
+  echo " [$esc $rol $ancho $tema => codigo $cod]"
+  [ $cod -eq 0 ] || FALLOS=$((FALLOS+1))
 }
 
 # 1) Cancelacion del pendiente (escritorio claro y movil oscuro)
@@ -48,5 +54,8 @@ cap pagina.cjs admin 1440 claro PAGINA="/admin/ventas-asesor/cartera" PASO=carte
 cap despacho_cancelar.cjs admin 390 oscuro PEDIDO="$PEDIDO_CANCELAR_MOVIL"
 cap pagina.cjs admin 390 oscuro PAGINA="/admin/ventas-asesor/comisiones" PASO=comisiones
 cap pagina.cjs admin 390 oscuro PAGINA="/admin/logistica/cuentas" PASO=cuentas_custodia
+# Mis comisiones (la asesora del ejemplo 998+5)
+cap pagina.cjs umbral 1440 claro PAGINA=/admin/ventas-asesor/comisiones/mias PASO=mis_comisiones
+cap pagina.cjs umbral 390 oscuro PAGINA=/admin/ventas-asesor/comisiones/mias PASO=mis_comisiones
 echo "RUN_ID=$RUN_ID  escenarios con fallo o error inesperado: $FALLOS"
 [ $FALLOS -eq 0 ]

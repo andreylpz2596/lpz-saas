@@ -222,11 +222,11 @@ final class Demo
     }
 
     /** Formulario del panel que DEBE terminar en exito (mensaje flash «success»). */
-    public function form(string $texto, string $rol, string $ruta, array $datos, string $volver, array $archivos = []): array
+    public function form(string $texto, string $rol, string $ruta, array $datos, string $volver, array $archivos = [], ?callable $persistido = null): array
     {
         [$estado, $r] = $this->s[$rol]->formulario($ruta, $datos, $volver, $archivos);
-        // Una redireccion 302 NO es exito por si sola: debe llevar el mensaje «success» del servidor (la persistencia se comprueba despues, en cada recorrido).
-        $ok = $estado === 302 && ($r['flash'] ?? null) === 'success';
+        // Una redireccion 302 NO es exito por si sola: debe llevar el mensaje «success» del servidor (la persistencia se comprueba despues, en cada recorrido). Si la pantalla no muestra mensaje, solo vale con una verificacion de persistencia explicita (`$persistido`).
+        $ok = $estado === 302 && (($r['flash'] ?? null) === 'success' || (($r['flash'] ?? null) === null && $persistido !== null && $persistido()));
         echo sprintf("  [%s] %s (HTTP %d) %s\n", $ok ? 'OK' : 'FALLO', $texto, $estado, $r['mensaje'] ? '«'.mb_substr($r['mensaje'], 0, 140).'»' : '');
 
         if (! $ok) {
