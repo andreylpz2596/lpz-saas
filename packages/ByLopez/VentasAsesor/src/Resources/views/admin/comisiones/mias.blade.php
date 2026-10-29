@@ -91,34 +91,25 @@
                         <span class="va-sub">{{ \Illuminate\Support\Carbon::parse($p['confirmado_en'])->isoFormat('D MMM YYYY, HH:mm') }}</span>
                     </div>
 
-                    <div class="mt-2 overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead>
-                                <tr class="text-left text-xs uppercase text-gray-500">
-                                    <th class="py-1 pr-3">@lang('ventasasesor::comisiones.referencia')</th>
-                                    <th class="py-1 pr-3 text-right">@lang('ventasasesor::comisiones.vendidas')</th>
-                                    <th class="py-1 pr-3 text-right">@lang('ventasasesor::comisiones.comisionables')</th>
-                                    <th class="py-1 pr-3 text-right">@lang('ventasasesor::comisiones.valor')</th>
-                                    <th class="py-1">@lang('ventasasesor::comisiones.estado') · @lang('ventasasesor::comisiones.mis.que-falta')</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($p['lineas'] as $l)
-                                    <tr class="border-t border-slate-100 dark:border-gray-800" data-etapa-linea="{{ $l['etapa'] }}">
-                                        <td class="py-1.5 pr-3">{{ $l['referencia'] ?? '—' }}<span class="va-sub block">{{ $l['sku'] }}</span></td>
-                                        <td class="py-1.5 pr-3 text-right">{{ $l['vendidas'] }}</td>
-                                        <td class="py-1.5 pr-3 text-right">{{ $l['comisionables'] ?? '—' }}</td>
-                                        <td class="py-1.5 pr-3 text-right font-semibold">{{ $dinero($l['importe']) }}</td>
-                                        <td class="py-1.5">
-                                            <span class="va-pill va-pill--sm va-pill--{{ $colorEtapa[$l['etapa']] }}"><span>@lang('ventasasesor::comisiones.mis.etapas.'.$l['etapa'])</span></span>
-                                            @foreach ($l['motivos'] as $m)
-                                                <span class="va-sub block text-amber-700 dark:text-amber-300" data-motivo="{{ $m }}">⚠ {{ trans()->has('ventasasesor::comisiones.motivos.'.$m) ? trans('ventasasesor::comisiones.motivos.'.$m) : trans('ventasasesor::comisiones.motivos.sin_distribucion') }}</span>
-                                            @endforeach
-                                        </td>
-                                    </tr>
+                    {{-- Una tarjeta por linea (no tabla): se lee igual en escritorio y en el celular. --}}
+                    <div class="mt-2 divide-y divide-slate-100 dark:divide-gray-800">
+                        @foreach ($p['lineas'] as $l)
+                            <div class="py-2" data-etapa-linea="{{ $l['etapa'] }}">
+                                <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-medium text-gray-900 dark:text-white">{{ $l['referencia'] ?? '—' }}</p>
+                                        <p class="va-sub">{{ $l['sku'] }} · @lang('ventasasesor::comisiones.vendidas'): {{ $l['vendidas'] }} · @lang('ventasasesor::comisiones.comisionables'): {{ $l['comisionables'] ?? '—' }}</p>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-semibold">{{ $dinero($l['importe']) }}</span>
+                                        <span class="va-pill va-pill--sm va-pill--{{ $colorEtapa[$l['etapa']] }}"><span>@lang('ventasasesor::comisiones.mis.etapas.'.$l['etapa'])</span></span>
+                                    </div>
+                                </div>
+                                @foreach ($l['motivos'] as $m)
+                                    <p class="va-sub mt-1 text-amber-700 dark:text-amber-300" data-motivo="{{ $m }}">⚠ {{ trans()->has('ventasasesor::comisiones.motivos.'.$m) ? trans('ventasasesor::comisiones.motivos.'.$m) : trans('ventasasesor::comisiones.motivos.sin_distribucion') }}</p>
                                 @endforeach
-                            </tbody>
-                        </table>
+                            </div>
+                        @endforeach
                     </div>
                 </div>
             @empty
@@ -141,25 +132,14 @@
                     @if ($q['abonos'] === [])
                         <p class="va-sub mt-2">@lang('ventasasesor::comisiones.mis.sin-abonos')</p>
                     @else
-                        <div class="mt-2 overflow-x-auto">
-                            <table class="w-full text-sm">
-                                <thead><tr class="text-left text-xs uppercase text-gray-500">
-                                    <th class="py-1 pr-3">@lang('ventasasesor::comisiones.mis.fecha')</th>
-                                    <th class="py-1 pr-3">@lang('ventasasesor::comisiones.estado')</th>
-                                    <th class="py-1 pr-3 text-right">@lang('ventasasesor::comisiones.valor')</th>
-                                    <th class="py-1">@lang('ventasasesor::comisiones.mis.medio')</th>
-                                </tr></thead>
-                                <tbody>
-                                    @foreach ($q['abonos'] as $a)
-                                        <tr class="border-t border-slate-100 dark:border-gray-800">
-                                            <td class="py-1.5 pr-3">{{ $a['fecha'] }}</td>
-                                            <td class="py-1.5 pr-3">@lang('ventasasesor::comisiones.mis.tipo-abono.'.$a['tipo'])</td>
-                                            <td class="py-1.5 pr-3 text-right">{{ $dinero($a['monto']) }}</td>
-                                            <td class="py-1.5">{{ $a['medio'] }} {{ $a['referencia'] ? '· '.$a['referencia'] : '' }}</td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
+                        <div class="mt-2 divide-y divide-slate-100 text-sm dark:divide-gray-800">
+                            @foreach ($q['abonos'] as $a)
+                                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-1.5">
+                                    <span>{{ $a['fecha'] }} · @lang('ventasasesor::comisiones.mis.tipo-abono.'.$a['tipo'])</span>
+                                    <span class="font-semibold">{{ $dinero($a['monto']) }}</span>
+                                    <span class="va-sub w-full sm:w-auto">{{ $a['medio'] }} {{ $a['referencia'] ? '· '.$a['referencia'] : '' }}</span>
+                                </div>
+                            @endforeach
                         </div>
                     @endif
                 </div>
