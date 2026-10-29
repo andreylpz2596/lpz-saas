@@ -91,16 +91,27 @@ function h_liquidacion(Demo $d, int $o): void
     esperar_igual('Saldo tras abonar $500', 700.0, $saldo());
     $abono('500', $k1);
     esperar_igual('Reintento con la MISMA clave: sin duplicar (sigue 1 abono, saldo 700)', [1, 700.0], [DB::table('bylopez_va_comision_abonos')->where('liquidacion_id', $liq)->where('tipo', 'abono')->count(), $saldo()]);
-    $d->formRechazo('Abonar mas que el saldo ($800 con saldo $700)', 'admin', "/admin/ventas-asesor/comisiones/liquidaciones/{$liq}/abonos", [
-        'monto' => '800', 'fecha_pago' => now()->toDateString(), 'medio' => 'transferencia', 'referencia' => 'DEMO-EXCESO', 'clave' => Demo::clave(),
-    ], $volver);
+    // Formulario COMPLETO y valido salvo el importe (con comprobante, fecha, medio, referencia y clave nuevos): el rechazo solo puede deberse al saldo.
+    $abonoRechazado = function (string $texto, string $monto, string $referencia, string $fragmento) use ($d, $liq, $volver, $saldo) {
+        $tablas = fn () => [
+            DB::table('bylopez_va_comision_abonos')->where('liquidacion_id', $liq)->count(),
+            DB::table('bylopez_va_comision_abonos')->where('liquidacion_id', $liq)->sum('monto') + 0,
+            DB::table('bylopez_va_comision_liquidaciones')->where('id', $liq)->value('estado'),
+            DB::table('bylopez_va_comision_aplicaciones')->count(),
+        ];
+        $antes = $tablas();
+        $r = $d->formRechazo($texto, 'admin', "/admin/ventas-asesor/comisiones/liquidaciones/{$liq}/abonos", [
+            'monto' => $monto, 'fecha_pago' => now()->toDateString(), 'medio' => 'transferencia', 'referencia' => $referencia, 'observacion' => 'DEMO (ficticio)', 'clave' => Demo::clave(),
+        ], $volver, $fragmento, ['comprobante' => Demo::comprobante()]);
+        esperar_igual("{$texto}: cero escrituras (abonos, suma, estado, aplicaciones)", $antes, $tablas());
+        echo '  Motivo exacto devuelto: «'.$r['mensaje']."»\n";
+    };
+    $abonoRechazado('Abonar mas que el saldo ($800 con saldo $700)', '800', 'DEMO-EXCESO', 'supera el saldo pendiente');
     esperar_igual('El abono excesivo no se registro (saldo 700)', 700.0, $saldo());
     $abono('700', Demo::clave());
     esperar_igual('Saldo final tras el abono de $700', 0.0, $saldo());
-    $d->formRechazo('Abonar con saldo cero', 'admin', "/admin/ventas-asesor/comisiones/liquidaciones/{$liq}/abonos", [
-        'monto' => '1', 'fecha_pago' => now()->toDateString(), 'medio' => 'transferencia', 'referencia' => 'DEMO-EXCESO2', 'clave' => Demo::clave(),
-    ], $volver);
-
+    // Con saldo cero la liquidacion ya no admite pagos: el motivo exacto es el estado/saldo, no un campo faltante.
+    $abonoRechazado('Abonar con saldo cero', '1', 'DEMO-EXCESO2', '');
     $abonos = DB::table('bylopez_va_comision_abonos')->where('liquidacion_id', $liq)->orderBy('id')->pluck('monto')->map(fn ($m) => (float) $m)->all();
     echo '  Historial de abonos: '.json_encode($abonos)."\n";
     guardar_evidencia('H', ['pedido' => $o, 'liquidacion' => $liq, 'comision' => 1200.0, 'abonos' => $abonos, 'saldo_final' => $saldo()]);

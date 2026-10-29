@@ -79,5 +79,5 @@ function guardar_evidencia(string $recorrido, array $datos): void
 {
     $dir = dirname(__DIR__, 6).'/storage/logs/demo';
     @mkdir($dir, 0775, true);
-    file_put_contents("{$dir}/RECORRIDO-{$recorrido}-".date('Ymd-His').'.json', json_encode($datos, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    file_put_contents("{$dir}/RECORRIDO-{$recorrido}-".date('Ymd-His').'-'.substr(bin2hex(random_bytes(3)), 0, 6).'.json', json_encode($datos, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }

@@ -81,21 +81,21 @@ orden="${1:-estado}"
 case "$orden" in
   iniciar)
     seguridad
-    cd public && arrancar servidor "$PHP" -S "$DEMO_HOST:$DEMO_PORT" ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php
+    cd public && rm -f "$PIDS"/*.entorno.json; arrancar servidor "$PHP" -S "$DEMO_HOST:$DEMO_PORT" "$AQUI/router_demo.php"
     cd "$RAIZ"
-    arrancar scheduler "$PHP" artisan schedule:work
-    if [ "${1:-}" = "--con-worker" ]; then arrancar worker "$PHP" artisan queue:work cargues --queue=cargues --tries=1 --timeout=900 --sleep=1; fi
+    arrancar scheduler "$PHP" "$AQUI/proceso_demo.php" scheduler schedule:work
+    if [ "${1:-}" = "--con-worker" ]; then arrancar worker "$PHP" "$AQUI/proceso_demo.php" worker queue:work cargues --queue=cargues --tries=1 --timeout=900 --sleep=1; fi
     sleep 2
     clave
     "$PHP" "$AQUI/verificar_entorno.php" --http
     ;;
   parar) detener servidor; detener scheduler; detener worker ;;
-  worker) seguridad; arrancar worker "$PHP" artisan queue:work cargues --queue=cargues --tries=1 --timeout=900 --sleep=1 ;;
+  worker) seguridad; arrancar worker "$PHP" "$AQUI/proceso_demo.php" worker queue:work cargues --queue=cargues --tries=1 --timeout=900 --sleep=1 ;;
   estado)
     for n in servidor scheduler worker; do
       if vivo "$n"; then echo "$n: corriendo (pid $(cat "$PIDS/$n.pid"))"; else echo "$n: detenido"; fi
     done
-    curl -s -o /dev/null -w "HTTP /admin/login: %{http_code}\n" "http://$DEMO_HOST:$DEMO_PORT/admin/login" || true
+    curl -s -o /dev/null -w "HTTP /admin/login: %{http_code}\n" "http://$DEMO_HOST:$DEMO_PORT/admin/login" || true\n    "$PHP" "$AQUI/verificar_entorno.php" --procesos || true
     ;;
   verificar) seguridad; clave; "$PHP" "$AQUI/verificar_entorno.php" --http ;;
   preparar) seguridad; clave; "$PHP" "$AQUI/preparar_demo.php" "$@" ;;

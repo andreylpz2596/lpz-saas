@@ -52,8 +52,17 @@ function recorrido_i(Demo $d): void
     $fotoD1 = foto($pedidoD1);
     $fotoD2 = foto($pedidoD2);
     mostrar_foto('I0 · D1 (Servientrega, sin cuenta corriente) ANTES del cargue', $fotoD1);
-    $estadosAntes = DB::table('bylopez_lg_guia_estados_proveedor')->count();
-    $eventosAntes = DB::table('bylopez_lg_guia_estado_proveedor_eventos')->count();
+    // El caso se identifica por SUS guías (nunca por conteos globales de la base): estados y eventos se miden solo sobre ellas.
+    $guiasCaso = [$gD2, $gC, $gD1, 'DEMO-IR-PENDIENTE'];
+    $medirCaso = function () use ($guiasCaso) {
+        $ids = DB::table('bylopez_lg_guias')->whereIn('numero_guia', $guiasCaso)->pluck('id')->all();
+
+        return [
+            'estados' => (int) DB::table('bylopez_lg_guia_estados_proveedor')->whereIn('guia_id', $ids)->count(),
+            'eventos' => (int) DB::table('bylopez_lg_guia_estado_proveedor_eventos')->whereIn('guia_id', $ids)->count(),
+            'ultimo_evento' => (int) DB::table('bylopez_lg_guia_estado_proveedor_eventos')->whereIn('guia_id', $ids)->max('id'),
+        ];
+    };
 
     // --- Pedido despachado SIN entrega ni cobro registrados en ByLopez (solo existe el despacho y la guía) ---
     $guiaPend = DB::table('bylopez_lg_guias')->where('numero_guia', 'DEMO-IR-PENDIENTE')->first();
@@ -90,18 +99,25 @@ function recorrido_i(Demo $d): void
     echo '  Archivo ficticio: '.basename($archivo).' (8 filas, 28 columnas)'."\n";
 
     // --- Cargue 1: crear → validar (worker) → ejecutar (worker) ---
-    $yaCargado = $estadosAntes >= 4;
+    // «Ya cargado» = ESTE archivo (mismo sha256) fue ejecutado antes Y las cuatro guías del caso ya tienen su estado reportado.
+    $hashArchivo = hash_file('sha256', $archivo);
+    $mismoArchivoAntes = (int) DB::table('bylopez_cg_cargas')->where('archivo_hash', $hashArchivo)->where('estado', 'completada')->count();
+    $casoAntes = $medirCaso();
+    $yaCargado = $mismoArchivoAntes > 0 && $casoAntes['estados'] === 4;
+    echo '  Archivo '.basename($archivo).' sha256 '.substr($hashArchivo, 0, 16).'… · cargas completadas previas con ese hash: '.$mismoArchivoAntes.' · estados reportados de las 4 guías del caso: '.$casoAntes['estados'].'/4 → '.($yaCargado ? 'YA CARGADO (el cargue 1 debe dar 0 aplicadas)' : 'primera carga del caso')."\n";
     $c1 = cargue_completo($d, $admin, $tipoId, $archivo, 'Cargue 1', 4);
     $filas1 = $d->paso('Resultado por fila del cargue 1', $admin->get("/admin/cargues/cargas/{$c1}/filas", ['estado' => 'todas']));
     mostrar_filas_cargue($filas1);
 
-    esperar_igual($yaCargado ? 'Filas aplicadas por el cargue 1 (base que ya recibió el archivo: 0, el resto sin cambio)' : 'Filas aplicadas por el cargue 1', $yaCargado ? 0 : 4, (int) DB::table('bylopez_cg_carga_datos')->where('carga_id', $c1)->where('estado_final', 'aplicada')->count());
+    esperar_igual($yaCargado ? 'Cargue 1 de un caso ya cargado: 0 aplicadas' : 'Filas aplicadas por el cargue 1', $yaCargado ? 0 : 4, (int) DB::table('bylopez_cg_carga_datos')->where('carga_id', $c1)->where('estado_final', 'aplicada')->count());
     esperar_igual('Filas rechazadas por el cargue 1 (con motivo)', 4, (int) DB::table('bylopez_cg_carga_datos')->where('carga_id', $c1)->where('estado_final', 'rechazada')->count());
     $codigos = DB::table('bylopez_cg_carga_incidencias')->where('carga_id', $c1)->where('severidad', 'error')->pluck('codigo', 'fila_origen')->all();
     ksort($codigos);
     echo '  Motivos de rechazo por fila de origen: '.json_encode($codigos, JSON_UNESCAPED_UNICODE)."\n";
-    esperar_igual('La guía desconocida se rechaza como GUIA_NO_REGISTRADA', true, in_array('GUIA_NO_REGISTRADA', $codigos, true));
-    esperar_igual('El código sin equivalencia se rechaza como TRANSPORTADORA_SIN_EQUIVALENCIA', true, in_array('TRANSPORTADORA_SIN_EQUIVALENCIA', $codigos, true));
+    // Cada rechazo se verifica POR FILA y por su motivo exacto (fila de origen = fila de datos + 1 por el encabezado).
+    esperar_igual('Motivo exacto de cada fila rechazada (guía desconocida, sin equivalencia, estado vacío, fecha ilegible)', [5 => 'GUIA_NO_REGISTRADA', 6 => 'TRANSPORTADORA_SIN_EQUIVALENCIA', 7 => 'OBLIGATORIO_VACIO', 8 => 'FECHA_INVALIDA'], $codigos);
+    $noCargadas = DB::table('bylopez_cg_carga_datos')->where('carga_id', $c1)->where('estado_final', 'rechazada')->pluck('fila_origen')->map(fn ($f) => (int) $f)->sort()->values()->all();
+    esperar_igual('Las filas rechazadas son exactamente la 5, 6, 7 y 8 (ninguna guía del caso quedó rechazada)', [5, 6, 7, 8], $noCargadas);
 
     // Trazabilidad: estado reportado → carga + fila + transportadora efectiva + guía.
     $rep = DB::table('bylopez_lg_guia_estados_proveedor as e')->join('bylopez_lg_guias as g', 'g.id', '=', 'e.guia_id')->orderBy('e.guia_id')
@@ -109,8 +125,9 @@ function recorrido_i(Demo $d): void
     foreach ($rep as $r) {
         echo sprintf("  TRAZA guía %s · %s · «%s» · cargue #%d fila %d · recaudo reportado %s vs interno %s (%s)\n", $r->numero_guia, $r->transportadora_codigo, $r->estado_reportado, $r->carga_id, $r->fila_origen, $r->recaudo_reportado ?? '-', $r->recaudo_interno ?? '-', $r->conciliacion ?? '-');
     }
-    esperar_igual('Estados del proveedor guardados (4 guías)', $yaCargado ? $estadosAntes : $estadosAntes + 4, (int) DB::table('bylopez_lg_guia_estados_proveedor')->count());
-    esperar_igual('Eventos del historial (4)', $yaCargado ? $eventosAntes : $eventosAntes + 4, (int) DB::table('bylopez_lg_guia_estado_proveedor_eventos')->count());
+    $casoTras1 = $medirCaso();
+    esperar_igual('Estados del proveedor de las 4 guías del caso: una fila por guía', 4, $casoTras1['estados']);
+    esperar_igual('Eventos de las 4 guías del caso tras el cargue 1', $yaCargado ? $casoAntes['eventos'] : $casoAntes['eventos'] + 4, $casoTras1['eventos']);
     $d1 = $rep->firstWhere('numero_guia', $gD1);
     esperar_igual('D1: recaudo reportado 25.000 frente a 20.000 internos → discrepancia registrada, NO conciliada', ['25000.00', '20000.00', '5000.00'], [(string) $d1->recaudo_reportado, (string) $d1->recaudo_interno, (string) $d1->diferencia_recaudo]);
     esperar_igual('El estado nuevo sin catalogar se guarda literal', 'Estado nuevo sin catalogar', (string) $rep->firstWhere('numero_guia', $gC)->estado_reportado);
@@ -125,12 +142,12 @@ function recorrido_i(Demo $d): void
     file_put_contents($ruta.'/resultado_completo_cargue_'.$c1.'.csv', (string) $res->getBody());
 
     // --- Cargue 2: EL MISMO archivo → sin duplicar ---
-    $eventosTras1 = (int) DB::table('bylopez_lg_guia_estado_proveedor_eventos')->count();
     $c2 = cargue_completo($d, $admin, $tipoId, $archivo, 'Cargue 2 (mismo archivo)', 4);
     $porEstado2 = DB::table('bylopez_cg_carga_datos')->where('carga_id', $c2)->selectRaw('estado_final, COUNT(*) n')->groupBy('estado_final')->pluck('n', 'estado_final')->all();
     echo '  Cargue 2 por estado: '.json_encode($porEstado2)."\n";
     esperar_igual('Repetir el archivo: 4 filas «sin cambio» y 4 rechazadas otra vez', [4, 4, 0], [(int) ($porEstado2['sin_cambio'] ?? 0), (int) ($porEstado2['rechazada'] ?? 0), (int) ($porEstado2['aplicada'] ?? 0)]);
-    esperar_igual('Repetir el archivo no crea eventos ni estados nuevos', [$eventosTras1, $yaCargado ? $estadosAntes : $estadosAntes + 4], [(int) DB::table('bylopez_lg_guia_estado_proveedor_eventos')->count(), (int) DB::table('bylopez_lg_guia_estados_proveedor')->count()]);
+    esperar_igual('Repetir el archivo no crea eventos ni estados nuevos en las guías del caso (ni mueve el último evento)', $casoTras1, $medirCaso());
+    esperar_igual('Las dos cargas son del MISMO archivo (mismo sha256) y distintas entre sí', [true, true], [DB::table('bylopez_cg_cargas')->whereIn('id', [$c1, $c2])->where('archivo_hash', $hashArchivo)->count() === 2, $c1 !== $c2]);
 
     // --- Separación: lo reportado por la transportadora NO es entrega, pago, custodia ni comisión ---
     $despues = $checksum();

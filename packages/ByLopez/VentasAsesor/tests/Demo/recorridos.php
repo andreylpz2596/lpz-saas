@@ -47,6 +47,22 @@ if (! in_array(parse_url($url, PHP_URL_HOST), ['127.0.0.1', 'localhost'], true))
     exit(1);
 }
 
+// El SERVIDOR debe atender la MISMA base que este proceso: se le pregunta a el (desde su propio proceso), no se infiere de un login.
+try {
+    $srv = json_decode((string) (new Client(['http_errors' => false, 'timeout' => 20]))->get($url.'/__demo/entorno')->getBody(), true);
+} catch (Throwable $e) {
+    $srv = null;
+}
+
+if (! is_array($srv) || ($srv['base_consultada'] ?? null) !== $base) {
+    fwrite(STDERR, "Bloqueado: el servidor en {$url} no confirma atender la base '{$base}' (respondio: ".json_encode($srv['base_consultada'] ?? null)."). Arranque con demo.sh iniciar.
+");
+    exit(1);
+}
+
+echo "Servidor confirma la base '{$base}' (pid {$srv['pid']}).
+";
+
 final class Sesion
 {
     public CookieJar $jar;
@@ -209,7 +225,8 @@ final class Demo
     public function form(string $texto, string $rol, string $ruta, array $datos, string $volver, array $archivos = []): array
     {
         [$estado, $r] = $this->s[$rol]->formulario($ruta, $datos, $volver, $archivos);
-        $ok = $estado === 302 && ($r['flash'] ?? null) !== 'error';
+        // Una redireccion 302 NO es exito por si sola: debe llevar el mensaje «success» del servidor (la persistencia se comprueba despues, en cada recorrido).
+        $ok = $estado === 302 && ($r['flash'] ?? null) === 'success';
         echo sprintf("  [%s] %s (HTTP %d) %s\n", $ok ? 'OK' : 'FALLO', $texto, $estado, $r['mensaje'] ? '«'.mb_substr($r['mensaje'], 0, 140).'»' : '');
 
         if (! $ok) {
@@ -220,9 +237,9 @@ final class Demo
     }
 
     /** Formulario que DEBE ser rechazado por el servidor (mensaje flash «error» con $fragmento). */
-    public function formRechazo(string $texto, string $rol, string $ruta, array $datos, string $volver, string $fragmento = ''): array
+    public function formRechazo(string $texto, string $rol, string $ruta, array $datos, string $volver, string $fragmento = '', array $archivos = []): array
     {
-        [$estado, $r] = $this->s[$rol]->formulario($ruta, $datos, $volver);
+        [$estado, $r] = $this->s[$rol]->formulario($ruta, $datos, $volver, $archivos);
         $ok = ($r['flash'] ?? null) === 'error' && ($fragmento === '' || stripos((string) $r['mensaje'], $fragmento) !== false);
         echo sprintf("  [%s] %s → rechazo esperado (HTTP %d) «%s»\n", $ok ? 'OK' : 'FALLO', $texto, $estado, mb_substr((string) $r['mensaje'], 0, 150));
 

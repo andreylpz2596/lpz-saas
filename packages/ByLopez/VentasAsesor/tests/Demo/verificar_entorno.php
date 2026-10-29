@@ -76,5 +76,53 @@ if (in_array('--http', $argv, true)) {
     }
 }
 
+// --- Configuracion EFECTIVA de cada proceso en marcha, informada desde dentro de el (no inferida por un login) ---
+$propia = $base;
+$compara = function (string $nombre, array $e) use (&$fallos, $propia) {
+    $problemas = [];
+    $e['base_consultada'] === $propia || $problemas[] = 'base '.$e['base_consultada'].' != '.$propia;
+    $e['base_configurada'] === $propia || $problemas[] = 'base configurada '.$e['base_configurada'];
+    $e['config_cacheada'] === false || $problemas[] = 'config cacheada';
+    $e['cache'] === getenv('CACHE_STORE') || $problemas[] = 'cache '.$e['cache'];
+    $e['cola'] === (getenv('QUEUE_CONNECTION') ?: 'sync') || $problemas[] = 'cola '.$e['cola'];
+    $e['correo'] === 'log' || $problemas[] = 'correo '.$e['correo'];
+    (string) $e['comisiones_desde'] === (string) getenv('VENTASASESOR_COMISIONES_FECHA_INICIO') || $problemas[] = 'comisiones_desde '.$e['comisiones_desde'];
+    (string) $e['c6_desde'] === (string) getenv('LOGISTICA_RECAUDO_DESDE_COBRO') || $problemas[] = 'c6_desde '.$e['c6_desde'];
+    echo sprintf("%-10s pid %-7s base consultada %-28s cache %-6s cola %-5s %s
+", $nombre, $e['pid'], $e['base_consultada'], $e['cache'], $e['cola'], $problemas === [] ? 'OK' : 'DIFIERE: '.implode('; ', $problemas));
+    $problemas === [] || $fallos[] = 'proceso_'.$nombre;
+};
+
+if (in_array('--http', $argv, true) || in_array('--procesos', $argv, true)) {
+    $url = 'http://'.getenv('DEMO_HOST').':'.getenv('DEMO_PORT');
+    $h = new Client(['base_uri' => $url, 'http_errors' => false, 'timeout' => 20]);
+
+    try {
+        $r = $h->get('/__demo/entorno');
+        $j = $r->getStatusCode() === 200 ? json_decode((string) $r->getBody(), true) : null;
+    } catch (Throwable) {
+        $j = null;
+    }
+
+    $j ? $compara('servidor', $j) : print("servidor   no responde en /__demo/entorno (¿detenido, o se arranco sin router_demo.php?)
+");
+
+    foreach (['scheduler', 'worker'] as $n) {
+        $f = $raiz."/storage/logs/demo/pids/{$n}.entorno.json";
+        $pid = $raiz."/storage/logs/demo/pids/{$n}.pid";
+
+        if (is_file($f) && is_file($pid)) {
+            $compara($n, json_decode((string) file_get_contents($f), true));
+        } else {
+            echo sprintf("%-10s sin registro de entorno (no esta corriendo o se lanzo sin proceso_demo.php)
+", $n);
+        }
+    }
+
+    if (in_array('--procesos', $argv, true)) {
+        exit($fallos === [] ? 0 : 1);
+    }
+}
+
 echo $fallos === [] ? "ENTORNO OK\n" : 'ENTORNO CON DIFERENCIAS: '.implode(', ', $fallos)."\n";
 exit($fallos === [] ? 0 : 1);

@@ -10,6 +10,8 @@ set -a
 . ../demo.env
 set +a
 [ -n "${DEMO_PASSWORD:-}" ] || DEMO_PASSWORD="$(tr -d '\r\n' < "$DEMO_CLAVE_ARCHIVO")"
+export RUN_ID="${RUN_ID:-$(date +%Y%m%d%H%M%S)-$RANDOM}"
+FALLOS=0
 export DEMO_PASSWORD BASE_URL="http://$DEMO_HOST:$DEMO_PORT"
 BIN="${MYSQL_BIN:-/c/xampp/mysql/bin}"
 q() { "$BIN/mysql" -uroot -N -e "$1" "$DB_DATABASE" 2>/dev/null; }
@@ -46,3 +48,5 @@ cap pagina.cjs admin 1440 claro PAGINA="/admin/ventas-asesor/cartera" PASO=carte
 cap despacho_cancelar.cjs admin 390 oscuro PEDIDO="$PEDIDO_CANCELAR_MOVIL"
 cap pagina.cjs admin 390 oscuro PAGINA="/admin/ventas-asesor/comisiones" PASO=comisiones
 cap pagina.cjs admin 390 oscuro PAGINA="/admin/logistica/cuentas" PASO=cuentas_custodia
+echo "RUN_ID=$RUN_ID  escenarios con fallo o error inesperado: $FALLOS"
+[ $FALLOS -eq 0 ]

@@ -28,6 +28,8 @@ module.exports = async (page, h) => {
     r.reabre_vacio = r.motivo_tras_reabrir === '';
 
     // 500 simulado en el NAVEGADOR (el servidor no recibe la peticion): el formulario conserva el texto y muestra el error.
+    h.esperar(/http 500\] POST .*cancelar-pendiente/);
+    h.esperar(/Failed to load resource.*500/);
     await page.route('**/cancelar-pendiente', (ruta) => ruta.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false, codigo: 'error_inesperado', mensaje: 'No pudimos completar la operación por un error inesperado. Referencia: SIMULADO.' }) }));
     await page.fill('[data-logistica="cancelacion-motivo"]', 'DEMO: el cliente desiste de las unidades pendientes');
     await page.click('[data-logistica="cancelacion-confirmar"]');
