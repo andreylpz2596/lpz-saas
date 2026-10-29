@@ -194,3 +194,121 @@ Tipo creado, confirmado y activado por los servicios del módulo (sin cambios de
 ### 7.5 Paquete de evidencia
 
 ZIP único sin secretos (ver la entrega): este documento, ensayo A–J, regresión con el detalle de fallos, evidencias de CONC-4 / CVD / F6, el archivo ficticio de Cargues con su resultado y no cargadas, los scripts, las capturas principales, el ejemplo 998 + 5 y un `INDICE.md` caso → esperado → observado.
+
+
+---
+
+## 8. Seguimiento 2026-10-29 · confiabilidad de las pruebas, vista de la asesora y regresión contrastada
+
+Estados usados: **IMPLEMENTADO** (código en commits locales) · **PROBADO** (con prueba ejecutada y resultado guardado) · **SIMULADO** (reproducido en la demo con datos ficticios, no es operación real) · **PENDIENTE** (no hecho o bloqueado por una decisión de negocio).
+
+### 8.0 Estado por entorno
+
+| Cambio de esta tanda | Código | dev (`lpz_saas`) | testing | demo (`lpz_saas_demo_20261028c`) | Producción |
+|---|---|---|---|---|---|
+| «Mis comisiones» (ruta `comisiones/mias`, servicio, vista) | IMPLEMENTADO · PROBADO (Com05, recorrido K) | Disponible; **sin comisiones activas** (`null`) y el rol real «ASESOR VENTAS» **no tiene** la hoja `view_own` hasta que se la asignen | PROBADO | PROBADO por HTTP y por Chrome (escritorio claro, móvil oscuro); el rol demo recibe la hoja solo en la base demo | No tocado |
+| Redirección de «Comisiones» a «Mis comisiones» para quien solo ve lo propio | IMPLEMENTADO · PROBADO (K) | Igual | — | PROBADO | No tocado |
+| Servidor/scheduler/worker informan su base real (`/__demo/entorno`, `*.entorno.json`) | IMPLEMENTADO · PROBADO | No aplica (solo demo) | No aplica | PROBADO | No aplica |
+| Recorridos A–K en base limpia con comprobación estricta | IMPLEMENTADO · PROBADO | — | — | PROBADO · **SIMULADO** (datos ficticios) | — |
+| Corrección del doble `ShippedNotification` (paquete `bagisto-eu/pickup`) | IMPLEMENTADO · PROBADO (Rt04b1a: 30/30) | Aplica al despliegue futuro | PROBADO | PROBADO | **No desplegado** (ver riesgo en 8.6) |
+| Migración de cancelaciones | Ya aplicada en dev el 2026-10-28 13:12 (lote 71); **no se repitió** | Aplicada | Aplicada | Aplicada | No aplicada |
+| Comisiones y C6 | Código existente | **Apagados** | Apagados salvo por prueba | Activos **solo** por el entorno de los procesos de la demo | Apagados |
+| Políticas D3/D4/D5/D10/D12 | **PENDIENTE** (propuesta en el doc 27) | Bloqueadas | Bloqueadas | Bloqueadas | Bloqueadas |
+
+### 8.1 Confiabilidad de las pruebas (qué estaba mal y cómo quedó)
+
+| Punto | Qué había | Qué se hizo | Resultado |
+|---|---|---|---|
+| Abono mayor al saldo | El rechazo se probaba con un formulario **sin comprobante**: podía rechazarse por otra causa | El formulario ahora es válido en todo salvo el importe (con comprobante, fecha, medio, referencia y clave nueva), se exige el texto exacto «El abono supera el saldo pendiente de la liquidación.» y se comprueba **cero escrituras** (abonos, suma, estado y aplicaciones antes = después). Mismo trato para «abonar con saldo cero» | PROBADO en base limpia (recorrido H) |
+| «302 = éxito» | `form()` aceptaba cualquier 302 sin mensaje de error | Ahora exige el mensaje `success` del servidor o, si la pantalla no muestra mensaje, una **comprobación de persistencia explícita** (solo se usa en «activar cuenta corriente de Inter»; la regla de Cartera y de comisiones sí muestra mensaje). Esto sacó a la luz que ese paso no mostraba mensaje y el recorrido D falló una vez; se corrigió la prueba, no la regla | PROBADO (D pasa en la segunda corrida, queda el fallo en el registro) |
+| Runner visual | Terminaba con código 0 aunque el escenario fallara; `capturas_finales.sh` decía «0 fallos» con **4 timeouts** | `run_demo.cjs`: código 0 todo bien · 1 el escenario falló · 2 error inesperado del navegador (los esperados se declaran con `h.esperar()`; el 500 simulado de cancelar se declara) · 3 el servidor no confirma una base demo. `capturas_finales.sh` suma los códigos y termina distinto de cero | PROBADO (escenario inexistente → 1; aislado → 0; la segunda pasada reportó 8 fallos reales) |
+| Evidencia sobrescrita | Las capturas usaban un nombre fijo | Cada ejecución usa `RUN_ID` y su carpeta `capturas/<RUN_ID>/` (más un JSON con resultado, errores esperados e inesperados y **reintentos de navegación**); los JSON de los recorridos llevan hora y sufijo aleatorio | IMPLEMENTADO |
+| Cargues «ya cargado» | Se deducía por conteos globales | El caso se identifica por **sus cuatro guías** (estados y eventos medidos solo sobre ellas), cada rechazo se verifica **por fila y motivo** (5 `GUIA_NO_REGISTRADA`, 6 `TRANSPORTADORA_SIN_EQUIVALENCIA`, 7 `OBLIGATORIO_VACIO`, 8 `FECHA_INVALIDA`), y repetir el archivo no mueve el último evento ni crea estados | PROBADO: primera carga (4 aplicadas, 4 rechazadas) y repetición sobre un caso ya cargado (0 aplicadas, 4 «sin cambio») |
+
+Dos fallos propios de esta tanda, dejados a la vista: (a) la primera repetición del recorrido I falló en el control de CHECKSUM porque la lancé **mientras corría V** en la misma base (V crea pedidos); repetida sola, pasa; (b) la primera edición del runner no marcaba `fallo = true` y por eso «el escenario inexistente» devolvía 0: lo detecté al probarlo y lo corregí.
+
+**Dónde están las capturas:** quedaron repartidas en tres ejecuciones con `RUN_ID` propio, porque `despacho_cancelar` y `despacho_f6` consumen su pedido y no pueden repetirse: `final-20261028c` (cancelación escritorio y móvil con su 500 simulado declarado, F6 tras devolución, devolución recibida, Entregas, Cartera, móvil de Comisiones y de Cuentas; en esa pasada el agregador de códigos aún no existía, por eso se comprobó el JSON de cada escenario: `fallo=false`, 0 errores inesperados), `final-20261028c-2` (pasada con 8 fallos reales, conservada) y `final-20261028c-3` (Cargues, Cuentas, Liquidación/conciliación, Comisiones, Cartera y **Mis comisiones**, 0 fallos).
+
+**Límite de las capturas:** `php -S` atiende una conexión a la vez y Chrome deja sockets ociosos; algunas navegaciones superaban 30 s sin respuesta. El runner **reintenta una vez** y deja el reintento en el JSON (5 en la última pasada). No se subió el tiempo de espera. No sustituye una prueba con un servidor real.
+
+### 8.2 Entorno y automatización
+
+- `/__demo/entorno` (solo 127.0.0.1) lo sirve el propio proceso del servidor; scheduler y worker escriben `pids/<nombre>.entorno.json` **desde su proceso** al arrancar. `demo.sh estado` y `verificar` comparan base consultada (`SELECT DATABASE()`), caché de configuración, caché, cola, correo y fechas de activación con `demo.env`; los recorridos y el runner **se niegan a correr** si el servidor no confirma la misma base. Autenticar a `demo.admin` ya no se usa como prueba de la base.
+- `demo.sh` funciona desde cualquier directorio (probado desde `/tmp`) y detecta `bootstrap/cache/config.php`.
+- Scheduler: `probar_scheduler.php` con el proceso nuevo — pendiente marcada 22:33:57, procesada por el scheduler a las 22:35:12, **sin botón manual**.
+- Migración de cancelaciones: ya aplicada en dev (lote 71, 2026-10-28 13:12 con respaldo previo); verificada con `migrate:status` y **no repetida**.
+
+### 8.3 «Mis comisiones» (vista de la asesora)
+
+Ruta `admin.ventas_asesor.comisiones.mias` (clave ACL `ventas_asesor.comisiones.view_own`), servicio `MisComisionesService`, vista en el diseño de Bagisto (`x-admin::layouts`, tarjetas, píldoras, claro/oscuro).
+
+- **Etapas que no se solapan.** Cada peso de cada línea del mes está en **una sola etapa**: estimada bloqueada · habilitada (por liquidar) · liquidada por pagar · pagada. Su suma es la comisión del mes. Ejemplo 998 + 5: $1.200 aparece bloqueado, luego habilitado, luego $700 por pagar + $500 pagado, luego $1.200 pagado; el total del mes **siempre** es $1.200 (no $2.400).
+- **Bloqueos con motivo comprensible:** cada línea bloqueada muestra los motivos del servicio de elegibilidad (unidades sin despachar, envío sin validar, saldo pendiente, recaudo en custodia, política pendiente…) con su texto; las primeras unidades del umbral muestran «aún estás dentro de las primeras unidades del umbral».
+- **Sin costos:** ni costo, ni base, ni margen aparecen (verificado en la página renderizada).
+- **Aislamiento en servidor:** el servicio no recibe ningún identificador de asesor; usa al usuario autenticado. `?asesor=` y `?pedido=` ajenos no cambian a quién se consulta (404 en el detalle ajeno). Aprobar, liquidar, abonar, reevaluar y cambiar acuerdos responden 401 (Bouncer) o 403 (servicio) y **no escriben nada** (PROBADO en Com05 MC-3 y en el recorrido K).
+- Fórmula y política sin cambios: (venta neta − costo) × porcentaje histórico; las políticas pendientes siguen bloqueando.
+- Límite: la traducción al inglés copia el texto en español (el módulo solo opera en español); los demás idiomas de Bagisto no se tradujeron.
+- En dev el rol real «ASESOR VENTAS» **no se modificó**: darle la hoja `view_own` es una decisión de administración (en la demo se le agrega solo en la base demo).
+
+### 8.4 Políticas pendientes
+
+Documento `27_PROPUESTAS_POLITICAS_COMISIONES_Y_DINERO_TRANSPORTADORAS.md`: recomendación, ejemplo numérico y efecto sobre comisiones pagadas de D3, D5, D4, D10/D6 y D12, más cómo se acredita hoy el dinero de transportadoras sin cuenta corriente (bloquea; propuesta de remesa manual con soporte) y la compensación de fletes (D12, **sin aprobación documentada**: los recorridos B y D2 son escenarios de prueba). Nada se activó.
+
+### 8.5 Validación funcional (una prueba puntual por cambio)
+
+| Cambio | Prueba | Resultado |
+|---|---|---|
+| Abono / comprobante / cero escrituras | Recorrido H (base limpia) | PROBADO |
+| 302 con persistencia | Recorridos A–K | PROBADO |
+| Runner visual / evidencia única | Escenario inexistente → 1; páginas → 0; `RUN_ID` por carpeta | PROBADO |
+| Cargues por guías del caso | Recorrido I (primera carga y repetición) | PROBADO |
+| Entorno y scheduler | `demo.sh verificar`, `probar_scheduler.php` | PROBADO |
+| Mis comisiones | Com05 (3), recorrido K (18 verificaciones), capturas | PROBADO |
+| Local/nacional, transferencia/contraentrega, recogida, pago reportado → confirmado/rechazado, parciales sin recaudo duplicado, entrega → validación → custodia → liquidación → conciliación | Recorridos A–G (base limpia, ver 8.6) | PROBADO · SIMULADO |
+| Devolución registrada vs recibida e invalidación de F6 | Recorrido J + Log16 | PROBADO |
+| Cancelación contra despacho (procesos paralelos) | `CancelarVsDespacharConcurrenteTest` | ver 8.6 |
+| CONC-4 bajo carga y reintento | `PagosConcurrentesTest` | ver 8.6 |
+| Comisión 998 + 5 → $1.200, abonos $500/$700, reintento, exceso | Recorrido H + Com04 (8) | PROBADO |
+| Permisos por rol | Com05 MC-3, recorrido K, F (cancelar), ACL unit (11 + 32) | PROBADO |
+| Escritorio / móvil / claro / oscuro | Capturas `final-20261028c-*` (desbordamiento horizontal 0 px) | PROBADO en Chrome headless |
+| **Safari en iPhone real** | — | **NO realizado** (ver 8.8) |
+
+### 8.6 Regresión contrastada (2026-10-29)
+
+Se corrió con la demo encendida (servidor, scheduler y worker en otra base).
+
+| Batería | Resultado |
+|---|---|
+| Logística completa (`tests/`) | **147 pasan, 0 fallan** en la segunda corrida (la primera, antes de las correcciones de esta tanda, tuvo 1 fallo intermitente por deadlock en `STK-6`, que pasó 3 de 3 aislado y pasó en la segunda corrida completa) |
+| VentasAsesor Unit | **140 pasan, 0 fallan** |
+| VentasAsesor Feature (incluye Pag*, Com01–Com05, Fase03*, Rt04*) | 696 pasan, 44 fallan en la corrida larga; ver abajo |
+| Concurrencia (una suite a la vez) | **19 de 19 pasan**: ConfirmacionConcurrente 9, PagosConcurrentes 7 (incluye CONC-4 y CONC-4b), CancelarVsDespachar 3 (CVD-1/2/3). CONC-4 se repitió 6 veces seguidas, todas OK (`conc4_bucle/bucle_20261029.txt`); además de las 14 de ayer y del fallo original **reproducido** con su diagnóstico (doc 26 §7.2) |
+| Recorridos A–K en base limpia | A 17 · B 36 · C 19 · D 46 (incluye 1 fallo de la primera corrida, ver 8.1) · E 41 · F 36 · G 37 · H 37 · I 37 (más 30 en la repetición sobre caso ya cargado) · J 47 · K 18 · PREP 2 — todos `[OK]` |
+
+**Contraste de los 44 fallos** (no se llamó «preexistente» a ninguno solo por el nombre):
+
+- **39 persisten por causas que se compararon**: contra la corrida de ayer coinciden las **causas** en las 31 cabeceras agrupadas (mismo tipo de error y mismo texto) y ayer se corrieron los mismos archivos contra el **respaldo `respaldo/pre-jornada-2026-10-26` en una copia aislada fuera del repositorio**, donde fallaban las mismas pruebas con la misma causa (`comparacion_actual_vs_respaldo.txt`). Siguen siendo expectativas desactualizadas, contaminación de datos (6.360 pagos clonados) y pruebas por investigar, con la tabla `tabla_regresion.md` (causa → impacto → acción).
+- **2 se corrigieron con causa demostrada** (`Fase03gdPantallaNuevaVentaTest`): el rol de prueba no tenía la clave agrupadora `ventas_asesor.pedidos`; sin ella el menú de Bagisto no se puede armar (`Undefined array key "key"` en `Webkul\Core\Menu`) y **toda** página responde 500. La pantalla de Roles siempre marca la agrupadora. Se añadió al rol de la prueba; no se tocó ninguna aserción. El mismo mecanismo explica `AccesoInicioTest` («el menú muestra el módulo…»).
+- **1 era un defecto real y se corrigió** (`Rt04b1aGuardNotificacionesTest`): el paquete de terceros `bagisto-eu/pickup` escucha también `sales.shipment.save.after` y envía **otra vez** `ShippedNotification` en envíos normales, además del aviso del Shop: **cada despacho podía llegar duplicado al cliente**. Ya ocurría en el respaldo. La subclase de ByLopez del listener del paquete ahora solo conserva el aviso de recogida; `vendor` no se tocó. Prueba: Rt04b1a 30/30 y comprobación de la cola (dos mails para la misma orden antes, uno después). **Riesgo:** en producción el duplicado sigue ocurriendo hasta que este código se despliegue.
+- **2 nuevos fallos de la corrida larga que no se reproducen solos**: `Fase03cSolicitudBorradorTest` («carrito VACIO») falló con `Deadlock 1213` y en Logística `Log05 STK-6` también falló con `Deadlock 1213`; **ambos pasan 3 de 3 ejecutados aislados**. Origen **no demostrado** (contención durante la corrida de 2 h; no se descarta otro proceso sobre `lpz_saas_testing`). Por política de esta jornada los deadlocks ya se responden 409 en las rutas de Cartera y Logística; en las pruebas son del montaje. **Quedan abiertos como intermitentes.**
+- **1 sensible a la carga**: `Fase03gbNuevaVentaTest · 03G-B2` mide tiempo (< 700 ms): con la demo encendida falló 2 de 3 (779 y 791 ms) y con la demo detenida pasó 3 de 3. Se recomienda no correrlo con otros procesos en marcha.
+- **JUnit incompleto:** el XML de esta corrida solo recogió 194 de los 740 casos de Feature (Pest dejó de escribirlo); las cifras de esta sección salen del **texto completo** de la corrida (`va_feature_20261029.txt`). El XML se guarda como está.
+
+### 8.7 Dinero y comisiones sin configuración artificial
+
+- Ningún recorrido ni prueba cambia fechas de comisiones, activa C6 por configuración compartida ni toca los acuerdos reales. Las comisiones y C6 solo existen para los procesos que arrancan con `demo.env`.
+- Honesto sobre D2: el recorrido activa «liquida cuenta corriente» de Inter Rapidísimo **por la pantalla de administración** de la base demo para representar una transportadora **con** cuenta; el recorrido D1 usa Servientrega **sin** cuenta y demuestra el bloqueo `recaudo_sin_cuenta_corriente`. Esa bandera no es prueba de dinero; el dinero se concilia en liquidación cerrada.
+
+### 8.8 Pasos breves para validar Safari en un iPhone real (**no realizados**)
+
+1. Levantar la demo en la computadora (`demo.sh iniciar --con-worker`) y abrir el puerto en la red local o usar la URL pública de pruebas que Camilo prefiera (la demo escucha solo en 127.0.0.1; **no se expuso a Internet**).
+2. En Safari del iPhone: entrar como `demo.asesora`/`demo.umbral`, abrir **Comisiones → Mis comisiones**: comprobar que no hay scroll horizontal y que las cuatro etapas y los motivos se leen.
+3. Como `demo.admin`, abrir **Logística → Despachos**, tocar un pedido (drawer lateral) y desplazar: el drawer debe desplazarse por dentro y el fondo no debe moverse; repetir con el drawer **Cancelar lo pendiente** y con un modal de confirmación.
+4. Girar el teléfono (vertical/horizontal) con el drawer abierto y confirmar que el contenido sigue visible.
+5. Anotar el modelo de iPhone, la versión de iOS y capturas de cualquier salto de scroll. La auditoría de scroll (`project_ui_audit_scroll`, causa del contenedor `overflow-x-hidden` de Bagisto) **sigue sin corrección** y es el principal sospechoso.
+
+### 8.9 Pendiente o bloqueado
+
+- **Decisión de negocio:** D3, D4, D5, D6, D10 y D12 (doc 27); remesa manual para transportadoras sin cuenta corriente; si la hoja `view_own` se asigna al rol real de asesoras en dev/producción.
+- **Técnico:** 39 fallos por expectativas desactualizadas o datos contaminados (tabla); deadlocks intermitentes sin origen demostrado; prueba de Safari real; duplicado de aviso de envío corregido pero **no desplegado**; el menú de Bagisto se rompe con un rol guardado con una hoja y sin su agrupadora (comportamiento del núcleo, no modificable aquí).
+- **Evidencia:** el cargue real de Camilo con el archivo oficial de 99 Envíos sigue pendiente (todo lo de Cargues es con archivo ficticio).
