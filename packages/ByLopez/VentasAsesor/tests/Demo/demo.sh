@@ -132,11 +132,11 @@ case "$orden" in
     # Ensayo general: PREP, recorridos A-J y preparacion visual V (cada uno imprime su conciliacion y falla si algun numero no coincide).
     seguridad; clave
     [ -n "${DEMO_PASSWORD:-}" ] || { echo "Falta DEMO_PASSWORD o DEMO_CLAVE_ARCHIVO" >&2; exit 2; }
-    for r in PREP A B C D E F G H I J V; do
+    for r in PREP A B C D E F G H I J K V; do
       echo; echo "######## $r"
       "$PHP" "$AQUI/recorridos.php" "$r" || { echo "FALLO el recorrido $r" >&2; exit 1; }
     done
     ;;
   php) seguridad; clave; "$PHP" "$@" ;;
-  *) echo "Uso: demo.sh <crear-base|preparar|preparar-cargues|iniciar [--con-worker]|ensayo|recorridos A..J|todos|estado|verificar|parar|worker|php script.php>" >&2; exit 1 ;;
+  *) echo "Uso: demo.sh <crear-base|preparar|preparar-cargues|iniciar [--con-worker]|ensayo|recorridos A..K|todos|estado|verificar|parar|worker|php script.php>" >&2; exit 1 ;;
 esac

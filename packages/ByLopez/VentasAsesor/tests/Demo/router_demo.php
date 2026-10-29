@@ -10,6 +10,7 @@
 */
 
 use Illuminate\Contracts\Console\Kernel;
+
 $ruta = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 
 if ($ruta === '/__demo/entorno' && in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)) {

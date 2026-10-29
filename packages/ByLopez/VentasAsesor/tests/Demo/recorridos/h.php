@@ -92,7 +92,7 @@ function h_liquidacion(Demo $d, int $o): void
     $abono('500', $k1);
     esperar_igual('Reintento con la MISMA clave: sin duplicar (sigue 1 abono, saldo 700)', [1, 700.0], [DB::table('bylopez_va_comision_abonos')->where('liquidacion_id', $liq)->where('tipo', 'abono')->count(), $saldo()]);
     // Formulario COMPLETO y valido salvo el importe (con comprobante, fecha, medio, referencia y clave nuevos): el rechazo solo puede deberse al saldo.
-    $abonoRechazado = function (string $texto, string $monto, string $referencia, string $fragmento) use ($d, $liq, $volver, $saldo) {
+    $abonoRechazado = function (string $texto, string $monto, string $referencia, string $fragmento) use ($d, $liq, $volver) {
         $tablas = fn () => [
             DB::table('bylopez_va_comision_abonos')->where('liquidacion_id', $liq)->count(),
             DB::table('bylopez_va_comision_abonos')->where('liquidacion_id', $liq)->sum('monto') + 0,

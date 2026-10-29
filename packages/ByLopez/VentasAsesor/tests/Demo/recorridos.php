@@ -55,8 +55,8 @@ try {
 }
 
 if (! is_array($srv) || ($srv['base_consultada'] ?? null) !== $base) {
-    fwrite(STDERR, "Bloqueado: el servidor en {$url} no confirma atender la base '{$base}' (respondio: ".json_encode($srv['base_consultada'] ?? null)."). Arranque con demo.sh iniciar.
-");
+    fwrite(STDERR, "Bloqueado: el servidor en {$url} no confirma atender la base '{$base}' (respondio: ".json_encode($srv['base_consultada'] ?? null).'). Arranque con demo.sh iniciar.
+');
     exit(1);
 }
 
@@ -301,7 +301,7 @@ foreach (glob(__DIR__.'/recorridos/*.php') ?: [] as $archivo) {
     require_once $archivo;
 }
 
-$mapa = ['A' => 'recorrido_a', 'B' => 'recorrido_b', 'C' => 'recorrido_c', 'D' => 'recorrido_d', 'E' => 'recorrido_e', 'F' => 'recorrido_f', 'G' => 'recorrido_g', 'H' => 'recorrido_h', 'I' => 'recorrido_i', 'J' => 'recorrido_j', 'PREP' => 'recorrido_prep', 'RENDIMIENTO' => 'recorrido_rendimiento', 'V' => 'recorrido_v'];
+$mapa = ['A' => 'recorrido_a', 'B' => 'recorrido_b', 'C' => 'recorrido_c', 'D' => 'recorrido_d', 'E' => 'recorrido_e', 'F' => 'recorrido_f', 'G' => 'recorrido_g', 'H' => 'recorrido_h', 'I' => 'recorrido_i', 'J' => 'recorrido_j', 'K' => 'recorrido_k', 'PREP' => 'recorrido_prep', 'RENDIMIENTO' => 'recorrido_rendimiento', 'V' => 'recorrido_v'];
 $aEjecutar = $cual === 'TODOS' ? array_slice($mapa, 0, 8, true) : [$cual => $mapa[$cual] ?? null];
 
 foreach ($aEjecutar as $letra => $funcion) {

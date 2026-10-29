@@ -7,6 +7,7 @@
 */
 
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\Console\Input\ArgvInput;
 use Symfony\Component\Console\Output\ConsoleOutput;
 
@@ -26,7 +27,7 @@ if ($comando === null) {
     exit(1);
 }
 
-$base = (string) Illuminate\Support\Facades\DB::selectOne('SELECT DATABASE() AS b')->b;
+$base = (string) DB::selectOne('SELECT DATABASE() AS b')->b;
 
 if (! str_starts_with($base, 'lpz_saas_demo_')) {
     fwrite(STDERR, "BLOQUEADO: el proceso {$nombre} apunta a '{$base}'.\n");

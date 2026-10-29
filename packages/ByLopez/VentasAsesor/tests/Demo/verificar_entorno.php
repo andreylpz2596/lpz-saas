@@ -88,8 +88,8 @@ $compara = function (string $nombre, array $e) use (&$fallos, $propia) {
     $e['correo'] === 'log' || $problemas[] = 'correo '.$e['correo'];
     (string) $e['comisiones_desde'] === (string) getenv('VENTASASESOR_COMISIONES_FECHA_INICIO') || $problemas[] = 'comisiones_desde '.$e['comisiones_desde'];
     (string) $e['c6_desde'] === (string) getenv('LOGISTICA_RECAUDO_DESDE_COBRO') || $problemas[] = 'c6_desde '.$e['c6_desde'];
-    echo sprintf("%-10s pid %-7s base consultada %-28s cache %-6s cola %-5s %s
-", $nombre, $e['pid'], $e['base_consultada'], $e['cache'], $e['cola'], $problemas === [] ? 'OK' : 'DIFIERE: '.implode('; ', $problemas));
+    echo sprintf('%-10s pid %-7s base consultada %-28s cache %-6s cola %-5s %s
+', $nombre, $e['pid'], $e['base_consultada'], $e['cache'], $e['cola'], $problemas === [] ? 'OK' : 'DIFIERE: '.implode('; ', $problemas));
     $problemas === [] || $fallos[] = 'proceso_'.$nombre;
 };
 
@@ -104,8 +104,8 @@ if (in_array('--http', $argv, true) || in_array('--procesos', $argv, true)) {
         $j = null;
     }
 
-    $j ? $compara('servidor', $j) : print("servidor   no responde en /__demo/entorno (¿detenido, o se arranco sin router_demo.php?)
-");
+    $j ? $compara('servidor', $j) : print 'servidor   no responde en /__demo/entorno (¿detenido, o se arranco sin router_demo.php?)
+';
 
     foreach (['scheduler', 'worker'] as $n) {
         $f = $raiz."/storage/logs/demo/pids/{$n}.entorno.json";
@@ -114,8 +114,8 @@ if (in_array('--http', $argv, true) || in_array('--procesos', $argv, true)) {
         if (is_file($f) && is_file($pid)) {
             $compara($n, json_decode((string) file_get_contents($f), true));
         } else {
-            echo sprintf("%-10s sin registro de entorno (no esta corriendo o se lanzo sin proceso_demo.php)
-", $n);
+            echo sprintf('%-10s sin registro de entorno (no esta corriendo o se lanzo sin proceso_demo.php)
+', $n);
         }
     }
 

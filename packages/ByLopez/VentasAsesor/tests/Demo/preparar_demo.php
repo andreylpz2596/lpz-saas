@@ -89,6 +89,11 @@ $bodega = $usuario('demo.bodega@bylopez.test', 'DEMO Bodega', 'BODEGA');
 $umbral = $usuario('demo.umbral@bylopez.test', 'DEMO Asesora Umbral', 'ASESOR VENTAS');
 Asesor::query()->firstOrCreate(['admin_id' => $asesora->id], ['admin_id' => $asesora->id, 'nombre' => 'DEMO Asesora', 'telefono' => '3009990001', 'activo' => true, 'creado_por_admin_id' => $admin->id]);
 Asesor::query()->firstOrCreate(['admin_id' => $umbral->id], ['admin_id' => $umbral->id, 'nombre' => 'DEMO Asesora Umbral', 'telefono' => '3009990002', 'activo' => true, 'creado_por_admin_id' => $admin->id]);
+// El rol copiado «ASESOR VENTAS» no trae la hoja de «Mis comisiones»: en la base DEMO (este script solo corre en lpz_saas_demo_*) se le agrega, con
+// las claves agrupadoras que el arbol de Roles marcaria. Solo lectura de lo propio; no concede aprobar, liquidar ni abonar.
+$rolAsesora = DB::table('roles')->where('id', $asesora->role_id)->first();
+$permisos = array_values(array_unique(array_merge(json_decode((string) $rolAsesora->permissions, true) ?: [], ['ventas_asesor', 'ventas_asesor.comisiones', 'ventas_asesor.comisiones.view_own'])));
+DB::table('roles')->where('id', $rolAsesora->id)->update(['permissions' => json_encode($permisos)]);
 auth()->guard('admin')->setUser($admin);
 $log("Usuarios: admin #{$admin->id}, asesora #{$asesora->id}, umbral #{$umbral->id}, bodega #{$bodega->id}");
 
