@@ -69,6 +69,7 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
         // Doc. 23 (R3/R4): Comisiones. Una pantalla con pestañas (?vista=, ?pedido=); cada accion con su clave ACL hoja.
         Route::prefix('comisiones')->name('admin.ventas_asesor.comisiones.')->group(function () {
             Route::get('', [ComisionesController::class, 'index'])->name('index');
+            Route::get('mias', [ComisionesController::class, 'mias'])->name('mias');
             Route::post('evaluar', [ComisionesController::class, 'evaluar'])->name('evaluar');
             Route::post('acuerdos/{asesor}', [ComisionesController::class, 'guardarAcuerdo'])->whereNumber('asesor')->name('acuerdos.store');
             Route::post('liquidaciones', [ComisionesController::class, 'crearLiquidacion'])->name('liquidaciones.store');

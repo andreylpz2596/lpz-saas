@@ -186,7 +186,8 @@ return [
     ], [
         'key' => 'ventas_asesor.comisiones.view_own',
         'name' => 'ventasasesor::app.acl.ver-propios',
-        'route' => $inicio,
+        // «Mis comisiones»: ruta propia de la asesora (el servicio solo atiende al actor autenticado).
+        'route' => [$inicio, 'admin.ventas_asesor.comisiones.mias'],
         'sort' => 1,
     ], [
         'key' => 'ventas_asesor.comisiones.view_all',

@@ -9,6 +9,7 @@ use ByLopez\VentasAsesor\Services\Comisiones\ConsultaComisionesService;
 use ByLopez\VentasAsesor\Services\Comisiones\EvaluarComisionesService;
 use ByLopez\VentasAsesor\Services\Comisiones\IncidenciasComisionService;
 use ByLopez\VentasAsesor\Services\Comisiones\LiquidacionesComisionService;
+use ByLopez\VentasAsesor\Services\Comisiones\MisComisionesService;
 use ByLopez\VentasAsesor\Services\Comisiones\ReevaluacionComisionesService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor as Autorizacion;
 use ByLopez\VentasAsesor\Support\Comisiones\MesComercial;
@@ -38,13 +39,19 @@ class ComisionesController extends Controller
         protected LiquidacionesComisionService $liquidaciones,
         protected IncidenciasComisionService $incidencias,
         protected ReevaluacionComisionesService $reevaluacion,
+        protected MisComisionesService $mias,
     ) {}
 
-    public function index(Request $request): View
+    public function index(Request $request): View|RedirectResponse
     {
         $actor = $this->actor();
         $permisos = $this->permisos($actor);
         abort_unless($permisos['ver_todas'] || $permisos['ver_propias'], 403);
+
+        // La asesora (solo lo propio) entra directo a «Mis comisiones»; con parametros (?pedido, ?vista, ?mes...) sigue el flujo de siempre.
+        if (! $permisos['ver_todas'] && $request->query() === []) {
+            return redirect()->route('admin.ventas_asesor.comisiones.mias');
+        }
 
         $mes = MesComercial::valido($request->query('mes')) ? (string) $request->query('mes') : MesComercial::de(now());
         $vista = in_array($request->query('vista'), ['resumen', 'acuerdos', 'liquidaciones', 'ajustes'], true) ? $request->query('vista') : 'resumen';
@@ -84,6 +91,22 @@ class ComisionesController extends Controller
             'pedidos' => $this->consulta->pedidosDelMes($actor, ['mes' => $mes, 'asesor' => $asesor, 'estado' => $estado]),
             've_costos' => $this->consulta->veCostos($actor),
         ]);
+    }
+
+    /** «Mis comisiones»: solo lo del actor autenticado (el servicio no recibe ningun id de asesor). */
+    public function mias(Request $request): View
+    {
+        $actor = $this->actor();
+        $mes = MesComercial::valido($request->query('mes')) ? (string) $request->query('mes') : MesComercial::de(now());
+
+        try {
+            $datos = $this->mias->resumen($actor, $mes);
+        } catch (Invalida $e) {
+            abort_if($e->codigo === Invalida::SIN_PERMISO, 403);
+            throw $e;
+        }
+
+        return view('ventasasesor::admin.comisiones.mias', ['datos' => $datos, 'mes' => $mes, 'permisos' => $this->permisos($actor)]);
     }
 
     public function evaluar(Request $request): RedirectResponse
