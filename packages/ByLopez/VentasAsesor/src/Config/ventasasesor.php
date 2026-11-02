@@ -134,6 +134,8 @@ return [
          * confirmation_token es el fencing token). Ajustable por entorno.
          */
         'lease_segundos' => (int) env('VENTASASESOR_CONFIRMACION_LEASE_SEGUNDOS', 300),
+        // Segundos que PHP deja correr UNA confirmacion (pedidos grandes pasan de los 30 s del php.ini). Siempre < lease.
+        'tiempo_maximo_segundos' => (int) env('VENTASASESOR_CONFIRMACION_TIEMPO_MAXIMO', 120),
     ],
 
     /*

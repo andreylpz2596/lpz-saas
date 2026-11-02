@@ -108,17 +108,54 @@ class ConfirmarVentaService
 
         [$token, $cartId] = $inicio;
 
+        $this->ampliarTiempo();
+        $terminado = false;
+        // Un pedido grande puede agotar el tiempo de PHP (error FATAL: no pasa por el catch). Sin esto el borrador
+        // quedaria `confirmando` hasta que venza el lease y «Reintentar» responderia «en proceso» sin que nadie trabaje.
+        register_shutdown_function(function () use ($borradorId, $token, &$terminado) {
+            if ($terminado || ! in_array(error_get_last()['type'] ?? null, [E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+                return;
+            }
+
+            try {
+                while (DB::transactionLevel() > 0) {
+                    DB::rollBack();
+                }
+
+                $this->liberar($borradorId, $token);
+            } catch (Throwable) {
+                // Sin conexion: el lease vence solo y el intento se recupera.
+            }
+        });
+
         try {
             $pedido = $this->crearPedido($borradorId, $token, $actor, $totalEsperado, $seleccion, $tipoOperacion);
         } catch (Throwable $e) {
+            $terminado = true;
             $this->liberar($borradorId, $token);
 
             throw $this->traducir($e);
         }
 
+        $terminado = true;
+
         $this->retirarCarrito($cartId, (int) $pedido->id);
 
         return $this->resultado($borradorId, (int) $pedido->id, false);
+    }
+
+    /** Tope de tiempo de la confirmacion (web: PHP corta a los 30 s por defecto). Debe quedar bajo el lease. */
+    protected function ampliarTiempo(): void
+    {
+        $lease = max(0, (int) config('ventasasesor.confirmacion.lease_segundos', 300));
+        $tope = min((int) config('ventasasesor.confirmacion.tiempo_maximo_segundos', 120), max(1, $lease - 30));
+
+        $actual = (int) ini_get('max_execution_time');
+
+        // 0 = sin limite (consola, colas, pruebas): no se le pone uno. Solo se SUBE el de la peticion web.
+        if ($actual > 0 && $actual < $tope) {
+            @set_time_limit($tope);
+        }
     }
 
     /** Clasificacion de solo lectura (Doc. 05 §38.7). No repara ni bloquea nada. */
