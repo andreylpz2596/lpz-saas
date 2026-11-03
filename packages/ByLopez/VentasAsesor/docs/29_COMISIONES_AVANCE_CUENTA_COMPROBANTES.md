@@ -1,4 +1,4 @@
-# 28 · Comisiones claras, avance de la asesora, cuenta del asesor y comprobantes de abono
+# 29 · Comisiones claras, avance de la asesora, cuenta del asesor y comprobantes de abono
 
 Fecha: 2026-11-02/03 · Entorno: desarrollo local y demo aislada (`lpz_saas_demo_*`). **No** es producción. Sin push ni despliegue.
 Aprobación de Camilo: «implementar las mejoras de Comisiones, avance de la asesora en Pedidos y cuenta de pagos con lectura de comprobantes».
