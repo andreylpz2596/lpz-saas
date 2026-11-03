@@ -95,7 +95,8 @@ case "$orden" in
     for n in servidor scheduler worker; do
       if vivo "$n"; then echo "$n: corriendo (pid $(cat "$PIDS/$n.pid"))"; else echo "$n: detenido"; fi
     done
-    curl -s -o /dev/null -w "HTTP /admin/login: %{http_code}\n" "http://$DEMO_HOST:$DEMO_PORT/admin/login" || true\n    "$PHP" "$AQUI/verificar_entorno.php" --procesos || true
+    curl -s -o /dev/null -w "HTTP /admin/login: %{http_code}\n" "http://$DEMO_HOST:$DEMO_PORT/admin/login" || true
+    "$PHP" "$AQUI/verificar_entorno.php" --procesos || true
     ;;
   verificar) seguridad; clave; "$PHP" "$AQUI/verificar_entorno.php" --http ;;
   preparar) seguridad; clave; "$PHP" "$AQUI/preparar_demo.php" "$@" ;;
