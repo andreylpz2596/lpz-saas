@@ -12,6 +12,7 @@
 @once
     @push('styles')
         @include('ventasasesor::admin.cartera.estilos')
+        @include('ventasasesor::admin.comisiones.estilos-panel')
     @endpush
 @endonce
 
@@ -24,6 +25,10 @@
         @if ($asesores !== [])
             <form method="GET" action="{{ route('admin.ventas_asesor.comisiones.index') }}" class="va-panel mt-4 flex flex-wrap items-end gap-3 p-4">
                 <input type="hidden" name="vista" value="liquidaciones">
+                <div style="min-width:9.5rem">
+                    <label class="{{ $label }}" for="f-mes-cuenta">@lang('ventasasesor::comisiones.mes-comercial')</label>
+                    <input id="f-mes-cuenta" type="month" name="mes" value="{{ $mes }}" class="{{ $input }}" onchange="this.form.submit()">
+                </div>
                 <div class="min-w-[16rem]">
                     <label class="{{ $label }}" for="f-asesor">@lang('ventasasesor::comisiones.asesor')</label>
                     <select id="f-asesor" name="asesor" class="custom-select {{ $input }}" onchange="this.form.submit()">
@@ -39,23 +44,33 @@
         @if ($cuenta === null)
             <p class="va-panel mt-4 p-4 text-sm text-slate-500">@lang('ventasasesor::comisiones.elige-asesor-ayuda')</p>
         @else
-            <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3" data-seccion="cuenta">
-                <div class="va-panel va-kpi-box">
-                    <p class="va-kpi-label">@lang('ventasasesor::comisiones.por-pagar')</p>
-                    <p class="va-kpi-value">{{ $dinero($cuenta['por_pagar']) }}</p>
-                    <p class="va-sub">@lang('ventasasesor::comisiones.por-pagar-ayuda')</p>
-                </div>
-                <div class="va-panel va-kpi-box">
-                    <p class="va-kpi-label">@lang('ventasasesor::comisiones.habilitado-sin-liquidar')</p>
-                    <p class="va-kpi-value">{{ $dinero($cuenta['habilitado_sin_liquidar']) }}</p>
-                </div>
-                <div class="va-panel va-kpi-box">
-                    <p class="va-kpi-label">@lang('ventasasesor::comisiones.en-revision')</p>
-                    <p class="va-kpi-value {{ (float) $cuenta['habilitado_en_revision'] > 0 ? 'text-amber-600' : '' }}">{{ $dinero($cuenta['habilitado_en_revision']) }}</p>
-                    <p class="va-sub">@lang('ventasasesor::comisiones.en-revision-ayuda')</p>
-                </div>
-            </div>
+            @include('ventasasesor::admin.comisiones.partials.cuenta-acumulado')
 
+            {{-- ACTIVIDAD del mes (separada del saldo acumulado): solo las ventas de ese mes comercial. --}}
+            @php($act = $cuentaAsesor['actividad'])
+            <section class="mt-6" data-seccion="actividad-mes" aria-labelledby="va-act-titulo">
+                <h2 id="va-act-titulo" class="text-base font-semibold text-gray-900 dark:text-white">@lang('ventasasesor::comisiones.cuenta.actividad-titulo', ['mes' => \Illuminate\Support\Carbon::createFromFormat('Y-m', $mes)->locale(app()->getLocale())->isoFormat('MMMM YYYY')])</h2>
+                <p class="va-sub">@lang('ventasasesor::comisiones.cuenta.actividad-ayuda')</p>
+                @include('ventasasesor::admin.comisiones.partials.avisos', ['panel' => $act])
+                <div class="va-etapas mt-3" data-etapas="comision">
+                    @foreach (['bloqueada', 'habilitada', 'por_pagar', 'pagada'] as $e)
+                        <span data-etapa="{{ $e }}">@lang('ventasasesor::comisiones.mis.etapas.'.$e): <strong>{{ $dinero($act['etapas'][$e]) }}</strong></span>
+                    @endforeach
+                    <p class="va-etapas__nota">@lang('ventasasesor::comisiones.panel.etapas-nota') <strong data-total-mes>{{ $dinero($act['total_mes']) }}@if ($act['total_parcial']) + @lang('ventasasesor::comisiones.panel.sin-calcular')@endif</strong></p>
+                </div>
+                <div class="mt-3">
+                    @include('ventasasesor::admin.comisiones.partials.lista-pedidos', [
+                        'pedidos' => $act['pedidos'],
+                        'verCalculo' => $cuentaAsesor['ve_calculo'],
+                        'urlDetalle' => fn ($id) => route('admin.ventas_asesor.comisiones.index', ['pedido' => $id]),
+                    ])
+                </div>
+            </section>
+
+            <div class="mt-6">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white">@lang('ventasasesor::comisiones.cuenta.liquidaciones-titulo')</h2>
+                <p class="va-sub">@lang('ventasasesor::comisiones.cuenta.liquidaciones-ayuda')</p>
+            </div>
             @if ($permisos['aprobar'])
                 @php($ajustesLibres = $cuenta['ajustes']->where('estado', 'aprobado')->whereNull('liquidacion_id'))
                 <form method="POST" action="{{ route('admin.ventas_asesor.comisiones.liquidaciones.store') }}" class="va-panel mt-4 p-4" data-form="crear-liquidacion">
@@ -150,16 +165,7 @@
                             <p class="va-sub mt-3 text-red-600">@lang('ventasasesor::comisiones.sin-pagable')</p>
                         @endif
                         @if ($permisos['pagar'] && $l->estado === Liq::APROBADA && (float) $f['pagable'] > 0)
-                            <form method="POST" action="{{ route('admin.ventas_asesor.comisiones.abonos.store', $l->id) }}" enctype="multipart/form-data" class="mt-3 grid grid-cols-1 gap-2 md:grid-cols-12" data-form="abono">
-                                @csrf
-                                <input type="hidden" name="clave" value="abono:{{ $l->id }}:{{ $clave }}">
-                                <div class="md:col-span-2"><label class="{{ $label }}">@lang('ventasasesor::comisiones.valor') <span class="font-normal text-slate-500">(≤ {{ $dinero($f['pagable']) }})</span></label><input type="number" name="monto" min="0.01" step="0.01" max="{{ $f['pagable'] }}" required class="{{ $input }}"></div>
-                                <div class="md:col-span-2"><label class="{{ $label }}">@lang('ventasasesor::comisiones.fecha-pago')</label><input type="date" name="fecha_pago" value="{{ $hoy }}" required class="{{ $input }}"></div>
-                                <div class="md:col-span-2"><label class="{{ $label }}">@lang('ventasasesor::comisiones.medio')</label><input type="text" name="medio" maxlength="40" class="{{ $input }}"></div>
-                                <div class="md:col-span-2"><label class="{{ $label }}">@lang('ventasasesor::comisiones.referencia-pago')</label><input type="text" name="referencia" maxlength="120" class="{{ $input }}"></div>
-                                <div class="md:col-span-2"><label class="{{ $label }}">@lang('ventasasesor::comisiones.comprobante')</label><input type="file" name="comprobante" accept=".pdf,.jpg,.jpeg,.png" class="text-xs"></div>
-                                <div class="flex items-end md:col-span-2"><button type="submit" class="primary-button w-full justify-center">@lang('ventasasesor::comisiones.registrar-abono')</button></div>
-                            </form>
+                            @include('ventasasesor::admin.comisiones.partials.abono-flujo')
                         @endif
 
                         @if ($l->abonos->isNotEmpty())
@@ -219,6 +225,8 @@
                     <p class="va-panel p-4 text-sm text-slate-500">@lang('ventasasesor::comisiones.sin-liquidaciones')</p>
                 @endforelse
             </div>
+
+            @include('ventasasesor::admin.comisiones.partials.cuenta-movimientos')
 
             {{-- Ajustes: nacen pendientes; solo un aprobado entra a una liquidacion, y solo si se elige. Nada se descuenta solo. --}}
             <div class="va-panel mt-4 p-4" data-seccion="ajustes">

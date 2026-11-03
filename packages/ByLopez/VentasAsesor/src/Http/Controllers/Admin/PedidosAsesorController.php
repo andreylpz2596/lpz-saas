@@ -5,10 +5,13 @@ namespace ByLopez\VentasAsesor\Http\Controllers\Admin;
 use ByLopez\Logistica\Support\AutorizacionLogistica;
 use ByLopez\VentasAsesor\Enums\AlcanceVisibilidad;
 use ByLopez\VentasAsesor\Http\Requests\Pedidos\ListarPedidosAsesorRequest;
+use ByLopez\VentasAsesor\Services\Comisiones\AvanceAsesorService;
 use ByLopez\VentasAsesor\Services\Pedidos\ConsultaPedidosAsesorService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Cartera\MediosCobro;
+use ByLopez\VentasAsesor\Support\Comisiones\MesComercial;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use Webkul\User\Contracts\Admin;
 
@@ -26,6 +29,7 @@ class PedidosAsesorController extends Controller
         protected ConsultaPedidosAsesorService $consulta,
         protected MediosCobro $medios,
         protected AutorizacionLogistica $logistica,
+        protected AvanceAsesorService $avance,
     ) {}
 
     /**
@@ -39,6 +43,29 @@ class PedidosAsesorController extends Controller
         return [
             'puedeDespachar' => $this->logistica->tienePermiso($admin, AutorizacionLogistica::PERMISO_DESPACHAR),
             'puedeVerEnvio' => $this->logistica->tienePermiso($admin, AutorizacionLogistica::PERMISO_DESPACHOS),
+        ];
+    }
+
+    /**
+     * «Tu avance del mes»: solo para quien ES una asesora con perfil (siempre SUS cifras: nunca las de todas las asesoras, ni siquiera
+     * con `view_all`). La estimacion de comision y el acceso a «Mis comisiones» exigen ademas `comisiones.view_own`.
+     *
+     * @return array{avance: ?array<string, mixed>, verEstimacion: bool, urlMisComisiones: ?string}
+     */
+    private function tarjetaDeAvance(?Admin $admin): array
+    {
+        $sinTarjeta = ['avance' => null, 'verEstimacion' => false, 'urlMisComisiones' => null];
+
+        if ($admin === null || ! DB::table('bylopez_va_asesores')->where('admin_id', (int) $admin->id)->exists()) {
+            return $sinTarjeta;
+        }
+
+        $verComisiones = $this->autorizacion->tienePermiso($admin, AutorizacionVentasAsesor::PERMISO_COMISIONES_VER_PROPIAS);
+
+        return [
+            'avance' => $this->avance->deAsesor((int) $admin->id, MesComercial::de(now())),
+            'verEstimacion' => $verComisiones,
+            'urlMisComisiones' => $verComisiones ? route('admin.ventas_asesor.comisiones.mias') : null,
         ];
     }
 
@@ -88,7 +115,7 @@ class PedidosAsesorController extends Controller
 
         $filtros = $request->filtros();
 
-        return view('ventasasesor::admin.pedidos.index', $this->permisosDeEnvio($admin) + [
+        return view('ventasasesor::admin.pedidos.index', $this->permisosDeEnvio($admin) + $this->tarjetaDeAvance($admin) + [
             'pedidos' => $this->consulta->listar($alcance, $admin, $filtros, (int) $request->input('page', 1))
                 ->withQueryString(),
             'filtros' => $filtros,

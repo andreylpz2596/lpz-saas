@@ -485,6 +485,10 @@
             @endif
         </div>
 
+        @if (! empty($avance))
+            @include('ventasasesor::admin.pedidos.avance')
+        @endif
+
         {{-- KPI clicables: cada tarjeta es un enlace ?resumen=… con el MISMO criterio que su cifra (resumen() en el servicio). --}}
         <div class="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <a

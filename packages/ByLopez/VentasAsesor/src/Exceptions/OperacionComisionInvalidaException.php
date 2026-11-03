@@ -34,6 +34,9 @@ class OperacionComisionInvalidaException extends RuntimeException
 
     public const IDEMPOTENCIA_CONFLICTO = 'idempotencia_conflicto';
 
+    /** La operacion (comprobante) ya respalda otros abonos o ya fue aplicada por completo. */
+    public const OPERACION_DUPLICADA = 'operacion_duplicada';
+
     public function __construct(public readonly string $codigo, string $mensaje = '')
     {
         parent::__construct($mensaje !== '' ? $mensaje : $codigo);

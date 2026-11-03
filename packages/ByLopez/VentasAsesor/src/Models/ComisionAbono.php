@@ -17,6 +17,7 @@ class ComisionAbono extends Model
     protected $fillable = [
         'liquidacion_id', 'asesor_admin_id', 'tipo', 'monto', 'revierte_id', 'fecha_pago', 'medio', 'referencia', 'observacion',
         'comprobante_disco', 'comprobante_ruta', 'comprobante_nombre', 'comprobante_mime', 'comprobante_sha256',
+        'soporte_id', 'operacion_huella', 'operacion_referencia', 'operacion_valor', 'lectura_detectada', 'lectura_corregida',
         'idempotency_key', 'actor_admin_id', 'actor_name_snapshot',
     ];
 
@@ -25,6 +26,9 @@ class ComisionAbono extends Model
         'asesor_admin_id' => 'integer',
         'revierte_id' => 'integer',
         'fecha_pago' => 'date',
+        'soporte_id' => 'integer',
+        'lectura_detectada' => 'array',
+        'lectura_corregida' => 'array',
     ];
 
     protected static function booted(): void

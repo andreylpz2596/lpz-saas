@@ -9,6 +9,7 @@ use ByLopez\VentasAsesor\Models\ComisionAjuste;
 use ByLopez\VentasAsesor\Models\ComisionIncidencia;
 use ByLopez\VentasAsesor\Models\ComisionLinea;
 use ByLopez\VentasAsesor\Models\ComisionLiquidacion;
+use ByLopez\VentasAsesor\Models\ComisionSoporte;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor as Autorizacion;
 use ByLopez\VentasAsesor\Support\Comisiones\Dinero;
 use Carbon\CarbonImmutable;
@@ -211,7 +212,15 @@ class LiquidacionesComisionService
         });
     }
 
-    /** @param  array{monto: mixed, fecha_pago: mixed, medio?: ?string, referencia?: ?string, observacion?: ?string}  $datos */
+    /**
+     * Registra un abono (pago) a una liquidacion aprobada. Es la UNICA via que contabiliza un pago: cargar o leer un comprobante nunca lo hace.
+     *
+     * Con `soporte_id` el comprobante ya cargado y leido respalda el abono (no se sube otro archivo); se guarda lo que el lector detecto y lo
+     * que administracion corrigio. La OPERACION (referencia + medio + fecha + valor) se aplica una sola vez: la misma operacion no puede
+     * respaldar mas que su valor total, ni siquiera con dobles clics o solicitudes simultaneas (se serializa por huella de la operacion).
+     *
+     * @param  array{monto: mixed, fecha_pago: mixed, medio?: ?string, referencia?: ?string, observacion?: ?string, soporte_id?: mixed, operacion_valor?: mixed, confirmar_misma_operacion?: mixed}  $datos
+     */
     public function registrarAbono(?Admin $actor, int $liquidacionId, array $datos, ?UploadedFile $comprobante, string $clave): ComisionAbono
     {
         $this->exigir($actor, Autorizacion::PERMISO_COMISIONES_PAGAR);
@@ -232,10 +241,20 @@ class LiquidacionesComisionService
         // Antes de pagar se reevaluan los pedidos de la liquidacion: un hecho posterior abre su incidencia y retiene lo afectado.
         $this->verificarPedidos(ComisionLinea::query()->where('liquidacion_id', $liquidacionId)->distinct()->pluck('order_id')->all(), $actor);
 
-        $archivo = $comprobante === null ? null : $this->guardarComprobante($comprobante);
+        $soporte = $this->soporteDe($datos['soporte_id'] ?? null, $liquidacionId);
+        $archivo = $soporte !== null
+            ? ['disco' => $soporte->disco, 'ruta' => $soporte->ruta, 'nombre' => $soporte->nombre_original, 'mime' => $soporte->mime, 'sha256' => $soporte->sha256]
+            : ($comprobante === null ? null : $this->guardarComprobante($comprobante));
+        $subioArchivo = $soporte === null && $archivo !== null;
+
+        $medio = $this->texto($datos['medio'] ?? null, 40);
+        $referencia = $this->texto($datos['referencia'] ?? null, 120);
+        $operacion = $this->operacion($medio, $referencia, $fecha->toDateString(), $monto, $datos['operacion_valor'] ?? null);
+        $trazabilidad = $soporte === null ? [null, null] : $this->trazabilidad($soporte, $operacion['valor'], $fecha->toDateString(), $medio, $referencia);
+        $cerrojo = $operacion['huella'] === null ? null : $this->cerrojoOperacion($operacion['huella']);
 
         try {
-            return DB::transaction(function () use ($actor, $liquidacionId, $monto, $fecha, $datos, $archivo, $clave) {
+            return DB::transaction(function () use ($actor, $liquidacionId, $monto, $fecha, $datos, $archivo, $clave, $soporte, $medio, $referencia, $operacion, $trazabilidad) {
                 $liq = $this->bloquear($liquidacionId);
 
                 if ($liq->estado !== ComisionLiquidacion::APROBADA) {
@@ -252,14 +271,16 @@ class LiquidacionesComisionService
                     throw new Invalida(Invalida::MONTO_EXCEDE_SALDO, 'Hoy solo se pueden pagar '.Dinero::texto($pagable).': el resto esta retenido por incidencias abiertas.');
                 }
 
+                $this->exigirOperacionNoRepetida($operacion, $monto, $soporte?->id, ! empty($datos['confirmar_misma_operacion']));
+
                 $abono = ComisionAbono::query()->create([
                     'liquidacion_id' => $liq->id,
                     'asesor_admin_id' => $liq->asesor_admin_id,
                     'tipo' => ComisionAbono::ABONO,
                     'monto' => $monto,
                     'fecha_pago' => $fecha,
-                    'medio' => $this->texto($datos['medio'] ?? null, 40),
-                    'referencia' => $this->texto($datos['referencia'] ?? null, 120),
+                    'medio' => $medio,
+                    'referencia' => $referencia,
                     'observacion' => $this->texto($datos['observacion'] ?? null, 500),
                     'comprobante_disco' => $archivo['disco'] ?? null,
                     'comprobante_ruta' => $archivo['ruta'] ?? null,
@@ -269,19 +290,187 @@ class LiquidacionesComisionService
                     'idempotency_key' => $clave,
                     'actor_admin_id' => (int) $actor->id,
                     'actor_name_snapshot' => mb_substr((string) $actor->name, 0, 191),
-                ]);
+                ] + $this->columnasDeOperacion($soporte, $operacion, $trazabilidad));
 
                 $this->aplicaciones->aplicarAbono($liq, $abono);
 
                 return $abono;
             });
         } catch (Throwable $e) {
-            if ($archivo !== null) {
+            // Solo se borra el archivo que ESTA llamada subio; el de un soporte cargado antes se conserva.
+            if ($subioArchivo) {
                 Storage::disk($archivo['disco'])->delete($archivo['ruta']);
             }
 
             throw $e;
+        } finally {
+            $cerrojo !== null && $this->soltarCerrojo($cerrojo);
         }
+    }
+
+    /**
+     * Huella de la operacion (null si falta referencia, fecha, valor o medio: sin contexto suficiente no hay huella) y valor TOTAL de la
+     * operacion (una transferencia puede cubrir varios abonos: nunca menor que este abono).
+     *
+     * @return array{huella: ?string, referencia: ?string, valor: string}
+     */
+    protected function operacion(?string $medio, ?string $referencia, string $fecha, string $monto, mixed $valorOperacion): array
+    {
+        $valor = $valorOperacion === null || trim((string) $valorOperacion) === '' ? $monto : trim((string) $valorOperacion);
+
+        if (! preg_match('/^\d{1,12}(\.\d{1,2})?$/', $valor) || BigDecimal::of($valor)->isLessThan(BigDecimal::of($monto))) {
+            throw new Invalida(Invalida::DATOS_INVALIDOS, 'El valor de la operación no puede ser menor que el abono.');
+        }
+
+        if (! $this->trazabilidadDisponible()) {
+            return ['huella' => null, 'referencia' => null, 'valor' => $valor];
+        }
+
+        $soportes = app(Comprobantes\SoporteAbonoService::class);
+
+        return [
+            'huella' => $soportes->huella($medio, $referencia, $fecha, $valor),
+            'referencia' => $soportes->referenciaNormalizada($referencia),
+            'valor' => $valor,
+        ];
+    }
+
+    /**
+     * La misma operacion no respalda mas que su valor total y, si ya respalda otros abonos, exige confirmar que es la MISMA operacion
+     * (otra liquidacion o parte de un mismo pago). Sin huella (falta referencia) solo se vigila el reuso del mismo ARCHIVO.
+     * Llamar DENTRO de la transaccion y con el cerrojo de la operacion tomado.
+     *
+     * @param  array{huella: ?string, referencia: ?string, valor: string}  $operacion
+     */
+    protected function exigirOperacionNoRepetida(array $operacion, string $monto, ?int $soporteId, bool $confirmada): void
+    {
+        $activos = fn () => ComisionAbono::query()->where('tipo', ComisionAbono::ABONO)
+            ->whereNotIn('id', ComisionAbono::query()->where('tipo', ComisionAbono::REVERSO)->select('revierte_id'));
+
+        if ($operacion['huella'] !== null) {
+            $previos = $activos()->where('operacion_huella', $operacion['huella'])->get(['id', 'monto', 'liquidacion_id']);
+
+            if ($previos->isEmpty()) {
+                return;
+            }
+
+            $aplicado = Dinero::de($previos->sum('monto'));
+            $restante = Dinero::de($operacion['valor'])->minus($aplicado);
+
+            if (BigDecimal::of($monto)->isGreaterThan($restante)) {
+                throw new Invalida(Invalida::OPERACION_DUPLICADA, 'Esta operación ya está registrada por '.Dinero::texto($aplicado).' ('.$previos->map(fn ($a) => 'abono #'.$a->id)->implode(', ').') y su valor total es '.Dinero::texto(Dinero::de($operacion['valor'])).': solo quedan '.Dinero::texto(Dinero::maximo($restante, BigDecimal::zero())).' por aplicar de ella.');
+            }
+
+            if (! $confirmada) {
+                throw new Invalida(Invalida::OPERACION_DUPLICADA, 'Esta operación ya respalda '.$previos->map(fn ($a) => 'el abono #'.$a->id)->implode(', ').'. Si este abono es otra parte del mismo pago, confirma que es la misma operación.');
+            }
+
+            return;
+        }
+
+        if ($soporteId !== null && ! $confirmada && $activos()->where('soporte_id', $soporteId)->exists()) {
+            throw new Invalida(Invalida::OPERACION_DUPLICADA, 'Este comprobante ya respalda otro abono y no se pudo comparar la operación (falta la referencia). Confirma que corresponde a este pago.');
+        }
+    }
+
+    /** Soporte cargado ANTES para esta liquidacion; el abono lo respalda sin subir otro archivo. */
+    protected function soporteDe(mixed $id, int $liquidacionId): ?ComisionSoporte
+    {
+        if ($id === null || $id === '') {
+            return null;
+        }
+
+        $soporte = ctype_digit((string) $id) ? ComisionSoporte::query()->find((int) $id) : null;
+
+        if ($soporte === null || (int) $soporte->liquidacion_id !== $liquidacionId || ! Storage::disk($soporte->disco)->exists($soporte->ruta)) {
+            throw new Invalida(Invalida::DATOS_INVALIDOS, 'El comprobante cargado ya no está disponible para esta liquidación: súbelo de nuevo.');
+        }
+
+        return $soporte;
+    }
+
+    /**
+     * Lo que el lector DETECTO y lo que administracion CORRIGIO (comparado en el servidor, no confiado al navegador): trazabilidad de datos.
+     *
+     * @return array{0: ?array<string, mixed>, 1: ?array<string, mixed>}
+     */
+    protected function trazabilidad(ComisionSoporte $soporte, string $valor, string $fecha, ?string $medio, ?string $referencia): array
+    {
+        $d = (array) (($soporte->lectura_resultado ?? [])[0] ?? []);
+
+        if ($d === []) {
+            return [null, null];
+        }
+
+        $detectado = [
+            'valor' => $d['valor'] ?? null,
+            'fecha' => $d['fecha'] ?? null,
+            'medio' => $d['medio'] ?? $d['banco_origen'] ?? $d['banco_destino'] ?? null,
+            'referencia' => $d['referencia'] ?? $d['autorizacion'] ?? null,
+            'destinatario' => $d['contraparte'] ?? null,
+            'advertencias' => $d['advertencias'] ?? [],
+        ];
+        $final = ['valor' => $valor, 'fecha' => $fecha, 'medio' => $medio, 'referencia' => $referencia];
+        $iguales = fn ($a, $b) => $a === null || $b === null
+            ? $a === $b
+            : (is_numeric($a) && is_numeric($b) ? bccomp((string) $a, (string) $b, 2) === 0 : mb_strtolower(trim((string) $a)) === mb_strtolower(trim((string) $b)));
+        $corregido = [];
+
+        foreach ($final as $campo => $nuevo) {
+            if (! $iguales($detectado[$campo], $nuevo)) {
+                $corregido[$campo] = ['detectado' => $detectado[$campo], 'final' => $nuevo];
+            }
+        }
+
+        return [$detectado, $corregido];
+    }
+
+    /**
+     * Columnas de la operacion y su trazabilidad. Solo se incluyen cuando hay algo que guardar: el abono manual de siempre no las toca.
+     *
+     * @param  array{huella: ?string, referencia: ?string, valor: string}  $operacion
+     * @param  array{0: ?array<string, mixed>, 1: ?array<string, mixed>}  $trazabilidad
+     * @return array<string, mixed>
+     */
+    protected function columnasDeOperacion(?ComisionSoporte $soporte, array $operacion, array $trazabilidad): array
+    {
+        if (! $this->trazabilidadDisponible()) {
+            return [];
+        }
+
+        return array_filter([
+            'soporte_id' => $soporte?->id,
+            'operacion_huella' => $operacion['huella'],
+            'operacion_referencia' => $operacion['referencia'],
+            'operacion_valor' => $operacion['huella'] === null && $soporte === null ? null : $operacion['valor'],
+            'lectura_detectada' => $trazabilidad[0],
+            'lectura_corregida' => $trazabilidad[1],
+        ], fn ($v) => $v !== null);
+    }
+
+    /** ¿Ya esta aplicada la migracion de soportes y trazabilidad en ESTE entorno? Sin ella el abono manual de siempre sigue igual. */
+    protected function trazabilidadDisponible(): bool
+    {
+        static $disponible = null;
+
+        return $disponible ??= \Illuminate\Support\Facades\Schema::hasColumn('bylopez_va_comision_abonos', 'operacion_huella');
+    }
+
+    /** Serializa los registros de UNA misma operacion (huella) entre solicitudes simultaneas, aunque sean de liquidaciones distintas. */
+    protected function cerrojoOperacion(string $huella): string
+    {
+        $nombre = 'va_op_'.substr($huella, 0, 40);
+
+        if (! (int) (DB::selectOne('SELECT GET_LOCK(?, 15) AS l', [$nombre])->l ?? 0)) {
+            throw new Invalida(Invalida::ESTADO_INVALIDO, 'Otro registro de esta misma operación está en curso. Espera unos segundos y verifica el estado.');
+        }
+
+        return $nombre;
+    }
+
+    protected function soltarCerrojo(string $nombre): void
+    {
+        DB::selectOne('SELECT RELEASE_LOCK(?) AS l', [$nombre]);
     }
 
     public function revertirAbono(?Admin $actor, int $abonoId, string $motivo, string $clave): ComisionAbono

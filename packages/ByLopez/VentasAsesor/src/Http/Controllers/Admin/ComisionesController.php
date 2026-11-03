@@ -4,19 +4,25 @@ namespace ByLopez\VentasAsesor\Http\Controllers\Admin;
 
 use ByLopez\VentasAsesor\Exceptions\OperacionComisionInvalidaException as Invalida;
 use ByLopez\VentasAsesor\Models\ComisionLiquidacion;
+use ByLopez\VentasAsesor\Models\ComisionSoporte;
 use ByLopez\VentasAsesor\Services\Comisiones\AcuerdosComisionService;
+use ByLopez\VentasAsesor\Services\Comisiones\Comprobantes\SoporteAbonoService;
 use ByLopez\VentasAsesor\Services\Comisiones\ConsultaComisionesService;
+use ByLopez\VentasAsesor\Services\Comisiones\CuentaAsesorService;
 use ByLopez\VentasAsesor\Services\Comisiones\EvaluarComisionesService;
 use ByLopez\VentasAsesor\Services\Comisiones\IncidenciasComisionService;
 use ByLopez\VentasAsesor\Services\Comisiones\LiquidacionesComisionService;
 use ByLopez\VentasAsesor\Services\Comisiones\MisComisionesService;
 use ByLopez\VentasAsesor\Services\Comisiones\ReevaluacionComisionesService;
+use ByLopez\VentasAsesor\Services\Comisiones\SimuladorProximaVentaService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor as Autorizacion;
 use ByLopez\VentasAsesor\Support\Comisiones\MesComercial;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\Response;
@@ -40,6 +46,9 @@ class ComisionesController extends Controller
         protected IncidenciasComisionService $incidencias,
         protected ReevaluacionComisionesService $reevaluacion,
         protected MisComisionesService $mias,
+        protected SimuladorProximaVentaService $simulador,
+        protected CuentaAsesorService $cuentaAsesor,
+        protected SoporteAbonoService $soportes,
     ) {}
 
     public function index(Request $request): View|RedirectResponse
@@ -76,20 +85,21 @@ class ComisionesController extends Controller
         if ($vista === 'liquidaciones' || $vista === 'ajustes') {
             $cuentaDe = $propio ?? $asesor;
 
+            $cuentaAsesor = $cuentaDe === null ? null : $this->cuentaAsesor->deAsesor($actor, $cuentaDe, $mes);
+
             return view('ventasasesor::admin.comisiones.liquidaciones', $datos + [
                 'cuenta' => $cuentaDe === null ? null : $this->consulta->cuenta($actor, $cuentaDe),
+                'cuentaAsesor' => $cuentaAsesor,
                 'clave' => (string) Str::uuid(),
             ]);
         }
 
-        $estado = in_array($request->query('estado'), ['estimada', 'habilitada', 'anulada'], true) ? $request->query('estado') : null;
+        $situacion = in_array($request->query('situacion'), ['bloqueada', 'habilitada', 'por_pagar', 'pagada', 'dentro_del_umbral', 'sin_calcular'], true) ? $request->query('situacion') : null;
 
         return view('ventasasesor::admin.comisiones.index', $datos + [
             'bandeja' => $permisos['calcular'] ? ['pendientes' => $this->reevaluacion->pendientes(), 'agotadas' => $this->reevaluacion->agotadas()] : null,
-            'estado' => $estado,
-            'resumen' => $this->consulta->resumenMes($actor, $mes, $asesor),
-            'pedidos' => $this->consulta->pedidosDelMes($actor, ['mes' => $mes, 'asesor' => $asesor, 'estado' => $estado]),
-            've_costos' => $this->consulta->veCostos($actor),
+            'situacion' => $situacion,
+            'panel' => $this->consulta->panelDelMes($actor, $mes, $asesor, $situacion),
         ]);
     }
 
@@ -109,6 +119,15 @@ class ComisionesController extends Controller
         return view('ventasasesor::admin.comisiones.mias', ['datos' => $datos, 'mes' => $mes, 'permisos' => $this->permisos($actor)]);
     }
 
+    /** «Simular próxima venta»: calcula en el servidor, no escribe nada y siempre se identifica como simulación. */
+    public function simular(Request $request): JsonResponse
+    {
+        try {
+            return response()->json($this->simulador->simular($this->actor(), (array) $request->input('lineas', [])));
+        } catch (Invalida $e) {
+            return response()->json(['simulacion' => true, 'error' => $e->getMessage(), 'codigo' => $e->codigo], $e->codigo === Invalida::SIN_PERMISO ? 403 : 422);
+        }
+    }
     public function evaluar(Request $request): RedirectResponse
     {
         return $this->ejecutar(function () use ($request) {
@@ -176,13 +195,77 @@ class ComisionesController extends Controller
             $abono = $this->liquidaciones->registrarAbono(
                 $this->actor(),
                 $liquidacion,
-                $request->only(['monto', 'fecha_pago', 'medio', 'referencia', 'observacion']),
+                $request->only(['monto', 'fecha_pago', 'medio', 'referencia', 'observacion', 'soporte_id', 'operacion_valor', 'confirmar_misma_operacion']),
                 $request->file('comprobante'),
                 (string) $request->input('clave', ''),
             );
 
             return $this->aLiquidaciones(ComisionLiquidacion::query()->findOrFail($abono->liquidacion_id))->with('success', trans('ventasasesor::comisiones.flash.abono'));
         });
+    }
+
+    /**
+     * «Registrar abono» paso 1-2: sube el comprobante, lo LEE (OCR local) y devuelve el borrador para revisar. NO registra ni aprueba
+     * ningun pago: solo el formulario confirmado (`abonos.store`) lo hace. Si la lectura falla o no esta disponible, el archivo queda
+     * guardado y el formulario se diligencia a mano.
+     */
+    public function leerSoporte(int $liquidacion, Request $request): JsonResponse
+    {
+        try {
+            $actor = $this->actor();
+            $archivo = $request->file('comprobante');
+
+            if ($archivo === null) {
+                return response()->json(['error' => 'Selecciona el comprobante (PDF, JPG o PNG).'], 422);
+            }
+
+            $subida = $this->soportes->subir($actor, $liquidacion, $archivo);
+            $soporte = $subida['soporte'];
+            $lectura = $this->soportes->leer($actor, (int) $soporte->id);
+            $b = $lectura['borrador'];
+            $analisis = $this->soportes->analizar($actor, (int) $soporte->id, $b);
+
+            $campos = $b === null ? [] : ['valor' => $b->valor, 'fecha' => $b->fecha, 'medio' => $b->medio ?? $b->bancoOrigen ?? $b->bancoDestino, 'referencia' => $b->referencia ?? $b->autorizacion, 'destinatario' => $b->contraparte];
+
+            return response()->json([
+                'soporte_id' => (int) $soporte->id,
+                'ya_cargado' => $subida['ya_cargado'],
+                'nombre' => $soporte->nombre_original,
+                'mime' => $soporte->mime,
+                'url' => route('admin.ventas_asesor.comisiones.soportes.ver', $soporte->id),
+                'lectura' => [
+                    'estado' => $lectura['estado'],
+                    'mensaje' => $lectura['mensaje'],
+                    'campos' => $campos,
+                    // Lo no detectado queda vacio (nunca inventado); lo dudoso lo marca el lector con sus advertencias.
+                    'no_detectados' => array_keys(array_filter($campos + ['valor' => null, 'fecha' => null, 'medio' => null, 'referencia' => null], fn ($v) => $v === null)),
+                    'advertencias' => $b?->advertencias ?? [],
+                ],
+                'duplicados' => [
+                    'estado' => $analisis['estado'],
+                    // Solo lo necesario para decidir: ningun nombre ni dato de otras personas.
+                    'coincidencias' => array_map(fn (array $c) => ['abono' => $c['movimiento_id'] ?? null, 'fecha' => $c['fecha'] ?? null, 'valor' => $c['valor'] ?? null, 'estado' => $c['estado_movimiento'] ?? null, 'fuerza' => $c['fuerza'] ?? null], $analisis['coincidencias']),
+                    'archivo_repetido' => array_map(fn (array $c) => ['abono' => $c['movimiento_id'] ?? null, 'fecha' => $c['fecha'] ?? null, 'valor' => $c['valor'] ?? null, 'estado' => $c['estado_movimiento'] ?? null], $analisis['archivo_repetido']),
+                ],
+                'aviso' => 'La lectura es una ayuda: no verifica la autenticidad del comprobante ni confirma el movimiento en el banco. Revisa cada dato contra el archivo.',
+            ]);
+        } catch (Invalida $e) {
+            return response()->json(['error' => $e->getMessage(), 'codigo' => $e->codigo], $e->codigo === Invalida::SIN_PERMISO ? 403 : 422);
+        }
+    }
+
+    /** Muestra el comprobante cargado (disco privado) a quien registra pagos; nunca una URL publica. */
+    public function verSoporte(int $soporte): Response
+    {
+        $s = ComisionSoporte::query()->find($soporte);
+
+        abort_unless($s !== null && $this->autorizacion->tienePermiso($this->actor(), Autorizacion::PERMISO_COMISIONES_PAGAR) && Storage::disk($s->disco)->exists($s->ruta), 404);
+
+        return Storage::disk($s->disco)->response($s->ruta, $s->nombre_original ?: 'comprobante', [
+            'Content-Type' => $s->mime ?: 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, no-store',
+        ]);
     }
 
     public function revertirAbono(int $abono, Request $request): RedirectResponse

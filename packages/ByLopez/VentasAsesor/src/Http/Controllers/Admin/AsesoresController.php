@@ -6,10 +6,13 @@ use ByLopez\VentasAsesor\Enums\AlcanceVisibilidad;
 use ByLopez\VentasAsesor\Exceptions\AsesorInvalidoException;
 use ByLopez\VentasAsesor\Services\Asesores\ConsultaAsesoresService;
 use ByLopez\VentasAsesor\Services\Asesores\GuardarAsesorService;
+use ByLopez\VentasAsesor\Services\Comisiones\AvanceAsesorService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
+use ByLopez\VentasAsesor\Support\Comisiones\MesComercial;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 /**
@@ -23,6 +26,7 @@ class AsesoresController extends Controller
         protected AutorizacionVentasAsesor $autorizacion,
         protected ConsultaAsesoresService $consulta,
         protected GuardarAsesorService $guardar,
+        protected AvanceAsesorService $avance,
     ) {}
 
     public function index(Request $request): View
@@ -59,13 +63,32 @@ class AsesoresController extends Controller
             'estado' => in_array($request->input('estado'), ['activo', 'inactivo'], true) ? $request->input('estado') : null,
         ];
 
+        $asesores = $this->consulta->listar($filtros, (int) $request->input('page', 1))->withQueryString();
+
         return view('ventasasesor::admin.asesores.index', [
-            'asesores' => $this->consulta->listar($filtros, (int) $request->input('page', 1))->withQueryString(),
+            'asesores' => $asesores,
+            'comparativo' => $this->comparativo($admin, $asesores->getCollection()->pluck('admin_id')->map(fn ($id) => (int) $id)->all()),
             'filtros' => $filtros,
             'indicadores' => $this->consulta->indicadores(),
             'elegibles' => $puedeGestionar ? $this->consulta->usuariosElegibles() : [],
             'puedeGestionar' => $puedeGestionar,
         ]);
+    }
+
+    /**
+     * Avance del mes comparable por asesora. Es dato de COMISIONES: solo con `comisiones.view_all` (ver asesores no basta), y calculado
+     * por el servidor con las mismas definiciones que la tarjeta de cada asesora.
+     *
+     * @param  list<int>  $adminIds
+     * @return ?list<array<string, mixed>>
+     */
+    private function comparativo(?\Webkul\User\Contracts\Admin $admin, array $adminIds): ?array
+    {
+        if (! $this->autorizacion->tienePermiso($admin, AutorizacionVentasAsesor::PERMISO_COMISIONES_VER_TODAS)) {
+            return null;
+        }
+
+        return $this->avance->comparativo($adminIds, MesComercial::de(now()));
     }
 
     public function store(Request $request): RedirectResponse

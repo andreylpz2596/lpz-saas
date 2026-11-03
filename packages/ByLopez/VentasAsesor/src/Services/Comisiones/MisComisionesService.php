@@ -31,8 +31,7 @@ class MisComisionesService
 {
     public function __construct(
         protected Autorizacion $autorizacion,
-        protected UmbralMensualService $umbral,
-        protected ElegibilidadComisionService $elegibilidad,
+        protected PanelComisionesService $panel,
         protected LiquidacionesComisionService $liquidaciones,
         protected AplicacionesComisionService $aplicaciones,
     ) {}
@@ -45,86 +44,11 @@ class MisComisionesService
         }
 
         $asesorId = (int) $actor->id;
-        $d = $this->umbral->distribucion($asesorId, $mes);
-        $lineas = ComisionLinea::query()->where('asesor_admin_id', $asesorId)->where('mes_comercial', $mes)
-            ->where('estado', '!=', ComisionLinea::ANULADA)->orderBy('confirmado_en')->orderBy('order_id')->orderBy('order_item_id')->get();
-
-        $liquidaciones = ComisionLiquidacion::query()->where('asesor_admin_id', $asesorId)->whereIn('id', $lineas->pluck('liquidacion_id')->filter()->unique()->all() ?: [0])->get()->keyBy('id');
-        $aplicadas = [];
-
-        foreach ($liquidaciones as $liq) {
-            if ($liq->estado !== ComisionLiquidacion::APROBADA) {
-                continue;
-            }
-
-            foreach ($this->aplicaciones->estado($liq)['destinos'] as $dest) {
-                $dest['tipo'] === 'linea' && $aplicadas[$dest['id']] = $dest;
-            }
-        }
-
-        $etapas = ['bloqueada' => BigDecimal::zero(), 'habilitada' => BigDecimal::zero(), 'por_pagar' => BigDecimal::zero(), 'pagada' => BigDecimal::zero()];
-        $pedidos = [];
-        $motivosPedido = [];
-        $incrementos = DB::table('orders')->whereIn('id', $lineas->pluck('order_id')->unique())->pluck('increment_id', 'id');
-
-        foreach ($lineas as $l) {
-            $dl = $d['lineas'][$l->id] ?? null;
-            $liq = $l->liquidacion_id ? $liquidaciones->get($l->liquidacion_id) : null;
-            $partes = ['bloqueada' => BigDecimal::zero(), 'habilitada' => BigDecimal::zero(), 'por_pagar' => BigDecimal::zero(), 'pagada' => BigDecimal::zero()];
-            $motivos = [];
-
-            if ($l->estado === ComisionLinea::HABILITADA) {
-                $monto = Dinero::de($l->monto);
-
-                if ($liq?->estado === ComisionLiquidacion::APROBADA) {
-                    $a = $aplicadas[$l->id] ?? null;
-                    $pagado = $a ? Dinero::de($a['pagado'])->plus(Dinero::de($a['compensado'])) : BigDecimal::zero();
-                    $partes['pagada'] = $pagado;
-                    $partes['por_pagar'] = Dinero::maximo($monto->minus($pagado), BigDecimal::zero());
-                    ! empty($a['retenido']) && $motivos[] = 'perdio_condiciones';
-                } else {
-                    $partes['habilitada'] = $monto;
-                }
-
-                array_push($motivos, ...($dl['marcas'] ?? []));
-            } else {
-                $partes['bloqueada'] = Dinero::de($dl['monto_estimado'] ?? 0);
-                $motivosPedido[$l->order_id] ??= $this->elegibilidad->dePedido((int) $l->order_id)['motivos'];
-                array_push($motivos, ...$motivosPedido[$l->order_id], ...($dl['marcas'] ?? []), ...array_filter([$l->alerta]));
-
-                if (($dl['comisionables'] ?? null) === 0 && $d['estado_umbral'] === 'definido') {
-                    $motivos[] = 'dentro_del_umbral';
-                }
-            }
-
-            foreach ($partes as $etapa => $valor) {
-                $etapas[$etapa] = $etapas[$etapa]->plus($valor);
-            }
-
-            $pedidos[$l->order_id] ??= ['order_id' => (int) $l->order_id, 'increment_id' => $incrementos[$l->order_id] ?? $l->order_id, 'confirmado_en' => $l->confirmado_en, 'lineas' => []];
-            $pedidos[$l->order_id]['lineas'][] = [
-                'referencia' => $l->referencia,
-                'sku' => $l->sku,
-                'vendidas' => (int) $l->cantidad_vendida,
-                'comisionables' => $l->estado === ComisionLinea::HABILITADA ? (int) $l->unidades_comisionables : ($dl['comisionables'] ?? null),
-                'etapa' => $this->etapaPrincipal($partes),
-                'importe' => Dinero::texto($partes['bloqueada']->plus($partes['habilitada'])->plus($partes['por_pagar'])->plus($partes['pagada'])),
-                'pagado' => Dinero::texto($partes['pagada']),
-                'por_pagar' => Dinero::texto($partes['por_pagar']),
-                'motivos' => array_values(array_unique($motivos)),
-            ];
-        }
-
-        $total = $etapas['bloqueada']->plus($etapas['habilitada'])->plus($etapas['por_pagar'])->plus($etapas['pagada']);
+        // El asesor sale del actor autenticado y `$conCalculo` es false: la asesora nunca recibe costo, base ni margen.
+        $panel = $this->panel->deAsesor($asesorId, $mes, false);
         $cuenta = $this->cuenta($asesorId);
 
-        return [
-            'mes' => $mes,
-            'umbral' => ['valor' => $d['umbral'], 'estado' => $d['estado_umbral'], 'computables' => $d['acumulado'], 'faltante' => $d['faltante'], 'comisionables' => $d['comisionables'],
-                'avance' => $d['umbral'] ? min(100, (int) floor($d['acumulado'] * 100 / max(1, $d['umbral']))) : null],
-            'etapas' => array_map(fn (BigDecimal $v) => Dinero::texto($v), $etapas),
-            'total_mes' => Dinero::texto($total),
-            'pedidos' => array_values($pedidos),
+        return $panel + [
             'liquidaciones' => $cuenta['liquidaciones'],
             'saldo_por_pagar' => $cuenta['por_pagar'],
             'habilitado_sin_liquidar' => $cuenta['habilitado_sin_liquidar'],
@@ -161,17 +85,5 @@ class MisComisionesService
         $libres = ComisionLinea::query()->where('asesor_admin_id', $asesorId)->where('estado', ComisionLinea::HABILITADA)->whereNull('liquidacion_id');
 
         return ['liquidaciones' => $filas, 'por_pagar' => Dinero::texto($porPagar), 'habilitado_sin_liquidar' => Dinero::texto(Dinero::de($libres->sum('monto')))];
-    }
-
-    /** Etapa que se muestra como estado de la linea: la mas avanzada con importe (parcialmente pagada = por pagar); sin importe, bloqueada. */
-    protected function etapaPrincipal(array $partes): string
-    {
-        foreach (['por_pagar', 'pagada', 'habilitada'] as $e) {
-            if ($partes[$e]->isPositive()) {
-                return $e;
-            }
-        }
-
-        return 'bloqueada';
     }
 }

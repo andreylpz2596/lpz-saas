@@ -85,6 +85,10 @@
             </div>
         </form>
 
+        @if (! empty($comparativo))
+            @include('ventasasesor::admin.asesores.avance-comparativo', ['comparativo' => $comparativo])
+        @endif
+
         {{-- Escritorio --}}
         <div class="va-panel va-desktop-table mt-4 overflow-hidden">
             <table class="va-orders-table text-left text-sm">

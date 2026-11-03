@@ -28,6 +28,8 @@ class ConsultaComisionesService
         protected ElegibilidadComisionService $elegibilidad,
         protected LiquidacionesComisionService $liquidaciones,
         protected AplicacionesComisionService $aplicaciones,
+        protected PanelComisionesService $panel,
+        protected AvanceAsesorService $avance,
     ) {}
 
     /** Asesor cuyos datos puede ver el actor: null = todos (view_all); id = solo el propio. */
@@ -90,6 +92,55 @@ class ConsultaComisionesService
         }
 
         return $salida;
+    }
+
+    /**
+     * Panel del mes para Comisiones: resumen por asesora y lista de pedidos agrupada. Misma fuente que «Mis comisiones»
+     * (PanelComisionesService); con `view_own` solo la propia asesora, y el calculo (costo, base, %) solo con `view_all`.
+     *
+     * @return array{asesoras: list<array<string, mixed>>, pedidos: list<array<string, mixed>>, avisos: list<string>, comisiones_activas: bool, ve_calculo: bool}
+     */
+    public function panelDelMes(?Admin $actor, string $mes, ?int $asesorFiltro, ?string $situacion = null): array
+    {
+        $propio = $this->alcance($actor);
+        $asesor = $propio ?? $asesorFiltro;
+        $calculo = $this->veCostos($actor);
+
+        $ids = ComisionLinea::query()->where('mes_comercial', $mes)->where('estado', '!=', ComisionLinea::ANULADA)
+            ->when($asesor !== null, fn ($q) => $q->where('asesor_admin_id', $asesor))
+            ->distinct()->pluck('asesor_admin_id')->map(fn ($id) => (int) $id)->all();
+
+        if ($asesor !== null && ! in_array($asesor, $ids, true)) {
+            $ids[] = $asesor;
+        }
+
+        $nombres = DB::table('bylopez_va_asesores')->whereIn('admin_id', $ids ?: [0])->pluck('nombre', 'admin_id');
+        $asesoras = [];
+        $pedidos = [];
+        $avisos = [];
+
+        foreach ($ids as $id) {
+            $p = $this->panel->deAsesor($id, $mes, $calculo);
+            $nombre = (string) ($nombres[$id] ?? ('#'.$id));
+            $asesoras[] = $p + ['asesora' => $nombre, 'saldo_aprobado' => $this->avance->saldoAprobado($id)];
+            array_push($avisos, ...$p['avisos']);
+
+            foreach ($p['pedidos'] as $pedido) {
+                if ($situacion === null || $pedido['situacion'] === $situacion) {
+                    $pedidos[] = $pedido + ['asesora' => $nombre];
+                }
+            }
+        }
+
+        usort($pedidos, fn ($a, $b) => [(string) $a['confirmado_en'], $a['order_id']] <=> [(string) $b['confirmado_en'], $b['order_id']]);
+
+        return [
+            'asesoras' => $asesoras,
+            'pedidos' => $pedidos,
+            'avisos' => array_values(array_unique($avisos)),
+            'comisiones_activas' => ! empty(config('ventasasesor.comisiones.fecha_inicio')),
+            've_calculo' => $calculo,
+        ];
     }
 
     /**

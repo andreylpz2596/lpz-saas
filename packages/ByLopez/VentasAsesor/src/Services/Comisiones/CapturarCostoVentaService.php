@@ -144,6 +144,19 @@ class CapturarCostoVentaService
     }
 
     /**
+     * Costo comisionable VIGENTE hoy de un producto (la misma lectura del atributo `cost` que usa el congelado de cada venta, en el
+     * canal principal). Solo para SIMULAR: no escribe ni congela nada. Sin valor positivo: null (nunca 0).
+     */
+    public function costoVigenteDe(int $productId): ?float
+    {
+        $atributoId = DB::table('attributes')->where('code', self::ATRIBUTO_COSTO)->value('id');
+        $canal = DB::table('channels')->orderBy('id')->value('id');
+        $costo = $this->costosDe($atributoId === null ? null : (int) $atributoId, collect([$productId]), (object) ['channel_id' => $canal])[$productId] ?? null;
+
+        return $costo !== null && $costo > 0 ? $costo : null;
+    }
+
+    /**
      * Valor del atributo `cost` por producto. Si el atributo fuera por canal, se prefiere el valor del canal del
      * pedido sobre el global.
      *

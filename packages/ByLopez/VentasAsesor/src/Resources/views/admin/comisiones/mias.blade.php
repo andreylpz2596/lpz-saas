@@ -8,6 +8,7 @@
 @once
     @push('styles')
         @include('ventasasesor::admin.cartera.estilos')
+        @include('ventasasesor::admin.comisiones.estilos-panel')
     @endpush
 @endonce
 
@@ -25,27 +26,27 @@
             </div>
         </div>
 
-        @if (empty(config('ventasasesor.comisiones.fecha_inicio')))
-            <p class="va-panel mt-4 p-3 text-xs leading-5 text-amber-700 dark:text-amber-300" data-aviso="sin-fecha-inicio">⚠ @lang('ventasasesor::comisiones.aviso-sin-fecha-inicio')</p>
-        @endif
+        @include('ventasasesor::admin.comisiones.partials.avisos', ['panel' => $datos])
 
-        <form method="GET" action="{{ route('admin.ventas_asesor.comisiones.mias') }}" class="va-panel mt-4 p-4">
-            <div class="grid grid-cols-1 gap-3 md:grid-cols-12">
-                <div class="md:col-span-4">
-                    <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400" for="f-mes">@lang('ventasasesor::comisiones.mes-comercial')</label>
-                    <input id="f-mes" type="month" name="mes" value="{{ $mes }}" class="{{ $input }}">
+        <div class="va-panel mt-4 p-4">
+            <input type="checkbox" id="va-f-toggle" class="va-fcheck">
+            <label for="va-f-toggle" class="va-fbtn">@lang('ventasasesor::comisiones.panel.filtros')</label>
+            <form method="GET" action="{{ route('admin.ventas_asesor.comisiones.mias') }}" class="va-fcompacto">
+                <div class="va-fcompacto__campo">
+                    <label for="f-mes">@lang('ventasasesor::comisiones.mes-comercial')</label>
+                    <input id="f-mes" type="month" name="mes" value="{{ $mes }}">
                 </div>
-                <div class="flex items-end md:col-span-2">
-                    <button type="submit" class="secondary-button w-full justify-center">@lang('ventasasesor::comisiones.filtrar')</button>
+                <div class="va-fcompacto__campo" style="flex:0 0 auto">
+                    <button type="submit" class="secondary-button justify-center">@lang('ventasasesor::comisiones.filtrar')</button>
                 </div>
-            </div>
-        </form>
+            </form>
+        </div>
 
         {{-- Las cuatro etapas se reparten el MISMO importe sin solaparse: su suma es la comision del mes. --}}
         <div class="va-panel mt-4 p-4" data-seccion="etapas">
             <div class="flex flex-wrap items-baseline justify-between gap-2">
                 <p class="va-kpi-label">@lang('ventasasesor::comisiones.mis.total-mes')</p>
-                <p class="text-2xl font-bold text-gray-900 dark:text-white" data-total-mes>{{ $dinero($datos['total_mes']) }}</p>
+                <p class="text-2xl font-bold text-gray-900 dark:text-white" data-total-mes>{{ $dinero($datos['total_mes']) }}@if ($datos['total_parcial']) <span class="va-sub" data-total-parcial>+ @lang('ventasasesor::comisiones.panel.sin-calcular')</span>@endif</p>
             </div>
             <p class="mt-1 text-xs text-slate-500 dark:text-gray-400">@lang('ventasasesor::comisiones.mis.total-mes-ayuda')</p>
 
@@ -83,38 +84,8 @@
             @endif
         </div>
 
-        <div class="mt-4 grid gap-3" data-seccion="pedidos-mes">
-            @forelse ($datos['pedidos'] as $p)
-                <div class="va-panel p-4">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <a href="{{ route('admin.ventas_asesor.comisiones.index', ['pedido' => $p['order_id']]) }}" class="text-base font-semibold text-blue-600 hover:underline">@lang('ventasasesor::comisiones.mis.pedido') #{{ $p['increment_id'] }}</a>
-                        <span class="va-sub">{{ \Illuminate\Support\Carbon::parse($p['confirmado_en'])->isoFormat('D MMM YYYY, HH:mm') }}</span>
-                    </div>
-
-                    {{-- Una tarjeta por linea (no tabla): se lee igual en escritorio y en el celular. --}}
-                    <div class="mt-2 divide-y divide-slate-100 dark:divide-gray-800">
-                        @foreach ($p['lineas'] as $l)
-                            <div class="py-2" data-etapa-linea="{{ $l['etapa'] }}">
-                                <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-                                    <div class="min-w-0">
-                                        <p class="text-sm font-medium text-gray-900 dark:text-white">{{ $l['referencia'] ?? '—' }}</p>
-                                        <p class="va-sub">{{ $l['sku'] }} · @lang('ventasasesor::comisiones.vendidas'): {{ $l['vendidas'] }} · @lang('ventasasesor::comisiones.comisionables'): {{ $l['comisionables'] ?? '—' }}</p>
-                                    </div>
-                                    <div class="flex items-center gap-2">
-                                        <span class="font-semibold">{{ $dinero($l['importe']) }}</span>
-                                        <span class="va-pill va-pill--sm va-pill--{{ $colorEtapa[$l['etapa']] }}"><span>@lang('ventasasesor::comisiones.mis.etapas.'.$l['etapa'])</span></span>
-                                    </div>
-                                </div>
-                                @foreach ($l['motivos'] as $m)
-                                    <p class="va-sub mt-1 text-amber-700 dark:text-amber-300" data-motivo="{{ $m }}">⚠ {{ trans()->has('ventasasesor::comisiones.motivos.'.$m) ? trans('ventasasesor::comisiones.motivos.'.$m) : trans('ventasasesor::comisiones.motivos.sin_distribucion') }}</p>
-                                @endforeach
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
-            @empty
-                <p class="va-panel p-4 text-sm text-slate-500">@lang('ventasasesor::comisiones.mis.sin-ventas')</p>
-            @endforelse
+        <div class="mt-4">
+            @include('ventasasesor::admin.comisiones.partials.lista-pedidos', ['pedidos' => $datos['pedidos'], 'verCalculo' => false, 'urlDetalle' => fn ($id) => route('admin.ventas_asesor.comisiones.index', ['pedido' => $id])])
         </div>
 
         <p class="mt-3 text-xs text-slate-500 dark:text-gray-400">@lang('ventasasesor::comisiones.mis.politicas')</p>
