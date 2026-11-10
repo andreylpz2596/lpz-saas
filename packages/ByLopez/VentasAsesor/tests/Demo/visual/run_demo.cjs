@@ -56,7 +56,7 @@ const correos = { admin: 'demo.admin', asesora: 'demo.asesora', umbral: 'demo.um
     console.log('SERVIDOR base', ent.base_consultada, 'pid', ent.pid);
 
     await page.goto(base + '/admin/login', { waitUntil: 'networkidle' });
-    await page.fill('input[name=email]', correos[rol] + '@bylopez.test');
+    await page.fill('input[name=email]', (correos[rol] || ('demo.' + rol)) + '@bylopez.test');
     await page.fill('input[name=password]', process.env.DEMO_PASSWORD || '');
     await page.click('form button');
     await page.waitForURL((u) => !u.pathname.endsWith('/admin/login'), { timeout: 45000 });
