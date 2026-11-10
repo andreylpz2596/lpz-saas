@@ -98,10 +98,10 @@ class ElegibilidadComisionService
         // Devolucion posterior a la entrega o reembolso (Bagisto): sin politica aprobada, queda en revision.
         $reembolsado = DB::table('order_items')->where('order_id', $orderId)->whereNull('parent_id')->sum('qty_refunded');
 
-        // C5: mercancia que Bodega ya recibio devuelta (descuenta el saldo exigible, pero la comision de esas unidades sigue sin politica).
-        $devueltaRecibida = DB::table('bylopez_lg_recepciones_devolucion')->where('order_id', $orderId)->where('estado', 'confirmado')->exists();
-
-        if ((int) $reembolsado > 0 || $devueltaRecibida || DB::table('refunds')->where('order_id', $orderId)->exists()) {
+        // D10 V1: la mercancia que Bodega ya recibio devuelta (C5) YA NO bloquea. Esas unidades salen del libro del umbral al registrarse el
+        // retorno (unidades netas), D5 recalcula la linea antes de liquidar, D6 ajusta solo el exceso despues de pagar, y el valor devuelto
+        // reduce lo exigible en Cartera. El bloqueo queda SOLO para el Refund nativo de Bagisto y las unidades reembolsadas (D10 V2).
+        if ((int) $reembolsado > 0 || DB::table('refunds')->where('order_id', $orderId)->exists()) {
             $motivos[] = 'devolucion_sin_politica';
         }
 

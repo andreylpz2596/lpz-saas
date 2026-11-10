@@ -5,7 +5,9 @@ namespace ByLopez\VentasAsesor\Http\Controllers\Admin;
 use ByLopez\Logistica\Support\AutorizacionLogistica;
 use ByLopez\VentasAsesor\Enums\AlcanceVisibilidad;
 use ByLopez\VentasAsesor\Http\Requests\Pedidos\ListarPedidosAsesorRequest;
+use ByLopez\VentasAsesor\Services\Cartera\CarteraConsultaService;
 use ByLopez\VentasAsesor\Services\Comisiones\AvanceAsesorService;
+use ByLopez\VentasAsesor\Services\Credito\CreditoClienteService;
 use ByLopez\VentasAsesor\Services\Pedidos\ConsultaPedidosAsesorService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Cartera\MediosCobro;
@@ -31,6 +33,39 @@ class PedidosAsesorController extends Controller
         protected AutorizacionLogistica $logistica,
         protected AvanceAsesorService $avance,
     ) {}
+
+    /** D10 V1: bloque «Saldo a favor» del pedido (solo con permiso de ver credito y alcance «todos»; los servicios revalidan al operar). */
+    private function creditoDelPedido(?Admin $admin, int $pedidoId, bool $verCartera): array
+    {
+        $ver = $verCartera && $this->autorizacion->alcanceDeCartera($admin) === AlcanceVisibilidad::TODOS
+            && $this->autorizacion->puedeCredito($admin, AutorizacionVentasAsesor::PERMISO_CREDITO_VER);
+
+        if (! $ver) {
+            return ['creditoPedido' => null];
+        }
+
+        $servicio = app(CreditoClienteService::class);
+        $orden = DB::table('orders')->where('id', $pedidoId)->first(['customer_id', 'increment_id', 'base_shipping_amount']);
+        $c = $servicio->dePedido($pedidoId);
+        $condonado = round((float) collect($servicio->ajustesDe($pedidoId))->where('estado', 'activo')->sum('monto'), 2);
+        $fichaElegibles = $orden->customer_id ? (app(CarteraConsultaService::class)->fichaDelCliente((int) $orden->customer_id, $admin)['elegibles'] ?? []) : [];
+        $tiene = fn (string $permiso) => $this->autorizacion->puedeCredito($admin, $permiso);
+
+        $puedeAjustar = $tiene(AutorizacionVentasAsesor::PERMISO_CREDITO_AJUSTAR);
+        $flete = max(0.0, round((float) $orden->base_shipping_amount - $condonado, 2));
+        // Sin nada que mostrar ni hacer, el bloque no aparece (el detalle no se satura).
+        $visible = $c['economico'] > 0 || $c['usado'] > 0 || $c['aplicado_a_este_pedido'] > 0 || $condonado > 0 || ($puedeAjustar && $flete > 0);
+
+        return $visible ? ['creditoPedido' => [
+            'credito' => ['total_disponible' => $c['disponible'], 'pedidos' => [['order_id' => $pedidoId, 'increment_id' => (string) $orden->increment_id] + $c]],
+            'elegibles' => $fichaElegibles,
+            'puedeAplicar' => $tiene(AutorizacionVentasAsesor::PERMISO_CREDITO_APLICAR),
+            'puedeReembolsar' => $tiene(AutorizacionVentasAsesor::PERMISO_CREDITO_REEMBOLSAR),
+            'puedeReversar' => $tiene(AutorizacionVentasAsesor::PERMISO_CREDITO_REVERSAR),
+            'puedeAjustar' => $puedeAjustar,
+            'pedidoFlete' => $flete,
+        ]] : ['creditoPedido' => null];
+    }
 
     /**
      * Despacho V1: lo que el usuario puede hacer sobre el envio desde esta pantalla. Solo decide que botones se ofrecen;
@@ -109,6 +144,7 @@ class PedidosAsesorController extends Controller
                 'plataformasTransferencia' => collect($this->medios->plataformasActivas())
                     ->map(fn (string $etiqueta, string $codigo) => ['codigo' => $codigo, 'etiqueta' => $etiqueta])->values()->all(),
                 'verTodos' => $verTodos,
+            ] + $this->creditoDelPedido($admin, (int) $detalle['pedido']->id, $verCartera) + [
                 'volver' => route('admin.ventas_asesor.pedidos.index', $request->except(['pedido'])),
             ]);
         }

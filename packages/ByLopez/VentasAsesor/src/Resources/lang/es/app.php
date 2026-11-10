@@ -113,6 +113,12 @@ return [
         'abono-general' => 'Abono general',
         'revisar-pagos' => 'Revisar pagos',
         'reversar-pagos' => 'Reversar pagos',
+        'credito' => 'Crédito del cliente',
+        'credito-ver' => 'Ver crédito',
+        'credito-aplicar' => 'Aplicar crédito a otro pedido',
+        'credito-reembolsar' => 'Reembolsar crédito',
+        'credito-reversar' => 'Reversar aplicación de crédito',
+        'credito-ajustar' => 'Ajustar/condonar obligación',
         'asesores' => 'Asesores',
         'gestionar-asesores' => 'Gestionar asesores',
         'costos' => 'Control de costos',
@@ -265,6 +271,7 @@ return [
             'transferencia' => 'Transferencia',
             'efectivo' => 'Efectivo',
             'contraentrega_recaudo' => 'Recaudo contra entrega',
+            'credito_cliente' => 'Crédito del cliente (compensación)',
         ],
 
         'bloque' => [

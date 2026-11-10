@@ -75,6 +75,9 @@ class EventServiceProvider extends ServiceProvider
         // reevaluacion de comisiones. Solo marca dentro de la transaccion del hecho; el calculo corre tras el commit.
         SolicitarReevaluacionComision::registrar();
 
+        // D10: un pedido con credito aplicado ACTIVO no se cancela (ni por la via nativa de Bagisto): primero se reversa el credito.
+        Event::listen(\ByLopez\VentasAsesor\Listeners\BloquearCancelacionConCredito::EVENTO, \ByLopez\VentasAsesor\Listeners\BloquearCancelacionConCredito::class.'@handle');
+
         // PAG-D: tarjeta «Pago / Cartera» en la ficha nativa del cliente (hook propio de Bagisto, sin tocar Webkul).
         Event::listen(MostrarCarteraEnFichaCliente::EVENTO, MostrarCarteraEnFichaCliente::class.'@handle');
 

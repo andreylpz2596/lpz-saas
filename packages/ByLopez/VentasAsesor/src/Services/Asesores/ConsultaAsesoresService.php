@@ -212,7 +212,8 @@ class ConsultaAsesoresService
             }
 
             $m[$asesor]['cartera_sin_revisar'] += (float) $saldo->sinRevisar;
-            $m[$asesor]['cartera_verificado'] += (float) $saldo->verificado;
+            // D10: dinero verificado REAL; la compensacion con credito del cliente satisface la deuda pero no es dinero recibido.
+            $m[$asesor]['cartera_verificado'] += max(0.0, (float) $saldo->verificado - (float) $saldo->creditoAplicado);
         }
 
         foreach (DB::table('bylopez_va_aplicaciones_pago as a')

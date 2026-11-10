@@ -162,7 +162,7 @@ test('ACL y alcance: exige abono_general; view_own solo opera sus pedidos; la pa
         ->postJson($url, $cuerpo([pagd_linea($mio->id, '10000')], '10000'))
         ->assertCreated()->assertJsonPath('pedidos_aplicados', 1);
 
-    $pagoId = Pago::query()->value('id');
+    $pagoId = Pago::query()->orderByDesc('id')->value('id'); // el recien creado (la base de pruebas conserva pagos de otras suites)
 
     // Pantalla: view_own ve su cartera (solo su pedido) con el resumen del abono; sin alcance → 403; cliente sin pedidos propios → 404.
     $pantalla = $this->actingAs($asesor, 'admin')->get(route('admin.ventas_asesor.cartera.index', ['cliente' => $cliente->id, 'abono' => $pagoId]))

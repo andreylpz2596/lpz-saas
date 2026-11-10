@@ -337,6 +337,7 @@ return [
         'resultado-operativo' => 'Operating result',
         'recaudo-transportadoras' => 'Collections settled by carriers',
         'recaudo-directo' => 'Confirmed payments without custody',
+        'credito-aplicado' => 'Credit applied (not money received)',
         'incompleto' => 'Incomplete',
         'lineas-sin-costo' => ':n lines without cost (excluded)',
         'habilitada' => 'Enabled: :monto',
@@ -395,7 +396,6 @@ return [
         'detalle' => 'Ver detalle',
         'politicas' => 'Algunos bloqueos esperan una decisión de administración (por ejemplo, un pedido que cruza el umbral o una devolución). Mientras no se apruebe, ese importe no se habilita.',
     ],
-];
 
     /* Commission panel (2026-11-02): advisor progress, per-order status and plain-language reasons. None of them mentions costs or margins. */
     'avance' => [
@@ -580,3 +580,4 @@ return [
         'revisar-antes' => 'Review the data and confirm: nothing is recorded until you press "Confirm and record payment".',
         'error' => 'The receipt could not be uploaded.',
     ],
+];

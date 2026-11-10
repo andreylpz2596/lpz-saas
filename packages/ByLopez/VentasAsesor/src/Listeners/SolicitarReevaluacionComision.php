@@ -52,7 +52,7 @@ class SolicitarReevaluacionComision
             Event::listen('eloquent.saved: '.$clase, fn ($modelo) => app(self::class)->deModelo($modelo, $origen));
         }
 
-        foreach ([Pago::class => 'pago', AplicacionPago::class => 'aplicacion_pago', AtribucionPedido::class => 'atribucion', ClasificacionPedido::class => 'clasificacion'] as $clase => $origen) {
+        foreach ([Pago::class => 'pago', AplicacionPago::class => 'aplicacion_pago', AtribucionPedido::class => 'atribucion', ClasificacionPedido::class => 'clasificacion', \ByLopez\VentasAsesor\Models\AjusteObligacion::class => 'ajuste_obligacion'] as $clase => $origen) {
             Event::listen('eloquent.saved: '.$clase, fn ($modelo) => app(self::class)->deModelo($modelo, $origen));
         }
 

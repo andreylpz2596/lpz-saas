@@ -308,6 +308,37 @@ return [
         'route' => $inicio,
         'sort' => 6,
     ], [
+        // D10 V1: credito del cliente. Hojas SEPARADAS (la agrupadora no autoriza nada); el servicio valida siempre. Sin asignar a ningun rol.
+        'key' => 'ventas_asesor.cartera.credito',
+        'name' => 'ventasasesor::app.acl.credito',
+        'route' => $inicio,
+        'sort' => 7,
+    ], [
+        'key' => 'ventas_asesor.cartera.credito.ver',
+        'name' => 'ventasasesor::app.acl.credito-ver',
+        'route' => [$inicio, 'admin.ventas_asesor.cartera.credito.pedido', 'admin.ventas_asesor.cartera.credito.cliente', 'admin.ventas_asesor.cartera.credito.comprobante'],
+        'sort' => 1,
+    ], [
+        'key' => 'ventas_asesor.cartera.credito.aplicar',
+        'name' => 'ventasasesor::app.acl.credito-aplicar',
+        'route' => [$inicio, 'admin.ventas_asesor.cartera.credito.aplicar'],
+        'sort' => 2,
+    ], [
+        'key' => 'ventas_asesor.cartera.credito.reembolsar',
+        'name' => 'ventasasesor::app.acl.credito-reembolsar',
+        'route' => [$inicio, 'admin.ventas_asesor.cartera.credito.reembolsar'],
+        'sort' => 3,
+    ], [
+        'key' => 'ventas_asesor.cartera.credito.reversar',
+        'name' => 'ventasasesor::app.acl.credito-reversar',
+        'route' => [$inicio, 'admin.ventas_asesor.cartera.credito.reversar'],
+        'sort' => 4,
+    ], [
+        'key' => 'ventas_asesor.cartera.credito.ajustar',
+        'name' => 'ventasasesor::app.acl.credito-ajustar',
+        'route' => [$inicio, 'admin.ventas_asesor.cartera.credito.ajustar', 'admin.ventas_asesor.cartera.credito.ajuste_reversar'],
+        'sort' => 5,
+    ], [
         /*
          * ASESOR-01: ficha de asesores. Como `pedidos`, la agrupadora abre la pantalla (string, regla 3) y el
          * controlador exige `view_own` (solo la ficha propia) o `view_all`. `manage` = crear, editar y activar.

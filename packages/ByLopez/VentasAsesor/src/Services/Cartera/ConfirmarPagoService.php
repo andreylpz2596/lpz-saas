@@ -10,6 +10,8 @@ use ByLopez\VentasAsesor\Enums\TipoEventoPago;
 use ByLopez\VentasAsesor\Exceptions\RevisionPagoInvalidaException as Rechazo;
 use ByLopez\VentasAsesor\Models\Pago;
 use ByLopez\VentasAsesor\Models\PagoEvento;
+use ByLopez\VentasAsesor\Services\Credito\CreditoClienteService;
+use ByLopez\VentasAsesor\Services\Credito\SatisfaccionFacturaService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Cartera\AlcanceDePagos;
 use ByLopez\VentasAsesor\Support\Cartera\FechaCorteCartera;
@@ -89,6 +91,12 @@ class ConfirmarPagoService extends RevisionPagoService
         // Falla cerrado: los saldos y la revision estructural solo existen con Cartera activa.
         if (! $this->fechaCorte->activa()) {
             throw new Rechazo(Rechazo::CARTERA_INACTIVA, 'Cartera todavia no esta activa (no hay fecha de corte).');
+        }
+
+        // D10: el credito del cliente es una COMPENSACION que nace confirmada desde AplicarCreditoService; jamas entra por aqui (crearia una
+        // Transaction = dinero recibido que no existe).
+        if ($pago->medio_cobro === CreditoClienteService::MEDIO) {
+            throw new Rechazo(Rechazo::ESTADO_NO_REVISABLE, 'Un pago de credito del cliente no se confirma: se aplica y se reversa desde el credito.', ['medio' => $pago->medio_cobro]);
         }
 
         // 2) Aplicaciones activas (bloqueadas) e invariantes del pago.
@@ -176,6 +184,11 @@ class ConfirmarPagoService extends RevisionPagoService
                 'invoice_id' => (int) $factura->id,
                 'monto' => $monto,
             ];
+        }
+
+        // D10: un pedido con credito/ajustes activos queda «satisfecho» con dinero real + compensacion (sin Transaction por el credito).
+        foreach ($ids as $orderId) {
+            app(SatisfaccionFacturaService::class)->sincronizar((int) $orderId);
         }
 
         // 6) El pago pasa a confirmado; el evento deja actor, mecanismo y las Transactions creadas.

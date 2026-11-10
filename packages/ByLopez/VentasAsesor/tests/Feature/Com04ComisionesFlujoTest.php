@@ -187,7 +187,7 @@ test('COM4-5 costo sin confirmar, sin fecha de inicio o venta anterior al inicio
     expect(com4_linea($pedidoB)->estado)->toBe('habilitada');
 });
 
-test('COM4-6 cancelar el pendiente de un pedido anterior desplaza el tramo: la linea ya habilitada no se recalcula sola (D5 pendiente)', function () {
+test('COM4-6 (D5 aprobada) cancelar el pendiente de un pedido anterior desplaza el tramo: la linea habilitada SIN liquidar se recalcula sola, con evento y traza', function () {
     $a = com4_escenario('10', 10);
     $primero = com4_vender($a, 8);                  // acumulado 8, nada entregado todavia
     $segundo = com4_vender($a, 5);                  // 3 comisionables
@@ -204,9 +204,13 @@ test('COM4-6 cancelar el pendiente de un pedido anterior desplaza el tramo: la l
     app(EvaluarComisionesService::class)->evaluarPedido((int) $segundo->id);
     $despues = com4_linea($segundo)->fresh();
 
-    // Nada se recalcula ni se descuenta automaticamente: conserva lo congelado y queda marcada en revision.
-    expect((int) $despues->unidades_comisionables)->toBe(3)->and((float) $despues->monto)->toBe(1200.0)
-        ->and($despues->alerta)->toBe('politica_pendiente_desplazamiento');
+    // D5 (aprobada): antes de liquidar se RECALCULA. Acumulado 5 < umbral 10 → 0 unidades comisionan → monto 0; queda el evento con la traza.
+    $evento = DB::table('bylopez_va_comision_eventos')->where('linea_id', $despues->id)->where('tipo', 'recalculada')->orderByDesc('id')->first();
+    $detalle = json_decode((string) $evento->detalle, true);
+
+    expect((int) $despues->unidades_comisionables)->toBe(0)->and((float) $despues->monto)->toBe(0.0)->and($despues->alerta)->toBeNull()
+        ->and($detalle['antes'])->toMatchArray(['unidades' => 3])
+        ->and($detalle['traza'])->toMatchArray(['umbral' => 10, 'acumulado_previo' => 0, 'unidades_pedido' => 5]);
 });
 
 test('COM4-7 la asesora ve solo sus comisiones y sin costos; las rutas administrativas le estan cerradas', function () {

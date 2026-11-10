@@ -7,6 +7,7 @@ use ByLopez\VentasAsesor\Exceptions\RegistroPagoInvalidoException;
 use ByLopez\VentasAsesor\Http\Requests\Cartera\RegistrarAbonoClienteRequest;
 use ByLopez\VentasAsesor\Services\Cartera\CarteraConsultaService;
 use ByLopez\VentasAsesor\Services\Cartera\RegistrarAbonoClienteService;
+use ByLopez\VentasAsesor\Services\Credito\CreditoClienteService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Cartera\MediosCobro;
 use Illuminate\Http\JsonResponse;
@@ -49,7 +50,17 @@ class CarteraClienteController extends Controller
 
         abort_if($ficha === null, 404);
 
+        // D10 V1: credito del cliente. Solo se calcula y se muestra con permiso de ver y alcance «todos»; los servicios revalidan al operar.
+        $alcanceTotal = $this->autorizacion->alcanceDeCartera($admin) === AlcanceVisibilidad::TODOS;
+        $verCredito = $alcanceTotal && $this->autorizacion->puedeCredito($admin, AutorizacionVentasAsesor::PERMISO_CREDITO_VER);
+        $credito = $verCredito && $ficha['cartera']->carteraActiva ? app(CreditoClienteService::class)->delCliente($clienteId) : null;
+        $tiene = fn (string $permiso) => $alcanceTotal && $this->autorizacion->puedeCredito($admin, $permiso);
+
         return view('ventasasesor::admin.cartera.cliente', $ficha + [
+            'credito' => $credito,
+            'puedeAplicar' => $tiene(AutorizacionVentasAsesor::PERMISO_CREDITO_APLICAR),
+            'puedeReembolsar' => $tiene(AutorizacionVentasAsesor::PERMISO_CREDITO_REEMBOLSAR),
+            'puedeReversar' => $tiene(AutorizacionVentasAsesor::PERMISO_CREDITO_REVERSAR),
             'puedeAbonar' => $this->autorizacion->tienePermiso($admin, AutorizacionVentasAsesor::PERMISO_CARTERA_ABONO_GENERAL),
             'mediosCobro' => collect($this->medios->activos())->map(fn (array $m) => [
                 'codigo' => $m['codigo'],

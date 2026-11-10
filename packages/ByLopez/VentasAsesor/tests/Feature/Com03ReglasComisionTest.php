@@ -65,9 +65,8 @@ test('COM03-1 el porcentaje sale de la regla VIGENTE (no del codigo); la potenci
         ->and($p->motivosNoPagable)->not->toContain(Potencial::MOTIVO_COSTO_NO_AUTORIZADO)
         ->and($p->motivosNoPagable)->toContain(Potencial::MOTIVO_ENTREGA_NO_IMPLEMENTADA)
         ->and($p->motivosNoPagable)->toContain(Potencial::MOTIVO_PAGO_NO_EVALUADO)
-        // COM-04 no existe: ninguna tabla de lineas ni liquidaciones de comision.
-        ->and(Schema::hasTable('bylopez_va_comision_lineas'))->toBeFalse()
-        ->and(Schema::hasTable('bylopez_va_comision_liquidaciones'))->toBeFalse();
+        // COM-04 ya existe (lineas y liquidaciones): la potencial sigue siendo SOLO diagnostica, y eso lo afirman las aserciones de arriba.
+        ->and(Schema::hasTable('bylopez_va_comision_lineas'))->toBeTrue();
 });
 
 test('COM03-2 un cambio futuro crea otra regla y solo CIERRA la anterior; nada retroactivo, sin solapes, sin editar ni borrar', function () {

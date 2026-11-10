@@ -216,7 +216,8 @@ test('TipoEventoPago: catalogo, estado resultante y motivo obligatorio solo al r
 test('medios de cobro: una sola fuente; transferencia exige referencia; medio de cobro != metodo de pago del pedido', function () {
     $medios = app(MediosCobro::class);
 
-    expect(array_keys($medios->todos()))->toBe(['transferencia', 'efectivo', 'contraentrega_recaudo'])
+    expect(array_keys($medios->todos()))->toBe(['transferencia', 'efectivo', 'contraentrega_recaudo', 'credito_cliente'])
+        ->and($medios->estaActivo('credito_cliente'))->toBeFalse()   // D10: compensacion, nunca seleccionable a mano
         ->and($medios->exigeReferencia('transferencia'))->toBeTrue()
         ->and($medios->politicaReferencia('efectivo'))->toBe(MediosCobro::REFERENCIA_OPCIONAL)
         ->and($medios->exigeReferencia('efectivo'))->toBeFalse()
@@ -274,6 +275,11 @@ test('los codigos de medio de cobro viven solo en la configuracion y los textos 
         }
 
         foreach (["'transferencia'", "'efectivo'", "'contraentrega_recaudo'"] as $literal) {
+            // C6: `efectivo` es ahi el NOMBRE de la columna «efectivo conciliado» de la caja del pedido, no un codigo de medio de cobro.
+            if ($literal === "'efectivo'" && in_array(basename($ruta), ['CajaPedidoService.php', 'detalle.blade.php'], true)) {
+                continue;
+            }
+
             if (str_contains($archivo->getContents(), $literal)) {
                 $repetidos[] = basename($ruta).' '.$literal;
             }
@@ -319,8 +325,15 @@ test('la fecha de corte no se inventa: por defecto Cartera esta inactiva', funct
 test('ACL de cartera: alcance independiente de pedidos; la agrupadora sola no concede nada; sin roles asignados', function () {
     $autz = app(Autz::class);
 
-    // No se asigno automaticamente a ningun rol existente (P-12: tampoco se quita sales.transactions aqui).
-    expect(Role::query()->where('permissions', 'like', '%ventas_asesor.cartera%')->count())->toBe(0);
+    // PAG-F configuro SOLO el rol ASESOR VENTAS (alcance propio: view_own, registrar y abono_general). Ningun rol `custom` recibe revisar,
+    // reversar, alcance total ni las hojas de credito (D10): esas las tiene solo el Administrador, que es `permission_type = all`.
+    $conCartera = Role::query()->where('permissions', 'like', '%ventas_asesor.cartera%')->get();
+
+    expect($conCartera->pluck('name')->unique()->values()->all())->toBe(['ASESOR VENTAS']);
+
+    foreach ($conCartera as $rol) {
+        expect(collect($rol->permissions)->filter(fn ($p) => preg_match('/cartera\.(revisar|reversar|view_all|credito)/', (string) $p))->all())->toBe([]);
+    }
 
     $todo = pagb_asesor([Autz::PERMISO_MODULO, Autz::PERMISO_CARTERA_VER_TODA]);
     $propio = pagb_asesor([Autz::PERMISO_MODULO, Autz::PERMISO_CARTERA_VER_PROPIA]);
@@ -355,16 +368,17 @@ test('ACL de cartera: alcance independiente de pedidos; la agrupadora sola no co
         ->and($autz->tienePermiso($soloRegistra, Autz::PERMISO_CARTERA_REVISAR))->toBeFalse();
 });
 
-test('hasta PAG-C solo existe registrar: no hay clases de confirmar, rechazar ni reversar pagos (PAG-E / PAG-I)', function () {
-    $encontradas = [];
+test('el modelo Pago es pasivo: confirmar, rechazar y reversar viven en servicios (PAG-E / PAG-I), nunca como metodos del modelo', function () {
+    $servicios = [];
 
     foreach ((new Finder)->files()->in(dirname(__DIR__, 2).'/src')->name('*.php') as $archivo) {
-        if (preg_match('/(Confirmar|Rechazar|Reversar)Pago/', $archivo->getFilename())) {
-            $encontradas[] = $archivo->getFilename();
+        if (preg_match('/^(Confirmar|Rechazar|Reversar)Pago.*Service\.php$/', $archivo->getFilename())) {
+            $servicios[] = $archivo->getFilename();
         }
     }
 
-    expect($encontradas)->toBe([])
+    // PAG-E y PAG-I ya fueron aprobadas e implementadas como servicios.
+    expect($servicios)->toContain('ConfirmarPagoService.php')->toContain('RechazarPagoService.php')
         ->and(method_exists(Pago::class, 'confirmar'))->toBeFalse()
         ->and(method_exists(Pago::class, 'rechazar'))->toBeFalse()
         ->and(method_exists(Pago::class, 'reversar'))->toBeFalse();

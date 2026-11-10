@@ -101,6 +101,8 @@ class VentasAsesorServiceProvider extends ServiceProvider
         // desde Cartera (bloquean el despacho «pagado» hasta que Cartera los confirme o rechace). Solo lectura.
         $this->app->bind(ResuelveMunicipio::class, MunicipioDesdeCatalogo::class);
         $this->app->bind(PagosPendientesDeConfirmar::class, PagosPendientesDesdeCartera::class);
+        // D10: anular una recepcion C5 no puede dejar credito consumido sin respaldo.
+        $this->app->bind(\ByLopez\Logistica\Contracts\GuardaAnulacionRecepcion::class, \ByLopez\VentasAsesor\Support\Logistica\GuardaAnulacionRecepcionConCredito::class);
 
         // Cierre F1: el carrier de domicilio local lee el domiciliario elegido en la venta (el borrador dueno del carrito).
         $this->app->bind(DomiciliarioElegidoEnCarrito::class, DomiciliarioDesdeBorrador::class);

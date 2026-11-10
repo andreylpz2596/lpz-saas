@@ -140,6 +140,8 @@ class ConsultaPedidosAsesorService
             $fila->saldo = $saldoPedido;
             $fila->pago_sin_revisar = (float) ($cartera?->sinRevisar ?? 0);
             $fila->pago_verificado = (float) ($cartera?->verificado ?? 0);
+            // D10: parte de lo verificado que es compensacion con credito (no es dinero recibido).
+            $fila->credito_aplicado = (float) ($cartera?->creditoAplicado ?? 0);
             $fila->estado_despacho = $this->estadoDespacho((string) $fila->status, $despachos[(int) $fila->id] ?? null);
             $fila->propietario = $this->propietario($fila);
 

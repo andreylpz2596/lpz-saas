@@ -129,6 +129,11 @@
                 </div>
             </div>
 
+            {{-- D10 V1: saldo a favor del cliente (solo con permiso de ver credito y alcance «todos»). --}}
+            @if (! empty($credito))
+                @include('ventasasesor::admin.cartera.credito')
+            @endif
+
             @if ($cartera->porRevisarTotal > 0 || $cartera->pedidosPorRevisar() > 0)
                 <p class="mt-3 text-sm font-medium" style="color:#3730a3">
                     @lang('ventasasesor::app.cartera.cliente.por-revisar', ['monto' => $dinero($cartera->porRevisarTotal)])

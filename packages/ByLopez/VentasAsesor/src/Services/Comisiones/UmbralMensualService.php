@@ -65,6 +65,7 @@ class UmbralMensualService
             $unidades = $delPedido->sum(fn (ComisionLinea $l) => $computables[$l->id] ?? 0);
             $libres = $umbral === null ? null : max(0, $umbral - $acumulado);
             $comisionablesPedido = $libres === null ? 0 : max(0, $unidades - $libres);
+            $acumuladoPrevio = $acumulado;
             $acumulado += $unidades;
 
             $reparto = $this->repartir($delPedido, $computables, $comisionablesPedido);
@@ -85,7 +86,9 @@ class UmbralMensualService
                     $marcas[] = self::POLITICA_PEDIDO_MIXTO;
                 }
 
-                if ($l->estado === ComisionLinea::HABILITADA && $c !== null && $l->unidades_comisionables !== $c) {
+                // D5 (aprobada): una linea habilitada que AUN NO esta en una liquidacion se recalcula sola (con evento y traza). Solo la que
+                // ya esta en una liquidacion conserva lo congelado y se trata por D6 (incidencia + ajuste por el exceso pagado).
+                if ($l->estado === ComisionLinea::HABILITADA && $l->liquidacion_id !== null && $c !== null && $l->unidades_comisionables !== $c) {
                     $marcas[] = self::POLITICA_DESPLAZAMIENTO;
                 }
 
@@ -94,6 +97,10 @@ class UmbralMensualService
                     'comisionables' => $c,
                     'monto_estimado' => Dinero::texto($monto),
                     'cruza_umbral' => $cruza,
+                    // Traza del calculo (D5): lo que se uso para decidir cuantas unidades comisionan.
+                    'umbral' => $umbral,
+                    'acumulado_previo' => $acumuladoPrevio,
+                    'unidades_pedido' => $unidades,
                     'marcas' => $marcas,
                 ];
 

@@ -31,6 +31,9 @@ use Webkul\User\Contracts\Admin;
  */
 class IncidenciasComisionService
 {
+    /** Tipo de incidencia por desplazamiento del tramo del umbral (D5/D6). */
+    private const DESPLAZAMIENTO = UmbralMensualService::POLITICA_DESPLAZAMIENTO;
+
     public function __construct(
         protected Autorizacion $autorizacion,
         protected AplicacionesComisionService $aplicaciones,
@@ -48,7 +51,17 @@ class IncidenciasComisionService
 
         $clave = ComisionIncidencia::claveAbierta($linea->id, $tipo);
 
-        if (ComisionIncidencia::query()->where('abierta_clave', $clave)->exists()) {
+        // D6: la comision CORRECTA hoy (con las unidades netas actuales) frente a lo historicamente pagado. Solo el EXCESO se ajusta.
+        $d6 = $tipo === self::DESPLAZAMIENTO && isset($detalle['correcta_actual']);
+        $correcta = $d6 ? Dinero::de($detalle['correcta_actual']) : null;
+
+        if ($d6 && ! Dinero::de($linea->monto)->isGreaterThan($correcta)) {
+            return null;   // la comision correcta no es menor a la liquidada: nada que retener ni ajustar
+        }
+
+        if (($existente = ComisionIncidencia::query()->where('abierta_clave', $clave)->first()) !== null) {
+            $d6 && $this->actualizarPropuestaD6($existente, $linea, $correcta, $actorId);
+
             return null;
         }
 
@@ -73,7 +86,8 @@ class IncidenciasComisionService
                 'order_id' => $linea->order_id,
                 'asesor_admin_id' => $linea->asesor_admin_id,
                 'tipo' => $tipo,
-                'detalle' => $detalle + ['huella' => $huella, 'monto_linea' => (string) $linea->monto, 'pagado_al_abrir' => Dinero::texto($pagado)],
+                'detalle' => $detalle + ['huella' => $huella, 'monto_linea' => (string) $linea->monto, 'pagado_al_abrir' => Dinero::texto($pagado)]
+                    + ($d6 ? ['pagado_historico' => Dinero::texto($pagado), 'exceso' => Dinero::texto($this->exceso($pagado, $correcta))] : []),
                 'estado' => ComisionIncidencia::ABIERTA,
                 'abierta_clave' => $clave,
             ]);
@@ -96,9 +110,77 @@ class IncidenciasComisionService
             $incidencia->update(['ajuste_id' => $ajuste->id]);
         }
 
+        // D6: el exceso (pagado − correcta hoy), nunca el total pagado. Sin exceso no se propone ajuste.
+        if ($d6) {
+            $this->proponerAjusteD6($incidencia, $linea, $pagado, $correcta);
+        }
+
         $this->evento($linea->id, 'incidencia_abierta', ['incidencia' => $incidencia->id, 'tipo' => $tipo, 'pagado' => Dinero::texto($pagado)], $actorId);
 
         return $incidencia;
+    }
+
+    /** Exceso pagado sobre lo que corresponde hoy: max(0, pagado − correcta). */
+    protected function exceso(\Brick\Math\BigDecimal $pagado, \Brick\Math\BigDecimal $correcta): \Brick\Math\BigDecimal
+    {
+        $exceso = $pagado->minus($correcta);
+
+        return $exceso->isPositive() ? $exceso : \Brick\Math\BigDecimal::zero();
+    }
+
+    /** Ajuste NEGATIVO futuro por el exceso (pagado historico 100.000, correcto hoy 75.000 → −25.000). La liquidacion historica no se toca. */
+    protected function proponerAjusteD6(ComisionIncidencia $incidencia, ComisionLinea $linea, \Brick\Math\BigDecimal $pagado, \Brick\Math\BigDecimal $correcta): void
+    {
+        $exceso = $this->exceso($pagado, $correcta);
+
+        if (! $exceso->isPositive()) {
+            return;
+        }
+
+        $ajuste = ComisionAjuste::query()->create([
+            'asesor_admin_id' => $linea->asesor_admin_id,
+            'linea_id' => $linea->id,
+            'order_id' => $linea->order_id,
+            'monto' => (string) $exceso->negated(),
+            'origen' => 'devolucion_posterior',
+            'motivo' => mb_substr('D6 · incidencia #'.$incidencia->id.': pagado historico '.Dinero::texto($pagado).', correcto hoy '.Dinero::texto($correcta).'. Se ajusta SOLO el exceso: '.Dinero::texto($exceso).'.', 0, 500),
+            'estado' => ComisionAjuste::PENDIENTE,
+            'idempotency_key' => 'incidencia:'.$incidencia->id.':ajuste:d6:'.substr(sha1(Dinero::texto($exceso)), 0, 12),
+        ]);
+        $incidencia->update(['ajuste_id' => $ajuste->id]);
+    }
+
+    /**
+     * La incidencia sigue abierta y la comision correcta cambio (otra devolucion): si el ajuste propuesto aun esta PENDIENTE y ya no
+     * coincide con el exceso, se rechaza (reemplazado) y se propone el nuevo. Uno ya APROBADO nunca se toca.
+     */
+    protected function actualizarPropuestaD6(ComisionIncidencia $inc, ComisionLinea $linea, \Brick\Math\BigDecimal $correcta, ?int $actorId): void
+    {
+        $pagado = $this->aplicaciones->pagadoDeLinea($linea->id);
+        $exceso = $this->exceso($pagado, $correcta);
+        $ajuste = $inc->ajuste_id === null ? null : ComisionAjuste::query()->lockForUpdate()->find($inc->ajuste_id);
+        $vigente = $ajuste !== null && $ajuste->estado !== ComisionAjuste::RECHAZADO;
+
+        if ($ajuste !== null && $ajuste->estado === ComisionAjuste::APROBADO) {
+            return;
+        }
+
+        if ($vigente && Dinero::de($ajuste->monto)->abs()->isEqualTo($exceso)) {
+            return;
+        }
+
+        if ($vigente) {
+            $ajuste->update([
+                'estado' => ComisionAjuste::RECHAZADO, 'resuelto_en' => now(), 'resuelto_por_name_snapshot' => 'sistema',
+                'motivo_resolucion' => 'Reemplazado por un recalculo (D6): el exceso cambio a '.Dinero::texto($exceso).'.',
+            ]);
+        }
+
+        if ($exceso->isPositive() || $vigente) {
+            $inc->update(['detalle' => array_merge((array) $inc->detalle, ['correcta_actual' => Dinero::texto($correcta), 'exceso' => Dinero::texto($exceso), 'pagado_historico' => Dinero::texto($pagado)])]);
+            $this->proponerAjusteD6($inc, $linea, $pagado, $correcta);
+            $this->evento($linea->id, 'ajuste_d6_recalculado', ['incidencia' => $inc->id, 'exceso' => Dinero::texto($exceso), 'correcta' => Dinero::texto($correcta)], $actorId);
+        }
     }
 
     /** «Mantener»: el hecho no afecta la comision. Rechaza el ajuste propuesto (si sigue pendiente) y libera la linea. */

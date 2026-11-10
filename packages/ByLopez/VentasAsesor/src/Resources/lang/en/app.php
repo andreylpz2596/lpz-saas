@@ -113,6 +113,12 @@ return [
         'abono-general' => 'General payment',
         'revisar-pagos' => 'Review payments',
         'reversar-pagos' => 'Reverse payments',
+        'credito' => 'Customer credit',
+        'credito-ver' => 'View credit',
+        'credito-aplicar' => 'Apply credit to another order',
+        'credito-reembolsar' => 'Refund credit',
+        'credito-reversar' => 'Reverse a credit application',
+        'credito-ajustar' => 'Adjust/waive an obligation',
         'asesores' => 'Advisors',
         'gestionar-asesores' => 'Manage advisors',
         'costos' => 'Cost control',
@@ -265,6 +271,7 @@ return [
             'transferencia' => 'Bank transfer',
             'efectivo' => 'Cash',
             'contraentrega_recaudo' => 'Cash on delivery collection',
+            'credito_cliente' => 'Customer credit (offset)',
         ],
 
         'bloque' => [

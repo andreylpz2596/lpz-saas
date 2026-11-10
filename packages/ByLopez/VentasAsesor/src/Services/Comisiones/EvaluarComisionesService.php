@@ -217,7 +217,9 @@ class EvaluarComisionesService
                     'alerta' => null,
                 ]);
 
-                $this->lineas->evento($linea, $antes === null ? 'habilitada' : 'recalculada', ['unidades' => $d['comisionables'], 'monto' => $monto, 'antes' => $antes], $actorId);
+                // D5: el evento deja la traza del calculo (umbral, acumulado previo y unidades netas del pedido) usada para recalcular.
+                $traza = ['umbral' => $d['umbral'] ?? null, 'acumulado_previo' => $d['acumulado_previo'] ?? null, 'unidades_pedido' => $d['unidades_pedido'] ?? null, 'computables' => $d['computables']];
+                $this->lineas->evento($linea, $antes === null ? 'habilitada' : 'recalculada', ['unidades' => $d['comisionables'], 'monto' => $monto, 'antes' => $antes, 'traza' => $traza], $actorId);
                 $resumen['habilitadas']++;
             } elseif ($linea->alerta !== null) {
                 $linea->update(['alerta' => null]);
@@ -270,7 +272,12 @@ class EvaluarComisionesService
         $soloDesplazamiento = $motivos === [UmbralMensualService::POLITICA_DESPLAZAMIENTO];
         $alerta = $soloDesplazamiento ? UmbralMensualService::POLITICA_DESPLAZAMIENTO : ComisionIncidencia::PERDIO_CONDICIONES;
 
-        $abierta = $this->incidencias->abrir($linea, $alerta, ['motivos' => $motivos, 'propuesta_unidades' => $d['comisionables'] ?? null], $actorId);
+        // D6: comision correcta HOY (con las unidades netas actuales; 0 si perdio condiciones) frente a lo pagado: solo el EXCESO se ajusta.
+        $correcta = $soloDesplazamiento && isset($d['comisionables']) ? ($this->umbral->monto($linea, $d['comisionables']) ?? \Brick\Math\BigDecimal::zero()) : \Brick\Math\BigDecimal::zero();
+        $abierta = $this->incidencias->abrir($linea, $alerta, [
+            'motivos' => $motivos, 'propuesta_unidades' => $d['comisionables'] ?? null, 'correcta_actual' => Dinero::texto($correcta),
+            'traza' => ['umbral' => $d['umbral'] ?? null, 'acumulado_previo' => $d['acumulado_previo'] ?? null, 'unidades_pedido' => $d['unidades_pedido'] ?? null],
+        ], $actorId);
 
         if ($abierta !== null) {
             $resumen['incidencias']++;

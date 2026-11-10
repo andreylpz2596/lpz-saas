@@ -5,6 +5,7 @@ namespace ByLopez\VentasAsesor\Services\Rentabilidad;
 use Brick\Math\BigDecimal;
 use ByLopez\VentasAsesor\Models\ComisionLinea;
 use ByLopez\VentasAsesor\Services\Comisiones\UmbralMensualService;
+use ByLopez\VentasAsesor\Services\Credito\CreditoClienteService;
 use ByLopez\VentasAsesor\Support\Comisiones\Dinero;
 use ByLopez\VentasAsesor\Support\Comisiones\MesComercial;
 use Illuminate\Support\Facades\DB;
@@ -116,7 +117,10 @@ class PanelMensualService
         // validar la entrega NO son dinero en ByLopez todavia: se reconocen por la liquidacion de arriba, o quedan aparte.
         $custodia = (array) config('ventasasesor.comisiones.medios_custodia_tercero', []);
         $obsEntrega = (string) config('ventasasesor.comisiones.observacion_cobro_en_entrega');
-        $pagos = DB::table('bylopez_va_pagos')->where('estado', 'confirmado')->where('revisado_en', '>=', $desde)->where('revisado_en', '<', $hasta);
+        // D10: el credito del cliente (`credito_cliente`) satisface una obligacion pero NO es dinero recibido: nunca entra en el recaudo.
+        $pagosMes = DB::table('bylopez_va_pagos')->where('estado', 'confirmado')->where('revisado_en', '>=', $desde)->where('revisado_en', '<', $hasta);
+        $creditoAplicado = Dinero::de((clone $pagosMes)->where('medio_cobro', CreditoClienteService::MEDIO)->sum('monto'));
+        $pagos = (clone $pagosMes)->where('medio_cobro', '!=', CreditoClienteService::MEDIO);
         $directo = Dinero::de((clone $pagos)->whereNotIn('medio_cobro', $custodia)
             ->where(fn ($q) => $q->whereNull('observacion')->orWhere('observacion', '!=', $obsEntrega))->sum('monto'));
         $enTerceros = Dinero::de((clone $pagos)->where(fn ($q) => $q->whereIn('medio_cobro', $custodia ?: ['__ninguno__'])->orWhere('observacion', $obsEntrega))->sum('monto'));
@@ -146,6 +150,7 @@ class PanelMensualService
             'liquidaciones' => $liqs->count(),
             'recaudo_directo' => Dinero::texto($directo),
             'cobros_en_terceros' => Dinero::texto($enTerceros),
+            'credito_aplicado' => Dinero::texto($creditoAplicado),
             // El costo es el ESTANDAR congelado al vender (COM-01), no el costo real completo de produccion.
             'costo_es_estandar' => true,
         ];

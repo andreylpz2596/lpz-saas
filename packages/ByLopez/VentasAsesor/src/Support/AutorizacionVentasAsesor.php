@@ -56,6 +56,17 @@ class AutorizacionVentasAsesor
 
     public const PERMISO_CARTERA_REVERSAR = 'ventas_asesor.cartera.reversar';
 
+    /* D10 V1: credito del cliente. Capacidades SEPARADAS; el servicio exige ademas el alcance de cartera `view_all`. Bodega (C5) no las recibe. */
+    public const PERMISO_CREDITO_VER = 'ventas_asesor.cartera.credito.ver';
+
+    public const PERMISO_CREDITO_APLICAR = 'ventas_asesor.cartera.credito.aplicar';
+
+    public const PERMISO_CREDITO_REEMBOLSAR = 'ventas_asesor.cartera.credito.reembolsar';
+
+    public const PERMISO_CREDITO_REVERSAR = 'ventas_asesor.cartera.credito.reversar';
+
+    public const PERMISO_CREDITO_AJUSTAR = 'ventas_asesor.cartera.credito.ajustar';
+
     /* D-COST-04/05: «Control de costos». Ver = pantalla de comparacion; actualizar = vista previa y confirmacion. */
     public const PERMISO_COSTOS = 'ventas_asesor.costos';
 
@@ -122,6 +133,40 @@ class AutorizacionVentasAsesor
         }
 
         return in_array($permiso, $permisos, true);
+    }
+
+    /**
+     * Administrador AUTORIZADO para operar dinero (D10 V1): comprobacion POSITIVA de identidad, no solo de permisos. El Bouncer y
+     * `tienePermiso()` conceden todo a cualquier rol `permission_type = all` (p. ej. un «BODEGA» de QA creado como `all`), asi que
+     * ese tipo de rol NO basta: tiene que ser el rol administrador configurado (`ventasasesor.credito.rol_administrador_id`, por
+     * defecto 1, el mismo criterio que Cargues) y seguir activo.
+     */
+    public function esAdministradorAutorizado(?AdminContract $admin): bool
+    {
+        $rol = $admin?->role;
+
+        return $admin !== null
+            && (bool) ($admin->status ?? true)
+            && $rol !== null
+            && $rol->permission_type === 'all'
+            && (int) $admin->role_id === (int) config('ventasasesor.credito.rol_administrador_id', 1);
+    }
+
+    /**
+     * Permiso de credito del cliente (D10 V1). Operar (aplicar, reembolsar, reversar, ajustar) = administrador autorizado Y la clave.
+     * Ver = la clave, pero un rol `all` que no sea el administrador autorizado tampoco ve (la «herencia» de `all` no es una asignacion).
+     */
+    public function puedeCredito(?AdminContract $admin, string $permiso): bool
+    {
+        if (! $this->tienePermiso($admin, $permiso)) {
+            return false;
+        }
+
+        if ($admin->role->permission_type === 'all' || $permiso !== self::PERMISO_CREDITO_VER) {
+            return $this->esAdministradorAutorizado($admin);
+        }
+
+        return true;
     }
 
     /**

@@ -238,6 +238,17 @@
                 </div>
             @endif
 
+            {{-- D10 V1: saldo a favor de ESTE pedido (origen) y credito recibido de otros pedidos (destino). Solo con permiso de ver credito. --}}
+            @if (! empty($creditoPedido))
+                @push('styles')
+                    @include('ventasasesor::admin.cartera.estilos')
+                @endpush
+                @include('ventasasesor::admin.cartera.credito', $creditoPedido + [
+                    'modo' => 'pedido',
+                    'dinero' => fn ($valor) => \ByLopez\Logistica\Support\Moneda::formatear((float) $valor),
+                ])
+            @endif
+
             @if ($verCartera && $caja !== null && ($caja['aplica'] || $caja['historico_sin_vinculo'] > 0))
                 {{-- C6: ¿dónde está el dinero? Complementa a Cartera (¿el cliente debe?); no la reemplaza ni cambia el saldo. --}}
                 <div class="box-shadow rounded bg-white p-4 dark:bg-gray-900" data-bloque-caja>

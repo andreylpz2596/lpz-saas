@@ -6,6 +6,7 @@ use ByLopez\VentasAsesor\DataObjects\CarteraCliente;
 use ByLopez\VentasAsesor\DataObjects\SaldoPedido;
 use ByLopez\VentasAsesor\Enums\AlcanceVisibilidad;
 use ByLopez\VentasAsesor\Enums\EstadoPago;
+use ByLopez\VentasAsesor\Services\Credito\CreditoClienteService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Cartera\DistribucionFifo;
 use ByLopez\VentasAsesor\Support\Cartera\FechaCorteCartera;
@@ -114,6 +115,13 @@ class CarteraConsultaService
             $aplicado[(int) $fila->order_id][(string) $fila->estado] = (float) $fila->total;
         }
 
+        // D10: parte confirmada que es COMPENSACION con credito del cliente (satisface la obligacion, no es dinero recibido).
+        $credito = $leer(DB::table('bylopez_va_aplicaciones_pago as a')
+            ->join('bylopez_va_pagos as p', 'p.id', '=', 'a.pago_id')
+            ->whereIn('a.order_id', $ids)->whereNull('a.anulada_en')
+            ->where('p.estado', EstadoPago::CONFIRMADO->value)->where('p.medio_cobro', CreditoClienteService::MEDIO))
+            ->groupBy('a.order_id')->selectRaw('a.order_id, SUM(a.monto) AS total')->pluck('total', 'order_id');
+
         // Transactions nativas NO vinculadas a ninguna aplicacion: ajenas a ByLopez.
         $ajenas = $leer(DB::table('order_transactions as t')
             ->leftJoin('bylopez_va_aplicaciones_pago as a', 'a.order_transaction_id', '=', 't.id')
@@ -126,6 +134,9 @@ class CarteraConsultaService
         $devuelto = $this->devueltoDePedidos($ids, $lecturaActual);
         // Cancelacion del pendiente de despacho (Logistica): su valor tambien deja de exigirse, identificado aparte de lo devuelto.
         $cancelado = $this->canceladoDePedidos($ids, $lecturaActual);
+
+        // D10: ajustes de obligacion ACTIVOS (condonacion de flete...). Sin la migracion no hay nada que restar.
+        $ajustado = $this->ajustadoDePedidos($ids, $lecturaActual);
 
         $facturaPagada = $leer(DB::table('invoices')->whereIn('order_id', $ids)->where('state', 'paid'))->distinct()->pluck('order_id')->flip();
 
@@ -145,6 +156,8 @@ class CarteraConsultaService
                 (float) ($devuelto[$id]['valor'] ?? 0),
                 (int) ($devuelto[$id]['unidades'] ?? 0),
                 (float) ($cancelado[$id] ?? 0),
+                (float) ($ajustado[$id] ?? 0),
+                (float) ($credito[$id] ?? 0),
             );
         }
 
@@ -338,7 +351,28 @@ class CarteraConsultaService
             ->map(fn ($v) => round((float) $v, 2))->all();
     }
 
-    private function componer(object $pedido, array $aplicadoPorEstado, float $ajenas, bool $tieneRefund, bool $tieneFacturaPagada, float $devuelto = 0.0, int $unidadesDevueltas = 0, float $cancelado = 0.0): SaldoPedido
+    /**
+     * Valor de los ajustes de obligacion ACTIVOS por pedido (D10).
+     *
+     * @param  list<int>  $ids
+     * @return array<int, float>
+     */
+    private function ajustadoDePedidos(array $ids, bool $lecturaActual = false): array
+    {
+        static $existe = null;
+
+        if (! ($existe ??= Schema::hasTable('bylopez_va_ajustes_obligacion'))) {
+            return [];
+        }
+
+        $consulta = DB::table('bylopez_va_ajustes_obligacion')->whereIn('order_id', $ids)->where('estado', 'activo');
+
+        return ($lecturaActual ? $consulta->sharedLock() : $consulta)->groupBy('order_id')
+            ->selectRaw('order_id, SUM(monto) AS valor')->pluck('valor', 'order_id')
+            ->map(fn ($v) => round((float) $v, 2))->all();
+    }
+
+    private function componer(object $pedido, array $aplicadoPorEstado, float $ajenas, bool $tieneRefund, bool $tieneFacturaPagada, float $devuelto = 0.0, int $unidadesDevueltas = 0, float $cancelado = 0.0, float $ajustado = 0.0, float $creditoAplicado = 0.0): SaldoPedido
     {
         $id = (int) $pedido->id;
         $total = round((float) $pedido->base_grand_total, 2);
@@ -380,9 +414,11 @@ class CarteraConsultaService
         $devuelto = min(max(0.0, round($devuelto, 2)), $total);
         // Lo cancelado (pendiente que nunca salio) se resta igual, sin superar lo que queda por exigir; ninguna unidad esta en las dos.
         $cancelado = min(max(0.0, round($cancelado, 2)), round($total - $devuelto, 2));
-        $totalOperativo = round($total - $devuelto - $cancelado, 2);
+        // D10: un ajuste de obligacion autorizado tambien deja de exigirse (sin superar lo que queda); el total original no se toca.
+        $ajustado = min(max(0.0, round($ajustado, 2)), round($total - $devuelto - $cancelado, 2));
+        $totalOperativo = round($total - $devuelto - $cancelado - $ajustado, 2);
         $saldo = max(0.0, round($totalOperativo - $aplicadoTotal, 2));
-        $reducido = round($devuelto + $cancelado, 2);
+        $reducido = round($devuelto + $cancelado + $ajustado, 2);
         $saldoAFavor = $reducido > 0 ? round(min($reducido, max(0.0, $aplicadoTotal - $totalOperativo)), 2) : 0.0;
         $motivos = [];
 
@@ -423,6 +459,8 @@ class CarteraConsultaService
             totalOperativo: $totalOperativo,
             saldoAFavor: $saldoAFavor,
             cancelado: $cancelado,
+            ajustado: $ajustado,
+            creditoAplicado: round($creditoAplicado, 2),
         );
     }
 

@@ -338,6 +338,7 @@ return [
         'resultado-operativo' => 'Resultado operativo',
         'recaudo-transportadoras' => 'Recaudo liquidado por transportadoras',
         'recaudo-directo' => 'Pagos confirmados sin custodia',
+        'credito-aplicado' => 'Crédito aplicado (no es dinero recibido)',
         'incompleto' => 'Incompleto',
         'lineas-sin-costo' => ':n líneas sin costo (excluidas)',
         'habilitada' => 'Habilitada: :monto',
@@ -396,7 +397,6 @@ return [
         'detalle' => 'Ver detalle',
         'politicas' => 'Algunos bloqueos esperan una decisión de administración (por ejemplo, un pedido que cruza el umbral o una devolución). Mientras no se apruebe, ese importe no se habilita.',
     ],
-];
 
     /*
      * Panel de comisiones (jornada 2026-11-02): avance de la asesora, situacion por pedido y motivos en lenguaje comprensible.
@@ -584,3 +584,4 @@ return [
         'revisar-antes' => 'Revisa los datos y confirma: nada se registra hasta que pulses «Confirmar y registrar abono».',
         'error' => 'No se pudo cargar el comprobante.',
     ],
+];

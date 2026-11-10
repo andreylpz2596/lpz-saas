@@ -53,6 +53,17 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
             ->whereNumber('cliente')
             ->name('admin.ventas_asesor.cartera.abonos.store');
 
+        // D10 V1: credito del cliente (ver / aplicar / reembolsar / reversar / ajustar). Cada hoja ACL autoriza SOLO su ruta;
+        // los servicios vuelven a validar permiso y alcance «todos».
+        Route::get('cartera/credito/pedido/{pedido}', [CreditoClienteController::class, 'pedido'])->whereNumber('pedido')->name('admin.ventas_asesor.cartera.credito.pedido');
+        Route::get('cartera/credito/cliente/{cliente}', [CreditoClienteController::class, 'cliente'])->whereNumber('cliente')->name('admin.ventas_asesor.cartera.credito.cliente');
+        Route::get('cartera/credito/{movimiento}/comprobante', [CreditoClienteController::class, 'comprobante'])->whereNumber('movimiento')->name('admin.ventas_asesor.cartera.credito.comprobante');
+        Route::post('cartera/credito/aplicar', [CreditoClienteController::class, 'aplicar'])->name('admin.ventas_asesor.cartera.credito.aplicar');
+        Route::post('cartera/credito/reembolsar', [CreditoClienteController::class, 'reembolsar'])->name('admin.ventas_asesor.cartera.credito.reembolsar');
+        Route::post('cartera/credito/{movimiento}/reversar', [CreditoClienteController::class, 'reversar'])->whereNumber('movimiento')->name('admin.ventas_asesor.cartera.credito.reversar');
+        Route::post('cartera/credito/ajustes', [CreditoClienteController::class, 'ajustar'])->name('admin.ventas_asesor.cartera.credito.ajustar');
+        Route::post('cartera/credito/ajustes/{ajuste}/reversar', [CreditoClienteController::class, 'reversarAjuste'])->whereNumber('ajuste')->name('admin.ventas_asesor.cartera.credito.ajuste_reversar');
+
         // ASESOR-01: listado (`view_all`) y ficha (`?asesor=ID`, o la propia con `view_own`); alta, edicion y estado
         // exigen la hoja ventas_asesor.asesores.manage.
         Route::get('asesores', [AsesoresController::class, 'index'])->name('admin.ventas_asesor.asesores.index');

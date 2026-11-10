@@ -33,6 +33,15 @@ return [
         'festivos' => [],
     ],
 
+    // D10 V1: medios por los que ByLopez puede DEVOLVER el dinero de un saldo a favor (salida real; no son medios de cobro).
+    'credito' => [
+        // Unico rol que puede OPERAR dinero del credito (aplicar/reembolsar/reversar/ajustar). Un rol `all` que no sea este NO opera ni ve.
+        'rol_administrador_id' => (int) env('VENTASASESOR_CREDITO_ROL_ADMIN_ID', 1),
+        'medios_devolucion' => ['transferencia', 'efectivo', 'otro'],
+        // Los que exigen referencia o comprobante de la salida de dinero.
+        'medios_con_referencia' => ['transferencia'],
+    ],
+
     'pagos' => [
         /*
          * D-49: metodos de pago permitidos para el canal asesor. Lo ofrecido al borrador
@@ -67,6 +76,8 @@ return [
             'transferencia' => ['etiqueta' => 'ventasasesor::app.cartera.medios.transferencia', 'activo' => true, 'referencia' => 'requerida', 'plataforma' => true],
             'efectivo' => ['etiqueta' => 'ventasasesor::app.cartera.medios.efectivo', 'activo' => true, 'referencia' => 'opcional'],
             'contraentrega_recaudo' => ['etiqueta' => 'ventasasesor::app.cartera.medios.contraentrega_recaudo', 'activo' => true, 'referencia' => 'opcional'],
+            // D10: compensacion con saldo a favor. NUNCA seleccionable a mano (activo=false): solo lo crea AplicarCreditoService. No es dinero recibido.
+            'credito_cliente' => ['etiqueta' => 'ventasasesor::app.cartera.medios.credito_cliente', 'activo' => false, 'referencia' => 'no_aplica'],
         ],
 
         /*

@@ -60,6 +60,10 @@ final class SaldoPedido
         public readonly float $saldoAFavor = 0.0,
         /** Valor de lo CANCELADO (pendiente de despacho que nunca salio): tambien deja de exigirse, aparte de lo devuelto (C5). */
         public readonly float $cancelado = 0.0,
+        /** D10: obligacion reducida por ajustes autorizados ACTIVOS (p. ej. condonacion de flete); el pedido original no cambia. */
+        public readonly float $ajustado = 0.0,
+        /** D10: parte de `verificado` que es COMPENSACION con credito del cliente (`credito_cliente`): satisface la obligacion, NO es dinero recibido. */
+        public readonly float $creditoAplicado = 0.0,
     ) {}
 
     /** Pedido fuera de Cartera: solo total y motivo. */
@@ -104,6 +108,9 @@ final class SaldoPedido
             'total_operativo' => $this->totalOperativo ?? $this->total,
             'saldo_a_favor' => $this->saldoAFavor,
             'cancelado' => $this->cancelado,
+            'ajustado' => $this->ajustado,
+            'credito_aplicado' => $this->creditoAplicado,
+            'dinero_real_verificado' => $this->enCartera ? round(max(0.0, (float) $this->verificado - $this->creditoAplicado), 2) : null,
             'devolucion_total' => $this->devolucionTotal(),
         ];
     }

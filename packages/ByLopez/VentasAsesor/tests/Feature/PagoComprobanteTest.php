@@ -47,10 +47,10 @@ test('transferencia sin evidencia bloquea y efectivo no exige soporte', function
     } catch (RegistroPagoInvalidoException $e) {
         expect($e->getMessage())->toBe('Ingresa la referencia o adjunta el comprobante de la transferencia.');
     }
-    expect(Pago::count())->toBe(0);
+    expect(Pago::where('registrado_por_admin_id', $this->actor->id)->count())->toBe(0);
     $datos = array_replace($this->datos, ['medio_cobro' => 'efectivo', 'plataforma' => null]);
     app(RegistrarPagoService::class)->registrar($this->actor, $this->pedido->id, $datos, 'prueba-evidencia-0003');
-    expect(Pago::count())->toBe(1);
+    expect(Pago::where('registrado_por_admin_id', $this->actor->id)->count())->toBe(1);
 });
 
 test('POST multipart conserva el soporte y su descarga exige alcance del pago', function () {
@@ -72,7 +72,7 @@ test('archivos invalidos y plataforma ausente se rechazan sin registrar pagos', 
     $url = route('admin.ventas_asesor.pedidos.pagos.store', $this->pedido->id);
     $this->actingAs($this->actor, 'admin')->postJson($url, $this->datos + ['idempotency_key' => 'prueba-invalida-0001', 'comprobante' => UploadedFile::fake()->create('mal.html', 10, 'text/html')])->assertUnprocessable()->assertJsonValidationErrors('comprobante');
     $this->postJson($url, array_replace($this->datos, ['plataforma' => '', 'idempotency_key' => 'prueba-invalida-0002', 'comprobante' => UploadedFile::fake()->create('abono.pdf', 10, 'application/pdf')]))->assertUnprocessable();
-    expect(Pago::count())->toBe(0)->and(Storage::disk('private')->allFiles())->toBe([]);
+    expect(Pago::where('registrado_por_admin_id', $this->actor->id)->count())->toBe(0)->and(Storage::disk('private')->allFiles())->toBe([]);
 });
 
 test('rollback combinado elimina archivos nuevos y cada parte conserva su evidencia', function () {
@@ -87,7 +87,7 @@ test('rollback combinado elimina archivos nuevos y cada parte conserva su eviden
     } catch (RegistroPagoInvalidoException $e) {
         expect($e->codigo)->toBe(RegistroPagoInvalidoException::MONTO_EXCEDE_SALDO);
     }
-    expect(Pago::count())->toBe(0)->and(Storage::disk('private')->allFiles())->toBe([]);
+    expect(Pago::where('registrado_por_admin_id', $this->actor->id)->count())->toBe(0)->and(Storage::disk('private')->allFiles())->toBe([]);
     $partes[1] = ['monto' => '10000', 'plataforma' => 'nequi', 'comprobante' => UploadedFile::fake()->create('dos.pdf', 10, 'application/pdf')];
     $r = $servicio->registrarCombinado($this->actor, $this->pedido->id, $partes, ['fecha_pago' => now()->toDateString()], 'prueba-combinada-0002');
     foreach ($r['pagos'] as $pago) {

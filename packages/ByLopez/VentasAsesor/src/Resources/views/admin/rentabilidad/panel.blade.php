@@ -52,6 +52,7 @@
             ])) !!}
             {!! $caja('recaudo-directo', $datos['recaudo_directo']) !!}
             {!! $caja('cobros-en-terceros', $datos['cobros_en_terceros'], trans('ventasasesor::comisiones.panel.cobros-en-terceros-ayuda')) !!}
+            {!! $caja('credito-aplicado', $datos['credito_aplicado']) !!}
         </div>
 
         <div class="va-panel mt-4 p-3 text-xs leading-5 text-slate-600 dark:text-gray-300" data-seccion="falta-medir">
