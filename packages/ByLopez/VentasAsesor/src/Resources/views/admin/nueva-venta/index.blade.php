@@ -108,6 +108,14 @@
                         </span>
 
                         <span
+                            v-if="creditoCliente && creditoCliente.visible && creditoCliente.total_disponible > 0"
+                            class="rounded-md bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+                            data-credito-disponible-nv
+                        >
+                            Saldo a favor disponible: @{{ precio(creditoCliente.total_disponible) }}
+                        </span>
+
+                        <span
                             v-if="estado"
                             class="rounded-md px-2 py-1 text-xs font-semibold"
                             :class="estado.confirmable ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200'"
@@ -2080,6 +2088,52 @@
                             <p>Total: <span class="font-bold">@{{ precio(confirmacion.total) }}</span></p>
                             <p>Pago: <span class="font-medium">@{{ confirmacion.estado_pago }}</span></p>
                         </div>
+
+                        <!-- D10 V1: saldo a favor. El pedido YA existe; aplicar el credito es un paso aparte y explicito (nunca automatico). -->
+                        <div
+                            v-if="confirmacion && creditoCliente && creditoCliente.visible && creditoCliente.puede_aplicar && (creditoCliente.total_disponible > 0 || creditoAplicar.hecho)"
+                            class="mt-4 rounded-md border border-indigo-200 p-3 text-sm dark:border-indigo-800"
+                            data-credito-aplicar-nv
+                        >
+                            <p class="font-semibold text-indigo-800 dark:text-indigo-200">
+                                Saldo a favor disponible: @{{ precio(creditoCliente.total_disponible) }}
+                            </p>
+
+                            <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                                El pedido ya fue creado. Aplicar el saldo a favor es un paso aparte: solo descuenta lo que el cliente debe en este pedido; no es dinero recibido.
+                            </p>
+
+                            <template v-if="! creditoAplicar.hecho">
+                                <label class="mt-2 block text-xs font-semibold text-gray-600 dark:text-gray-300" for="credito-nv-monto">Monto a aplicar (máx. @{{ precio(creditoMaximoAplicable) }})</label>
+                                <input
+                                    id="credito-nv-monto"
+                                    v-model="creditoAplicar.monto"
+                                    type="number"
+                                    inputmode="decimal"
+                                    min="1"
+                                    step="0.01"
+                                    :max="creditoMaximoAplicable"
+                                    class="mt-1 block w-full rounded-md border px-3 py-2 text-base text-gray-800 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
+                                >
+
+                                <p class="mt-1 text-xs text-gray-700 dark:text-gray-200">
+                                    Saldo pendiente después de aplicar: <span class="font-bold">@{{ precio(creditoSaldoDespues) }}</span>
+                                </p>
+
+                                <p v-if="creditoAplicar.error" class="mt-2 text-sm font-medium text-red-700 dark:text-red-300" role="alert">@{{ creditoAplicar.error }}</p>
+
+                                <button
+                                    type="button"
+                                    class="secondary-button mt-2"
+                                    :disabled="creditoAplicar.enviando"
+                                    @click="aplicarCreditoAVentaCreada"
+                                >
+                                    @{{ creditoAplicar.enviando ? 'Aplicando…' : 'Aplicar saldo a favor' }}
+                                </button>
+                            </template>
+
+                            <p v-else class="mt-2 font-semibold text-green-700 dark:text-green-400">@{{ creditoAplicar.hecho }}</p>
+                        </div>
                     </x-slot:content>
 
                     <x-slot:footer>
@@ -2314,6 +2368,11 @@
                         confirmacion: null,
                         errorGeneral: null,
 
+
+                        // D10 V1: saldo a favor del cliente (solo informativo hasta que el administrador decide aplicarlo).
+                        creditoCliente: null,
+                        creditoAplicar: { monto: '', enviando: false, error: null, hecho: null, claves: {} },
+
                         cargando: {
                             cliente: false, colores: false, matrices: false, tallas: false, direccion: false,
                             entrega: false, pago: false, confirmar: false, domiciliario: false, crearCliente: false, enCurso: false,
@@ -2335,6 +2394,20 @@
                 },
 
                 computed: {
+                    /** D10 V1: tope aplicable = menor entre el saldo a favor y lo que debe el pedido recien creado. */
+                    creditoMaximoAplicable() {
+                        const disponible = Number(this.creditoCliente?.total_disponible ?? 0);
+                        const total = Number(this.confirmacion?.total ?? 0);
+
+                        return Math.max(0, Math.min(disponible, total));
+                    },
+
+                    creditoSaldoDespues() {
+                        const monto = Math.max(0, Number(this.creditoAplicar.monto) || 0);
+
+                        return Math.max(0, Number(this.confirmacion?.total ?? 0) - monto);
+                    },
+
                     /** GRP-01: grupo habitual vs aplicado, tal cual lo devuelve el backend (nunca se calcula aqui). */
                     grupoVenta() {
                         return this.estado?.borrador?.grupo || null;
@@ -2686,6 +2759,10 @@
                         this.buscarCliente();
                     },
 
+                    clienteActual(nuevo) {
+                        this.cargarCreditoCliente(nuevo ? (nuevo.customer_id ?? nuevo.customerId) : null);
+                    },
+
                     // R2: cada cambio del estado (cliente, grupo, cantidades, entrega, pago) o del propietario reevalua.
                     estado() {
                         this.cargarRentabilidad();
@@ -2704,6 +2781,90 @@
                 },
 
                 methods: {
+                    /** D10 V1: saldo a favor del cliente. Sin permiso responde visible:false (o es refusado) y simplemente no se ofrece. */
+                    cargarCreditoCliente(customerId) {
+                        this.creditoCliente = null;
+                        this.creditoAplicar = { monto: '', enviando: false, error: null, hecho: null, claves: {} };
+
+                        if (! customerId) {
+                            return;
+                        }
+
+                        this.$axios.get("{{ url(route('admin.ventas_asesor.cartera.credito.cliente', ['cliente' => '__ID__'])) }}".replace('__ID__', customerId))
+                            .then((response) => { this.creditoCliente = response.data; })
+                            .catch(() => { this.creditoCliente = null; });
+                    },
+
+                    /**
+                     * Aplica el saldo a favor al pedido YA creado, tomando de los pedidos origen del mas antiguo al mas nuevo. Cada origen usa su
+                     * propia clave de idempotencia (estable mientras se reintenta con el mismo monto). Si uno falla se detiene y se informa lo ya aplicado:
+                     * no existe una transaccion unica entre varios pedidos origen y no se simula.
+                     */
+                    async aplicarCreditoAVentaCreada() {
+                        const c = this.creditoAplicar;
+                        const total = Number(this.confirmacion?.total ?? 0);
+                        let restante = Math.round(Number(c.monto) * 100) / 100;
+
+                        c.error = null;
+
+                        if (! (restante > 0)) {
+                            c.error = 'Indica un monto mayor a cero.';
+                            return;
+                        }
+
+                        if (restante > this.creditoMaximoAplicable + 0.0001) {
+                            c.error = 'El monto supera el saldo a favor disponible o lo que debe el pedido.';
+                            return;
+                        }
+
+                        c.enviando = true;
+                        let aplicado = 0;
+
+                        try {
+                            for (const origen of this.creditoCliente.origenes) {
+                                if (restante <= 0) {
+                                    break;
+                                }
+
+                                const parte = Math.round(Math.min(restante, origen.disponible) * 100) / 100;
+                                const idClave = origen.order_id + ':' + this.confirmacion.order_id + ':' + parte.toFixed(2);
+                                c.claves[idClave] = c.claves[idClave] ?? (window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'nv-' + Date.now() + '-' + Math.random().toString(36).slice(2, 12));
+
+                                await this.$axios.post("{{ route('admin.ventas_asesor.cartera.credito.aplicar') }}", {
+                                    origen: origen.order_id,
+                                    destino: this.confirmacion.order_id,
+                                    monto: parte.toFixed(2),
+                                    motivo: 'Aplicado desde Nueva venta',
+                                    idempotency_key: c.claves[idClave],
+                                });
+
+                                aplicado += parte;
+                                restante = Math.round((restante - parte) * 100) / 100;
+                            }
+
+                            c.hecho = 'Saldo a favor aplicado: ' + this.precio(aplicado) + '. Saldo pendiente del pedido: ' + this.precio(Math.max(0, total - aplicado)) + '.';
+                            this.cargarCreditoClienteSinReiniciar();
+                        } catch (error) {
+                            const mensaje = error?.response?.data?.mensaje || error?.response?.data?.message || 'No se pudo aplicar el saldo a favor.';
+                            c.error = aplicado > 0
+                                ? 'Se aplicaron ' + this.precio(aplicado) + ' y luego falló: ' + mensaje + ' Revisa el pedido antes de reintentar.'
+                                : mensaje;
+                            this.cargarCreditoClienteSinReiniciar();
+                        } finally {
+                            c.enviando = false;
+                        }
+                    },
+
+                    cargarCreditoClienteSinReiniciar() {
+                        const id = this.clienteActual ? (this.clienteActual.customer_id ?? this.clienteActual.customerId) : null;
+
+                        if (id) {
+                            this.$axios.get("{{ url(route('admin.ventas_asesor.cartera.credito.cliente', ['cliente' => '__ID__'])) }}".replace('__ID__', id))
+                                .then((response) => { this.creditoCliente = response.data; })
+                                .catch(() => {});
+                        }
+                    },
+
                     irASeccion(id) {
                         document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     },
@@ -4116,6 +4277,7 @@
                         })
                             .then((response) => {
                                 this.confirmacion = response.data;
+                                this.creditoAplicar.monto = this.creditoMaximoAplicable > 0 ? String(this.creditoMaximoAplicable) : '';
                                 this.$refs.modalVentaCreada.open();
                             })
                             .catch((error) => {
