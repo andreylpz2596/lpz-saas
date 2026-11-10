@@ -5,6 +5,7 @@ use ByLopez\VentasAsesor\Http\Controllers\Admin\CarteraClienteController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CarteraController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\ComisionesController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\ControlCostosController;
+use ByLopez\VentasAsesor\Http\Controllers\Admin\CreditoClienteController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\GuiaPedidoController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\InicioController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\NuevaVentaController;
