@@ -262,13 +262,16 @@ class EjecucionService
             return $this->completar($carga->fresh(), null);
         }
 
-        if ($nulas === $elegibles) {
+        $conExtension = $this->extensiones->de((array) $cfg['map']) !== null;
+
+        // Con extension, filas sin marca pero CON plan = el procedimiento confirmo (y pudo escribir su parte) y la aplicacion no termino.
+        if ($nulas === $elegibles && ! ($conExtension && $c->table((string) $cfg['map']['tabla'])->where('cg_carga_id', $carga->id)->whereNull('cg_estado')->whereNotNull('cg_detalle')->exists())) {
             $this->marcar($carga->id, Estados::EJECUTANDO, Estados::FALLIDA_EJECUCION, '[REVERTIDA] La ejecución no llegó a confirmarse: el servidor la deshizo y no se aplicó nada. Puede ejecutar de nuevo.');
 
             return $carga->fresh();
         }
 
-        if ($this->extensiones->de((array) $cfg['map']) !== null) {
+        if ($conExtension) {
             $this->marcar($carga->id, Estados::EJECUTANDO, Estados::FALLIDA_EJECUCION, "[PARCIAL] La aplicación se interrumpió: quedan {$nulas} de {$elegibles} filas pendientes y las demás ya están aplicadas y marcadas. Puede ejecutar de nuevo: solo se procesan las pendientes.");
 
             return $carga->fresh();

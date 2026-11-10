@@ -109,6 +109,17 @@
                                         <input type="file" class="sr-only" accept=".xlsx,.csv,.txt" :disabled="subiendo" @change="elegirArchivo">
                                     </label>
                                     <p v-if="subiendo" class="cg-sub mt-3"><span class="cg-spin"></span> {{ t('subiendo') }}</p>
+
+                                    <div v-if="tipo.plantillas && tipo.plantillas.length" class="cg-alert cg-alert--info mt-4" data-cg="plantilla">
+                                        <span class="icon-information text-2xl" aria-hidden="true"></span>
+                                        <div>
+                                            <p class="cg-alert-title">{{ t('plantilla_titulo') }}</p>
+                                            <p>{{ t('plantilla_ayuda') }}</p>
+                                            <span class="mt-2 flex flex-wrap gap-2">
+                                                <a v-for="f in tipo.plantillas" :key="f" :href="plantillaUrl(f)" class="cg-btn">{{ t('plantilla_descargar') }} ({{ f.toUpperCase() }})</a>
+                                            </span>
+                                        </div>
+                                    </div>
                                 </template>
                             </div>
 
@@ -168,6 +179,14 @@
                                     </div>
 
                                     <div v-for="(a, i) in advertencias" :key="'adv' + i" class="cg-alert cg-alert--aviso mt-3"><span class="icon-information text-xl" aria-hidden="true"></span><p>{{ a }}</p></div>
+
+                                    <!-- Acción (solo si el tipo ofrece más de una) -->
+                                    <div v-if="tipo && tipo.acciones.length > 1" class="cg-field mt-4" data-cg="accion">
+                                        <label for="cg-accion">{{ t('accion_cargue') }}</label>
+                                        <select id="cg-accion" class="cg-input" v-model="accionElegida">
+                                            <option v-for="a in tipo.acciones" :key="a" :value="a">{{ (tipo.acciones_etiquetas && tipo.acciones_etiquetas[a]) || a }}</option>
+                                        </select>
+                                    </div>
 
                                     <hr class="my-5 border-gray-200 dark:border-gray-700">
 
@@ -247,7 +266,7 @@
                             <!-- PASO 3: validar (progreso, error o resumen) -->
                             <div v-else-if="paso >= 3 && carga">
                                 <h2 class="text-lg font-bold text-gray-900 dark:text-white">{{ carga.archivo.nombre }}</h2>
-                                <p class="cg-sub">{{ tipo ? tipo.nombre : '' }} · {{ t('carga_n') }} {{ carga.id }}<template v-if="carga.version"> · <span data-cg="version-carga">{{ t('cabecera_version').replace(':n', carga.version.numero).replace(':p', carga.version.procedimiento) }}</span></template></p>
+                                <p class="cg-sub">{{ tipo ? tipo.nombre : '' }} · {{ t('carga_n') }} {{ carga.id }}<template v-if="carga.version"> · <span data-cg="version-carga">{{ t('cabecera_version').replace(':n', carga.version.numero).replace(':p', carga.version.procedimiento) }}</span></template><template v-if="tipo && tipo.acciones.length > 1"> · <span data-cg="accion-carga">{{ t('accion_cargue') }}: {{ (tipo.acciones_etiquetas && tipo.acciones_etiquetas[carga.accion]) || carga.accion }}</span></template></p>
 
                                 <!-- En cola / en proceso -->
                                 <div v-if="progreso && progreso.en_curso" class="mt-4" aria-live="polite">
@@ -381,6 +400,48 @@
 
                                 <div v-else class="cg-vacio"><span class="cg-spin"></span></div>
 
+                                <!-- Revisión agrupada (opcional por tipo): p. ej. producto → variantes. Solo lectura de lo persistido. -->
+                                <div v-if="mostrarFilas && tipo && tipo.agrupado" class="mt-6" data-cg="agrupado">
+                                    <p class="text-base font-bold text-gray-900 dark:text-white">{{ agrupado.datos ? agrupado.datos.titulo : t('agrupado_titulo') }}</p>
+                                    <p v-if="agrupado.datos && agrupado.datos.nota" class="cg-sub mt-1">{{ agrupado.datos.nota }}</p>
+                                    <div v-if="agrupado.cargando" class="cg-vacio"><span class="cg-spin"></span> {{ t('cargando_filas') }}</div>
+                                    <template v-else-if="agrupado.datos">
+                                        <div class="cg-kpis mt-3">
+                                            <div v-for="(k, i) in agrupado.datos.indicadores" :key="'ind' + i" class="cg-kpi"><div class="cg-kpi-n">{{ k.n }}</div><div class="cg-kpi-l">{{ k.etiqueta }}</div></div>
+                                        </div>
+                                        <div v-for="(s, i) in agrupado.datos.secciones" :key="'sec' + i" class="cg-alert cg-alert--aviso mt-3">
+                                            <span class="icon-information text-xl" aria-hidden="true"></span>
+                                            <div><p class="cg-alert-title">{{ s.titulo }}</p><ul class="list-disc pl-5"><li v-for="(x, j) in s.items" :key="j">{{ x }}</li></ul></div>
+                                        </div>
+                                        <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                            <span class="cg-sub">{{ gruposFiltrados.length }} {{ t('agrupado_productos') }}</span>
+                                            <select v-model="agrupado.filtro" class="cg-input" style="width:auto" :aria-label="t('agrupado_filtro')">
+                                                <option value="">{{ t('agrupado_todos') }}</option>
+                                                <option v-for="f in agrupado.datos.filtros" :key="f.estado" :value="f.estado">{{ f.etiqueta }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="mt-2 grid gap-2">
+                                            <div v-for="(g, i) in gruposFiltrados" :key="'g' + i" class="cg-panel p-3" :data-grupo="g.estado">
+                                                <div class="flex items-start justify-between gap-2 max-sm:flex-wrap">
+                                                    <div class="min-w-0"><p class="font-semibold text-gray-900 dark:text-white">{{ g.titulo }}</p><p class="cg-sub">{{ g.subtitulo }}</p></div>
+                                                    <span class="flex flex-wrap items-center gap-2">
+                                                        <a v-if="g.enlace" :href="g.enlace" target="_blank" rel="noopener" class="cg-link">{{ g.enlace_texto }}</a>
+                                                        <span class="cg-pill" :class="'cg-pill--' + g.tono">{{ g.estado_texto }}</span>
+                                                    </span>
+                                                </div>
+                                                <ul class="mt-2 text-sm">
+                                                    <li v-for="(e, j) in g.elementos" :key="j" class="flex items-center justify-between gap-2 border-t border-gray-100 py-1 dark:border-gray-800">
+                                                        <span class="min-w-0 break-words">{{ e.texto }}</span><span class="cg-pill" :class="'cg-pill--' + e.tono">{{ e.estado_texto }}</span>
+                                                    </li>
+                                                </ul>
+                                                <ul v-if="g.motivos.length" class="mt-2 list-disc pl-5 text-sm text-red-700 dark:text-red-400"><li v-for="(m, j) in g.motivos" :key="j">{{ m }}</li></ul>
+                                                <ul v-if="g.avisos.length" class="mt-2 list-disc pl-5 text-sm text-amber-700 dark:text-amber-400"><li v-for="(m, j) in g.avisos" :key="j">{{ m }}</li></ul>
+                                            </div>
+                                        </div>
+                                        <p v-if="agrupado.datos.truncado" class="cg-sub mt-2">{{ t('agrupado_truncado') }}</p>
+                                    </template>
+                                </div>
+
                                 <!-- Detalle por fila: lo PERSISTIDO (igual al recargar o abrir desde el Historial) -->
                                 <div v-if="mostrarFilas" class="mt-6" data-cg="detalle-filas">
                                     <div class="flex flex-wrap items-center justify-between gap-2">
@@ -501,6 +562,8 @@
                         forzarPaso2: false,
                         aviso: null,
                         filas: { estado: 'todas', q: '', datos: null, cargando: false, abiertas: {}, clave: null },
+                        agrupado: { datos: null, cargando: false, filtro: '' },
+                        accionElegida: null,
                     };
                 },
 
@@ -519,6 +582,11 @@
                     vistaPreviaPendiente() { return this.carga && !this.carga.encabezados && this.carga.progreso && this.carga.progreso.etapa === 'vista_previa'; },
                     resumen() { return this.carga ? this.carga.resumen : null; },
                     mostrarFilas() { return !!(this.carga && this.resumen && ['validada', 'completada'].includes(this.carga.estado)); },
+                    gruposFiltrados() {
+                        const d = this.agrupado.datos;
+
+                        return d ? d.grupos.filter(g => !this.agrupado.filtro || g.estado === this.agrupado.filtro) : [];
+                    },
                     filtrosFilas() {
                         const e = this.carga ? this.carga.estado : '';
 
@@ -589,6 +657,10 @@
                             this.filas.q = '';
 
                             if (clave) { this.cargarFilas(1); }
+
+                            this.agrupado.datos = null;
+                            this.agrupado.filtro = '';
+                            if (clave && this.tipo && this.tipo.agrupado) { this.cargarAgrupado(); }
                         }
                     },
                 },
@@ -620,6 +692,15 @@
                             .catch(e => { this.filas.datos = null; this.notificar('error', this.mensajeError(e)); })
                             .finally(() => { this.filas.cargando = false; });
                     },
+                    cargarAgrupado() {
+                        const id = this.carga.id;
+                        this.agrupado.cargando = true;
+                        this.$axios.get(this.cargaUrl(id, '/agrupado'))
+                            .then(r => { if (this.carga && this.carga.id === id) { this.agrupado.datos = r.data; } })
+                            .catch(e => { this.agrupado.datos = null; this.notificar('error', this.mensajeError(e)); })
+                            .finally(() => { this.agrupado.cargando = false; });
+                    },
+                    plantillaUrl(f) { return this.cfg.rutas.plantilla.replace(/\/0\/plantilla\.xlsx$/, '/' + this.tipo.id + '/plantilla.' + f); },
                     pillEstado(e) { return ['validada', 'completada'].includes(e) ? 'cg-pill--verde' : (e.startsWith('fallida') ? 'cg-pill--rojo' : (e === 'cancelada' ? 'cg-pill--gris' : 'cg-pill--azul')); },
                     estadoTexto(e) { return this.t('estado_' + e); },
 
@@ -661,6 +742,7 @@
                         this.lectura = Object.assign({}, this.lectura, c.lectura);
                         this.lectura.fila_encabezado = c.lectura.fila_encabezado || 1;
                         this.relaciones = this.relacionesIniciales(c);
+                        this.accionElegida = c.accion || (this.tipo ? this.tipo.accion : null);
                         this.progreso = c.progreso;
 
                         if (c.progreso && (c.progreso.en_curso || c.progreso.etapa === 'vista_previa')) { this.vigilar(); }
@@ -696,6 +778,7 @@
                         if (this.carga.formato === 'xlsx') { p.hoja = this.lectura.hoja; }
                         if (this.carga.formato === 'csv') { Object.assign(p, { delimitador: this.lectura.delimitador, entrecomillado: this.lectura.entrecomillado, codificacion: this.lectura.codificacion }); }
                         if (this.guardarComparacion) { p.guardar_comparacion = true; p.nombre_comparacion = this.nombreComparacion; }
+                        if (this.tipo && this.tipo.acciones.length > 1 && this.accionElegida) { p.accion = this.accionElegida; }
 
                         this.$axios.post(this.cargaUrl(this.carga.id, '/validar'), p)
                             .then(r => { this.forzarPaso2 = false; this.carga = r.data.carga; this.progreso = r.data.carga.progreso; this.guardarComparacion = false; this.vigilar(); })

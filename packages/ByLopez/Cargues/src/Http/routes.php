@@ -15,6 +15,7 @@ Route::group(['middleware' => [SoloAdministrador::class, 'admin', NoCacheMiddlew
     Route::get('/', [CarguesController::class, 'index'])->name('admin.cargues.index');
     Route::get('tipos-activos', [CarguesController::class, 'tipos'])->name('admin.cargues.tipos_activos');
     Route::get('historial', [CarguesController::class, 'historial'])->name('admin.cargues.historial');
+    Route::get('tipos/{tipo}/plantilla.{formato}', [CarguesController::class, 'plantilla'])->whereNumber('tipo')->where('formato', 'csv|xlsx')->name('admin.cargues.tipos.plantilla');
 
     Route::post('cargas', [CarguesController::class, 'store'])->name('admin.cargues.cargas.store');
 
@@ -22,6 +23,7 @@ Route::group(['middleware' => [SoloAdministrador::class, 'admin', NoCacheMiddlew
         Route::get('/', [CarguesController::class, 'show'])->name('admin.cargues.cargas.show');
         Route::get('progreso', [CarguesController::class, 'progreso'])->name('admin.cargues.cargas.progreso');
         Route::get('filas', [CarguesController::class, 'filas'])->name('admin.cargues.cargas.filas');
+        Route::get('agrupado', [CarguesController::class, 'agrupado'])->name('admin.cargues.cargas.agrupado');
         Route::post('lectura', [CarguesController::class, 'lectura'])->name('admin.cargues.cargas.lectura');
         Route::post('validar', [CarguesController::class, 'validar'])->name('admin.cargues.cargas.validar');
         Route::post('reintentar', [CarguesController::class, 'reintentar'])->name('admin.cargues.cargas.reintentar');

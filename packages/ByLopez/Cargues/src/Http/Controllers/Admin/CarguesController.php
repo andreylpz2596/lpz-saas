@@ -42,6 +42,7 @@ class CarguesController extends Controller
                 'subir' => route('admin.cargues.cargas.store'),
                 'carga' => route('admin.cargues.cargas.show', 0),
                 'historial' => route('admin.cargues.historial'),
+                'plantilla' => route('admin.cargues.tipos.plantilla', [0, 'xlsx']),
             ],
             't' => trans('cargues::app.ui'),
         ]]);
@@ -78,6 +79,24 @@ class CarguesController extends Controller
         return $this->responder(fn () => $this->filas->pagina(
             Carga::findOrFail($carga), (string) $request->query('estado', 'todas'), $request->query('q') === null ? null : (string) $request->query('q'), (int) $request->query('pagina', 1),
         ));
+    }
+
+    /** Revision agrupada (opcional por tipo): p. ej. producto → variantes, en la validacion y en el resultado. */
+    public function agrupado(int $carga): JsonResponse
+    {
+        return $this->responder(fn () => $this->cargas->agrupado(Carga::findOrFail($carga)));
+    }
+
+    /** Plantilla del tipo (archivo del paquete con ejemplos sinteticos). */
+    public function plantilla(int $tipo, string $formato)
+    {
+        try {
+            [$ruta, $nombre] = $this->cargas->plantilla($tipo, $formato);
+        } catch (OperacionInvalidaException $e) {
+            return $this->error($e);
+        }
+
+        return response()->download($ruta, $nombre, ['Content-Type' => $formato === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv; charset=UTF-8']);
     }
 
     public function progreso(int $carga): JsonResponse

@@ -1,0 +1,7 @@
+﻿"Código del producto base";"SKU de la variante";"Nombre del producto";"Público (Hombre, Dama o Niño)";Color;Talla;Composición;Manga;Cuello;"Tipo de tela";Costo;"Precio de venta";"Peso (kg)";"Descripción corta";Descripción
+EJEMPLO-CAM-H01;EJEMPLO-CAM-H01-NEG-S;"Camiseta Ejemplo Hombre Piel de Durazno";Hombre;Negro;S;"80% poliéster / 20% spandex";"Manga Corta";Redondo;"Piel Durazno";5500;8500;0,17;;
+EJEMPLO-CAM-H01;EJEMPLO-CAM-H01-NEG-M;"Camiseta Ejemplo Hombre Piel de Durazno";Hombre;Negro;M;"80% poliéster / 20% spandex";"Manga Corta";Redondo;"Piel Durazno";5500;8500;0,17;;
+EJEMPLO-CAM-H01;EJEMPLO-CAM-H01-BLA-L;"Camiseta Ejemplo Hombre Piel de Durazno";Hombre;Blanco;L;"80% poliéster / 20% spandex";"Manga Corta";Redondo;"Piel Durazno";5500;8500;0,17;;
+EJEMPLO-CAM-D01;EJEMPLO-CAM-D01-ROS-S;"Camiseta Ejemplo Dama Piel de Durazno";Dama;Rosado;S;;"Manga Corta";Cuello-V;;;;;;
+EJEMPLO-CAM-N01;EJEMPLO-CAM-N01-NEG-2-4;"Camiseta Ejemplo Niño Piel de Durazno";Niño;Negro;2-4;;;;;;;;;
+EJEMPLO-CAM-D01;EJEMPLO-CAM-D01-ROS-M;"Camiseta Ejemplo Dama Piel de Durazno";Dama;Rosado;M;;"Manga Corta";Cuello-V;;;;;;

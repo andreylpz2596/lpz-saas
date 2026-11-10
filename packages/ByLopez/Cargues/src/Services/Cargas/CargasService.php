@@ -72,7 +72,11 @@ class CargasService
                     'id' => $t->id, 'nombre' => $t->nombre, 'descripcion' => $t->descripcion, 'activo' => true,
                     'version' => (int) $v->numero, 'procedimiento' => $v->procedimiento,
                     'acciones' => (array) $v->map['acciones'], 'accion' => $v->accion,
+                    'acciones_etiquetas' => array_map(fn ($a) => (string) config('cargues.acciones_etiquetas.'.$a, $a), array_combine((array) $v->map['acciones'], (array) $v->map['acciones'])),
                     'politica_errores' => $v->politica_errores,
+                    // Plantilla descargable del tipo (si tiene) y revision agrupada opcional (registros por tabla intermedia).
+                    'plantillas' => array_values(array_filter(['xlsx', 'csv'], fn ($f) => $this->rutaPlantilla($v->map, $f) !== null)),
+                    'agrupado' => $this->agrupador($v->map) !== null,
                     'formatos' => ['xlsx', 'csv', 'txt'],
                     'limites' => ['max_bytes' => $lim->maxBytes, 'max_celdas' => $lim->maxCeldas, 'max_filas' => $lim->maxFilas],
                     'campos' => array_map(fn ($c) => [
@@ -82,6 +86,50 @@ class CargasService
                     ], (array) $v->map['campos']),
                 ];
             })->filter()->values()->all();
+    }
+
+    /** Archivo de plantilla del tipo vigente (solo tipos activos; la ruta sale de la configuracion, nunca del map ni de la peticion). */
+    public function plantilla(int $tipoId, string $formato): array
+    {
+        [$tipo, $v] = $this->tipoVigente($tipoId);
+        $ruta = $this->rutaPlantilla($v->map, $formato);
+
+        if ($ruta === null) {
+            throw new OperacionInvalidaException('SIN_PLANTILLA', 'Este tipo no tiene plantilla en ese formato.');
+        }
+
+        return [$ruta, basename($ruta)];
+    }
+
+    /** Revision agrupada de una carga validada o ejecutada (solo si su tipo la registra). */
+    public function agrupado(Carga $carga): array
+    {
+        if (! in_array($carga->estado, [Estados::VALIDADA, Estados::COMPLETADA, Estados::FALLIDA_EJECUCION], true)) {
+            throw new OperacionInvalidaException('ESTADO_NO_EJECUTABLE', 'La revisión agrupada existe cuando la carga está validada o ejecutada.');
+        }
+
+        $agrupador = $this->agrupador((array) ($carga->config_congelada['map'] ?? []));
+
+        if ($agrupador === null) {
+            throw new OperacionInvalidaException('SIN_AGRUPADO', 'Este tipo no tiene revisión agrupada.');
+        }
+
+        return $agrupador->agrupar($carga);
+    }
+
+    protected function rutaPlantilla(array $map, string $formato): ?string
+    {
+        $relativa = config('cargues.plantillas.'.($map['tabla'] ?? '').'.'.$formato);
+        $ruta = is_string($relativa) ? realpath(dirname(__DIR__, 3).'/'.$relativa) : false;
+
+        return $ruta && is_file($ruta) ? $ruta : null;
+    }
+
+    protected function agrupador(array $map): ?\ByLopez\Cargues\Contracts\AgrupaResultado
+    {
+        $clase = config('cargues.resultado.agrupados.'.($map['tabla'] ?? ''));
+
+        return $clase && is_subclass_of($clase, \ByLopez\Cargues\Contracts\AgrupaResultado::class) ? app($clase) : null;
     }
 
     /** @return array{0: Tipo, 1: TipoVersion} */

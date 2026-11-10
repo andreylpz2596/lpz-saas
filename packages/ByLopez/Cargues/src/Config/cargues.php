@@ -46,7 +46,32 @@ return [
         'complementos' => [
             'bylopez_cgi_envios_completos' => \ByLopez\Cargues\Services\Cargas\Complementos\EnviosCompletosResultado::class,
             'bylopez_cgi_clientes_historicos' => \ByLopez\Cargues\Services\Cargas\Complementos\ClientesHistoricosResultado::class,
+            'bylopez_cgi_productos_camisetas' => \ByLopez\Cargues\Services\Cargas\Complementos\ProductosCamisetasResultado::class,
         ],
+        // Revision AGRUPADA opcional (Contracts/AgrupaResultado): validacion y resultado por grupo de filas (p. ej. producto → variantes).
+        'agrupados' => [
+            'bylopez_cgi_productos_camisetas' => \ByLopez\Cargues\Services\Cargas\Complementos\ProductosCamisetasResultado::class,
+        ],
+    ],
+
+    /*
+     | Plantillas descargables por tabla intermedia del tipo (archivos del paquete con ejemplos SINTETICOS). Sin plantilla, el
+     | paso «Archivo» no muestra el enlace. Las rutas son relativas a la raiz del paquete Cargues.
+     */
+    'plantillas' => [
+        'bylopez_cgi_productos_camisetas' => [
+            'xlsx' => 'docs/plantillas/Plantilla_Productos_Camisetas_Piel_Durazno.xlsx',
+            'csv' => 'docs/plantillas/Plantilla_Productos_Camisetas_Piel_Durazno.csv',
+        ],
+    ],
+
+    /*
+     | Etiquetas de las acciones de un tipo (selector del paso «Relacionar columnas» cuando el tipo tiene mas de una).
+     | Sin etiqueta se muestra el codigo.
+     */
+    'acciones_etiquetas' => [
+        'crear_inactivos' => 'Crear inactivos (revisar antes de publicar)',
+        'crear_activos' => 'Crear y activar los que tengan precio',
     ],
 
     /*
@@ -54,6 +79,46 @@ return [
      */
     'extensiones' => [
         'clientes_historicos' => \ByLopez\Cargues\Extensiones\ClientesHistoricos\ClientesHistoricosExtension::class,
+        // «99 Envíos — Envíos completos» v3: hitos logísticos (entrega + validación, retorno) por los servicios de Logística (docs/16 §15).
+        'envios_completos_hitos' => \ByLopez\Cargues\Extensiones\EnviosCompletos\EnviosCompletosHitosExtension::class,
+        // «Productos — Camisetas piel de durazno»: producto configurable + variantes por los repositorios y eventos de Bagisto (docs/17).
+        'productos_camisetas' => \ByLopez\Cargues\Extensiones\ProductosCamisetas\ProductosCamisetasExtension::class,
+    ],
+
+    /*
+     | «Productos — Camisetas piel de durazno» (docs/17). Todo se resuelve por CODIGO o NOMBRE, nunca por id (los ids cambian entre
+     | entornos). Un valor que no exista en el catalogo bloquea el grupo con un motivo claro: el cargue nunca crea opciones.
+     */
+    'productos_camisetas' => [
+        // Publico del archivo (normalizado: minusculas, sin tildes) → familia de atributos y categorias (nombre en el idioma por defecto).
+        'publicos' => [
+            'hombre' => ['familia' => 'Camiseta_Hombre_DURZ', 'categorias' => ['CAMISETA CABALLERO', 'PIEL DURAZNO HOMBRE'], 'tallas' => 'adulto'],
+            'dama' => ['familia' => 'Camiseta_Mujer_DURZ', 'categorias' => ['CAMISETAS DAMA', 'PIEL DURAZNO DAMA'], 'tallas' => 'adulto'],
+            // Niño NO usa `size`: su familia y sus 5 configurables reales varían por color + `grupo_de_edad_ninos` (opciones 2-4, 6-8, 10-12, 14-16).
+            'nino' => ['familia' => 'Camisetas_nino_DURZ', 'categorias' => ['CAMISETA NIÑO', 'PIEL DURAZNO NIÑO'], 'tallas' => 'nino', 'atributo_talla' => 'grupo_de_edad_ninos'],
+        ],
+        'sinonimos_publico' => ['caballero' => 'hombre', 'mujer' => 'dama', 'nina' => 'nino', 'ninos' => 'nino'],
+        // Tallas admitidas por grupo de publico: texto EXACTO de las opciones existentes de su atributo de talla (adulto `size`; niño
+        // `grupo_de_edad_ninos`). Una talla de adulto nunca vale para niño ni al reves.
+        'tallas' => [
+            'adulto' => ['S', 'M', 'L', 'XL', 'XXL', 'T-Unica'],
+            'nino' => ['2-4', '6-8', '10-12', '14-16'],
+        ],
+        // Codigos de atributo del catalogo.
+        'atributos' => [
+            'color' => 'color', 'talla' => 'size', 'manga' => 'sleeve', 'cuello' => 'cuello', 'tipo_tela' => 'tipo_tela',
+            'composicion' => 'composicion', 'marca' => 'brand',
+        ],
+        // Valores comunes del tipo (texto de la opcion) cuando la columna no viene o viene vacia. null = dato pendiente (no se inventa).
+        // Tela y marca: las del tipo (BYLOPEZ esta en 382 de las 383 camisetas del catalogo vigente). Manga, cuello y composicion son
+        // datos FISICOS: quedan pendientes salvo que se configuren EXPLICITAMENTE (texto exacto de una opcion existente; si no existe, bloquea).
+        'por_defecto' => [
+            'tipo_tela' => 'Piel Durazno',
+            'marca' => 'BYLOPEZ',
+            'manga' => env('CARGUES_PRODUCTOS_MANGA') ?: null,
+            'cuello' => env('CARGUES_PRODUCTOS_CUELLO') ?: null,
+            'composicion' => env('CARGUES_PRODUCTOS_COMPOSICION') ?: null,
+        ],
     ],
 
     /*

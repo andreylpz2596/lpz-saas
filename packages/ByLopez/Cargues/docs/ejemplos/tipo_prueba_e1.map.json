@@ -1,0 +1,16 @@
+{
+    "tabla": "bylopez_cgi_prueba_e1",
+    "acciones": ["actualizar_estado"],
+    "campos": [
+        { "nombre": "guia", "etiqueta": "Guía", "tipo": "identificador", "longitud": 20, "nulo": false, "sinonimos": ["Número de guía", "numero_de_guia"] },
+        { "nombre": "telefono", "etiqueta": "Teléfono", "tipo": "identificador", "longitud": 20, "nulo": true, "vacio": "nulo" },
+        { "nombre": "estado", "etiqueta": "Estado", "tipo": "texto", "longitud": 60, "nulo": false },
+        { "nombre": "valor", "etiqueta": "Valor", "tipo": "decimal", "precision": 14, "escala": 2, "nulo": true, "vacio": "nulo", "formato": { "decimal": ",", "miles": "." } },
+        { "nombre": "fecha_estado", "etiqueta": "Fecha del estado", "tipo": "fecha_hora", "nulo": true, "vacio": "nulo", "formato": { "formatos": ["d/m/Y H:i"] } }
+    ],
+    "llaves": { "primaria": ["guia"], "unicas": [], "indices": [["estado"]] },
+    "duplicados": "rechazar_todas",
+    "transaccion": "motor",
+    "reanudable": false,
+    "tablas_negocio": []
+}

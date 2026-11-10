@@ -4,6 +4,7 @@ namespace ByLopez\Cargues\Extensiones\ClientesHistoricos;
 
 use ByLopez\Cargues\Contracts\ExtensionTipo;
 use ByLopez\Cargues\Exceptions\OperacionInvalidaException;
+use ByLopez\Cargues\Extensiones\Concerns\AplicaPorFila;
 use ByLopez\Cargues\Models\Carga;
 use ByLopez\Cargues\Services\Configuracion\ConexionTipo;
 use Closure;
@@ -25,6 +26,8 @@ use Throwable;
  */
 class ClientesHistoricosExtension implements ExtensionTipo
 {
+    use AplicaPorFila;
+
     public function __construct(protected ConexionTipo $conexiones) {}
 
     // ---------------------------------------------------------------------------------------------------------------------
@@ -394,30 +397,11 @@ class ClientesHistoricosExtension implements ExtensionTipo
         return 'Dirección pendiente de completar. Texto original: «'.trim($direccion).($ciudad ? ' — '.trim($ciudad) : '').'». Motivo: '.$motivo.'. El cliente y el antecedente sí se guardaron.';
     }
 
-    protected function marcar(string $tabla, int $cgId, string $estado, ?string $detalle, ?string $codigo = null, ?string $mensaje = null): void
-    {
-        DB::table($tabla)->where('cg_id', $cgId)->whereNull('cg_estado')->update([
-            'cg_estado' => $estado, 'cg_detalle' => $detalle, 'cg_codigo' => $codigo,
-            'cg_mensaje' => $mensaje === null ? null : mb_substr($mensaje, 0, 500), 'cg_procesado_en' => now(),
-        ]);
-    }
-
     // ---------------------------------------------------------------------------------------------------------------------
 
     protected function proveedor(): string
     {
         return (string) config('cargues.clientes_historicos.proveedor', '99envios');
-    }
-
-    /** La marca de cada fila va en la MISMA transaccion que sus efectos: la intermedia debe estar en la base de la aplicacion. */
-    protected function exigirMismaBase(string $conexion): void
-    {
-        $c = $this->conexiones->conexion($conexion);
-        $app = DB::connection();
-
-        if ($c->getName() !== $app->getName() && ($c->getDatabaseName() !== $app->getDatabaseName() || ($c->getConfig('host') ?? null) !== ($app->getConfig('host') ?? null) || ($c->getConfig('port') ?? null) !== ($app->getConfig('port') ?? null))) {
-            throw new OperacionInvalidaException('EXTENSION_CONEXION_DISTINTA', 'Este tipo aplica por los servicios de la aplicación y su intermedia debe estar en la base de la aplicación (conexión «'.$app->getName().'»). La conexión del tipo es otra.');
-        }
     }
 
     protected function exigirModulo(): void

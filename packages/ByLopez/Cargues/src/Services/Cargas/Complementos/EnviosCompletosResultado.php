@@ -3,6 +3,7 @@
 namespace ByLopez\Cargues\Services\Cargas\Complementos;
 
 use ByLopez\Cargues\Contracts\ComplementaResultado;
+use ByLopez\Cargues\Extensiones\EnviosCompletos\EnviosCompletosHitosExtension;
 use ByLopez\Cargues\Models\Carga;
 use Illuminate\Support\Facades\DB;
 
@@ -33,7 +34,7 @@ class EnviosCompletosResultado implements ComplementaResultado
             $coinciden = $tr === '' ? collect() : $equivalencias->filter(fn ($e) => strcmp((string) $e->codigo_externo, $tr) === 0 || strcmp((string) $e->nombre_externo, $tr) === 0);
             $efectiva = $coinciden->count() === 1 ? $coinciden->first()->transportadora_codigo : null;
             $registro = $efectiva && $guia !== ''
-                ? DB::table('bylopez_lg_guias')->where('transportadora_codigo', $efectiva)->whereRaw('BINARY numero_guia = ?', [$guia])->first(['id', 'order_id', 'recaudo_esperado'])
+                ? DB::table('bylopez_lg_guias')->where('transportadora_codigo', $efectiva)->whereRaw('BINARY numero_guia = ?', [$guia])->first(['id', 'order_id', 'shipment_id', 'recaudo_esperado'])
                 : null;
 
             $pares = [
@@ -63,10 +64,49 @@ class EnviosCompletosResultado implements ComplementaResultado
                 ]));
             }
 
+            if ($registro && $registro->shipment_id && ($hito = $this->hito((int) $registro->shipment_id)) !== null) {
+                $pares[] = $this->par('res_hito', $hito);
+            }
+
             $salida[$n] = $pares;
         }
 
         return $salida;
+    }
+
+    /**
+     * Hitos AUTOMATICOS del envio (version 3, docs/16 §15), leidos de Logistica por sus claves fijas: lo que hay HOY, tambien al
+     * abrir la carga desde el Historial. Null si el cargue no registro ningun hito sobre ese envio.
+     */
+    protected function hito(int $envio): ?string
+    {
+        $claves = [EnviosCompletosHitosExtension::claveEntrega($envio), EnviosCompletosHitosExtension::claveValidacion($envio), EnviosCompletosHitosExtension::claveRetorno($envio)];
+        $entrega = DB::table('bylopez_lg_entregas')->where('idempotency_key', $claves[0])->first(['id', 'fecha_entrega', 'estado']);
+        $retorno = DB::table('bylopez_lg_retornos')->where('idempotency_key', $claves[2])->first(['id', 'fecha_retorno', 'estado']);
+
+        if (! $entrega && ! $retorno && ! DB::table('bylopez_lg_validaciones_entrega')->where('idempotency_key', $claves[1])->exists()) {
+            return null;
+        }
+
+        $partes = [];
+
+        if ($entrega) {
+            $partes[] = trans('cargues::app.res.hito_entrega', ['id' => $entrega->id, 'fecha' => $entrega->fecha_entrega])
+                .($entrega->estado === 'confirmado' ? '' : ' ('.trans('cargues::app.res.hito_anulado').')');
+        }
+
+        if ($entrega || DB::table('bylopez_lg_validaciones_entrega')->where('idempotency_key', $claves[1])->exists()) {
+            $validacion = DB::table('bylopez_lg_validaciones_entrega')->where('shipment_id', $envio)->where('estado', 'confirmado')->first(['id']);
+            $partes[] = $validacion ? trans('cargues::app.res.hito_validada', ['id' => $validacion->id]) : trans('cargues::app.res.hito_validacion_pendiente');
+        }
+
+        if ($retorno) {
+            $recibida = DB::table('bylopez_lg_recepciones_devolucion')->where('retorno_id', $retorno->id)->where('estado', 'confirmado')->exists();
+            $partes[] = trans('cargues::app.res.hito_retorno', ['id' => $retorno->id, 'fecha' => $retorno->fecha_retorno])
+                .($retorno->estado === 'confirmado' ? ' · '.trans($recibida ? 'cargues::app.res.hito_recibida' : 'cargues::app.res.hito_por_recibir') : ' ('.trans('cargues::app.res.hito_anulado').')');
+        }
+
+        return implode(' · ', $partes);
     }
 
     protected function par(string $clave, string $valor): array

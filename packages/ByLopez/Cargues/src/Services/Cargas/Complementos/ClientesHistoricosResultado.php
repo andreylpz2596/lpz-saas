@@ -38,7 +38,7 @@ class ClientesHistoricosResultado implements ComplementaResultado
 
             if ($reg) {
                 $pares[] = $this->par('res_cliente', '#'.$reg->customer_id);
-                $pares[] = $this->par('res_envio', ($reg->transportadora_clave === '' ? trans('cargues::app.res.sin_determinar') : (str_starts_with($reg->transportadora_clave, 'PEND:') ? '«'.$reg->transportadora_original.'» ('.trans('cargues::app.res.sin_equivalencia').')' : $reg->transportadora_clave)).' · '.$reg->estado_proveedor.' · '.($reg->fecha_estado ?: trans('cargues::app.res.sin_fecha')));
+                $pares[] = $this->par('res_envio', ($reg->transportadora_clave === '' ? trans('cargues::app.res.sin_determinar') : (str_starts_with($reg->transportadora_clave, 'PEND:') ? '«'.$reg->transportadora_original.'» ('.trans('cargues::app.res.sin_equivalencia_corta').')' : $reg->transportadora_clave)).' · '.$reg->estado_proveedor.' · '.($reg->fecha_estado ?: trans('cargues::app.res.sin_fecha')));
 
                 if ($reg->nombre_reportado) {
                     $pares[] = $this->par('res_nombre_reportado', $reg->nombre_reportado.' — '.trans('cargues::app.res.nombre_propuesta'));
