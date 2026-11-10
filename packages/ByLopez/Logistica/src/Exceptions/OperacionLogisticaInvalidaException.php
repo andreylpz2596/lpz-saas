@@ -179,6 +179,9 @@ class OperacionLogisticaInvalidaException extends RuntimeException
 
     public const RECEPCION_YA_REINGRESADA = 'recepcion_ya_reingresada';
 
+    /** D10: anular la recepcion dejaria credito ya aplicado/reembolsado sin respaldo. */
+    public const RECEPCION_CON_CREDITO_CONSUMIDO = 'recepcion_con_credito_consumido';
+
     public const REINGRESO_FALLIDO = 'reingreso_fallido';
 
     // Validacion de entrega (Fase D).

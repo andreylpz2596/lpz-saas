@@ -2,6 +2,7 @@
 
 namespace ByLopez\Logistica\Services\Entregas;
 
+use ByLopez\Logistica\Contracts\GuardaAnulacionRecepcion;
 use ByLopez\Logistica\Enums\EstadoEventoLogistico as Estado;
 use ByLopez\Logistica\Exceptions\OperacionLogisticaInvalidaException as Invalida;
 use ByLopez\Logistica\Models\Entrega;
@@ -79,6 +80,10 @@ class AnularEventoLogisticoService
                 throw new Invalida(Invalida::RECEPCION_YA_REINGRESADA, ['id' => $id]);
             }
 
+            // D10: la recepcion es una fuente de credito del cliente; se bloquea el pedido antes de escribir (mismo orden que el credito).
+            $guardaCredito = $registro instanceof RecepcionDevolucion ? app(GuardaAnulacionRecepcion::class) : null;
+            $guardaCredito?->antes((int) $registro->order_id);
+
             $registro->forceFill([
                 'estado' => Estado::ANULADO,
                 'motivo_anulacion' => mb_substr($motivo, 0, 500),
@@ -86,6 +91,9 @@ class AnularEventoLogisticoService
                 'anulada_por_name_snapshot' => mb_substr((string) $actor->name, 0, 191),
                 'anulada_en' => now(),
             ])->save();
+
+            // Con la recepcion ya anulada (sin commit): si el credito consumido pierde su respaldo, se rechaza y todo se deshace.
+            $guardaCredito?->despues((int) $registro->order_id);
 
             // Cuenta corriente: si el envio deja de estar entregado, lo generado se REVIERTE (nunca se edita ni se borra).
             if (! $registro instanceof RecepcionDevolucion) {

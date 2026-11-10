@@ -1117,6 +1117,7 @@ return [
         'retorno_con_recepcion' => 'The return cannot be voided because it already has a warehouse receipt. Void the receipt first.',
         'recepcion_ya_reingresada' => 'This receipt cannot be voided because its fit units were already restocked.',
         'reingreso_fallido' => 'Inventory could not be restocked (:causa). The receipt was not saved.',
+        'recepcion_con_credito_consumido' => 'This receipt cannot be voided: credit originated by this order was already applied or refunded ($ :usado used of $ :generado generated). Reverse that application first.',
         'validacion_ya_registrada' => 'This delivery was already validated.',
         'validacion_sin_entregas' => 'There are no delivered units on this shipment: nothing to validate or collect.',
         'validacion_con_pendientes' => 'Units are still pending on this shipment. Register them as delivered or returned before validating.',

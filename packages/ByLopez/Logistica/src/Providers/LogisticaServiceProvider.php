@@ -60,6 +60,8 @@ class LogisticaServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(dirname(__DIR__).'/Config/cuentas.php', 'logistica.cuentas');
         $this->app->bind(ResuelveMunicipio::class, SinResolucionMunicipio::class);
         $this->app->bind(PagosPendientesDeConfirmar::class, SinPagosPendientes::class);
+        // D10: anular una recepcion C5 no puede dejar credito consumido sin respaldo (VentasAsesor la reemplaza).
+        $this->app->bind(\ByLopez\Logistica\Contracts\GuardaAnulacionRecepcion::class, \ByLopez\Logistica\Support\SinGuardaAnulacionRecepcion::class);
 
         // Cierre F1 (D1): Logistica OFRECE a la venta el domiciliario elegible y guarda la eleccion con el pedido.
         $this->app->bind(DomiciliarioDeVenta::class, DomiciliarioDeVentaService::class);

@@ -90,7 +90,7 @@ trait ResponderOperacionesLogisticas
                 Invalida::STOCK_INSUFICIENTE, Invalida::PEDIDO_NO_DESPACHABLE, Invalida::DESPACHO_FALLIDO,
                 Invalida::INCIDENCIA_ABIERTA, Invalida::INCIDENCIA_YA_RESUELTA, Invalida::AJUSTE_FALLIDO,
                 Invalida::RETORNO_ANULADO, Invalida::RECEPCION_YA_REGISTRADA, Invalida::BODEGA_ORIGEN_INDETERMINADA, Invalida::RETORNO_CON_RECEPCION,
-                Invalida::RECEPCION_YA_REINGRESADA, Invalida::REINGRESO_FALLIDO,
+                Invalida::RECEPCION_YA_REINGRESADA, Invalida::REINGRESO_FALLIDO, Invalida::RECEPCION_CON_CREDITO_CONSUMIDO,
                 Invalida::VALIDACION_YA_REGISTRADA, Invalida::VALIDACION_CON_PENDIENTES, Invalida::VALIDACION_DEVOLUCION_SIN_RECIBIR, Invalida::ENVIO_VALIDADO,
                 Invalida::MOVIMIENTOS_YA_LIQUIDADOS, Invalida::LIQUIDACION_CERRADA, Invalida::REVISION_NO_APLICA,
             ], true) => 409,
