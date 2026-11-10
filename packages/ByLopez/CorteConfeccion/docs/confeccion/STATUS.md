@@ -1,5 +1,34 @@
 # Estado desarrollo — Distribución y Confección
 
+## SUGERENCIA POR STOCK + REGLA P1 + MÍNIMOS POR VARIANTE — IMPLEMENTADO EN DEV Y PRUEBAS (2026-11-03)
+
+Ver `09_CONSOLIDADO_PRIORIDADES.md` §4 y §9–§16. «Prioridad asignada» y «Sugerencia por stock» separadas en distribución, ficha y consolidado; P1 aprobada (Urgente → Alta → Normal, reparto ajustable y guardado en reportes y reasignaciones; reverso con el reparto registrado). Pantalla nueva «Mínimos de stock» (llaves `corte_confeccion.stock_minimos` y `.editar`). Migración aditiva `2026_11_03_000001` (dev lote 78, pruebas y bases aisladas, aplicada con `--path`). Debugbar ya no tapa acciones (parcial local). Pendiente de Camilo: configurar mínimos y asignar las llaves en Roles; iPhone físico.
+
+## CONSOLIDADO GENERAL + PRIORIDAD POR CANTIDAD + ALERTAS — IMPLEMENTADO EN DEV Y PRUEBAS (2026-11-02)
+
+Ver `09_CONSOLIDADO_PRIORIDADES.md`. Migraciones aditivas `2026_11_02_000002` (cantidades por prioridad, relleno sin perder Urgentes) y `…000003` (historial y avisos). Alertas en la campana y el listado nativos por eventos oficiales; `packages/Webkul/` sin cambios. Pendiente de Camilo: **decisión P1** (regla de consumo) y asignar la llave «Cambiar prioridad por cantidad» en Roles.
+
+## CARTERA DE CORTADORES Y SATÉLITES — IMPLEMENTADA EN DEV Y PRUEBAS (2026-11-01)
+
+Ver `08_CARTERA_PRESTADORES.md` y `docs/LECTURA_COMPROBANTES_PAGOS.md`. Migración aditiva `2026_11_01_000001`. Pendientes de Camilo: **fecha de arranque (D2)** y quién carga saldos iniciales; D7 y D8 siguen como propuesta (D8 no implementada); N1 no implementada; lectura de comprobantes desactivada hasta aprobar proveedor y medir exactitud con comprobantes reales. Sin saldos reales cargados.
+
+## CIERRE DE VALIDACIÓN (2026-10-31)
+
+Ver `07_CIERRE_VALIDACION_2026-10-31.md`: H11 corregido (cortador vetado al anular órdenes de confección), H10 con concurrencia real por HTTP (RCC-5/6), custodia física (revertir prendas salidas exige constancia + confirmación; migración `2026_10_31_000001`), migraciones conciliadas en `lpz_saas`, ACL `reasignar` de BODEGA y caso de demo para iPhone (fallos de WebKit corregidos: listeners perdidos y zoom por campos de 14 px). Pendiente tuyo: iPhone físico y asignar la ACL en Roles.
+
+## VALIDACIÓN INTEGRAL + REASIGNACIÓN DE PRENDAS — IMPLEMENTADA EN DEV, PENDIENTE DE PRUEBA MANUAL EN iPHONE (2026-10-29)
+
+Plan `Plan_Claude_CorteConfeccion_Reasignacion.md`. Diseño y reglas en `docs/confeccion/06_REASIGNACION_PRENDAS.md`; informe completo con la
+matriz P/H/R en `docs/confeccion/INFORME_VALIDACION_2026-10-29.md`.
+
+- **H01–H10** reproducidos con pruebas (`HallazgosAuditoriaH01H10Test`): H01 (mismo `product_id` repetido excedía el disponible), H02 (endpoint antiguo sin gate de rol), H03
+  (anular/editar pesos y costo de rollos reservados/usados), H04 (recepción única sin cobertura de todos los detalles), H05 (`agregarDetalle` aceptaba configurables y productos fuera
+  de la tela/color), H06 (anular con instancia vieja liberaba lo ya reportado), H07 (familia derivada en vivo), H08 (cierre vs recepción), H09 (cambio de proveedor con rollos
+  vinculados) corregidos; H10 verificado con bloqueo de fila. Detalle y evidencia en el informe.
+- **Reasignación** (R01–R23) + concurrencia real con procesos PHP (RCC-1..4) + matriz de permisos + tarifas por combinación.
+- Migraciones nuevas **aditivas** (`2026_10_29_000001` y `…000002`); aplicadas en `lpz_saas_testing`, en la demo aislada y en `lpz_saas` (dev, batch 72; verificado 2026-10-31). Se suma `2026_10_31_000001` (constancia de devolucion) en dev y pruebas.
+- `packages/Webkul/`, `vendor/` y `bootstrap/` sin cambios.
+
 ## 05 — Tarifas y cuentas por pagar de prestadores (talleres y cortadores) — FASE 2 AJUSTADA A REFERENCIAS, PENDIENTE DE PRUEBA MANUAL (2026-10-14)
 
 Reglas, modelo, permisos y plan en `docs/confeccion/05_TARIFAS_CUENTAS_PRESTADOR.md` (decisiones de Camilo: R13–R16 y, el 2026-10-14, tarifas por referencia).
