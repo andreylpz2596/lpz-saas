@@ -1,0 +1,64 @@
+{
+    "base": "lpz_saas_demo_cc_val_20261103",
+    "canal": 1,
+    "variantes": 355,
+    "pedidos_f5_afectados": 0,
+    "unidades_f5_sin_reserva": 0,
+    "lineas_f5": [],
+    "conteo": {
+        "nueva_venta_vs_sugerencia": 0,
+        "indice_desactualizado": 4,
+        "cerco_vs_nueva_venta": 4,
+        "sin_indice": 39
+    },
+    "diferencias": [
+        {
+            "sku": "116DURZ-H-S",
+            "nueva_venta": 23,
+            "sugerencia": 23,
+            "indexador": 26,
+            "pendiente_sin_reserva": 0,
+            "cerco": 26,
+            "motivos": [
+                "indice_desactualizado",
+                "cerco_vs_nueva_venta"
+            ]
+        },
+        {
+            "sku": "116DURZ-H-M",
+            "nueva_venta": 30,
+            "sugerencia": 30,
+            "indexador": 33,
+            "pendiente_sin_reserva": 0,
+            "cerco": 33,
+            "motivos": [
+                "indice_desactualizado",
+                "cerco_vs_nueva_venta"
+            ]
+        },
+        {
+            "sku": "116-DURZ-H-XL",
+            "nueva_venta": 27,
+            "sugerencia": 27,
+            "indexador": 30,
+            "pendiente_sin_reserva": 0,
+            "cerco": 30,
+            "motivos": [
+                "indice_desactualizado",
+                "cerco_vs_nueva_venta"
+            ]
+        },
+        {
+            "sku": "124DURZ-H-M",
+            "nueva_venta": 16,
+            "sugerencia": 16,
+            "indexador": 28,
+            "pendiente_sin_reserva": 0,
+            "cerco": 28,
+            "motivos": [
+                "indice_desactualizado",
+                "cerco_vs_nueva_venta"
+            ]
+        }
+    ]
+}

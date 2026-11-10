@@ -1,0 +1,305 @@
+{
+  "resultados": [
+    {
+      "ancho": 1280,
+      "pantalla": "proveedores",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "referencias",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "compras",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "rollos",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "cortadores",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "cortes",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "corte-ficha",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 2663,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/1031/1763"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "distribuir",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 2663,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/1031/1763"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "talleres",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "taller-ficha",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 1294,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/347/394"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "taller-ficha-reasignaciones",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 1571,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/485/671"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "confeccion",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "confeccion-ficha",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 1358,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/379/458"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "confeccion-ficha-historial",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 1722,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/561/822"
+    },
+    {
+      "ancho": 1280,
+      "pantalla": "movimientos",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 1108,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/208/208"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "proveedores",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "referencias",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "compras",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "rollos",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "cortadores",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "cortes",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "corte-ficha",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 2527,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/963/1627"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "distribuir",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 2527,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/963/1627"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "talleres",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "taller-ficha",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 1235,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/317/335"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "taller-ficha-reasignaciones",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 1478,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/439/578"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "confeccion",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 900,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "n/a"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "confeccion-ficha",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 1358,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/379/458"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "confeccion-ficha-historial",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 1688,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/544/788"
+    },
+    {
+      "ancho": 1440,
+      "pantalla": "movimientos",
+      "http": 200,
+      "desbordamiento_px": 0,
+      "alto": 1091,
+      "visible": 900,
+      "scroll_y_arriba_centro_abajo": "150/191/191"
+    }
+  ],
+  "flujo": [
+    {
+      "ancho": 1440,
+      "orden": 698,
+      "boton_visible": true,
+      "filas": 3,
+      "antes_despues": "Antes y despues Taller Jairo (demo): 700 → 600 Taller Andrea (demo): 300 → 400",
+      "impacto": "Impacto de tarifa (referencial) Con Taller Jairo (demo): Sin tarifa (parcial $ 0) Con Taller Andrea (demo): Sin tarifa (parcial $ 0) El destino usa su propia tarifa vigente; no hereda la del taller de origen.",
+      "boton_habilitado": true,
+      "error_visible": true,
+      "error_texto": "9a5e6ccb-7ade-3f34-99da-45a532c67bf9: supera el maximo elegible (300).",
+      "scroll_modal": 51,
+      "tras_enviar": "sin historial",
+      "errores_pagina": []
+    },
+    {
+      "ancho": 390,
+      "orden": 700,
+      "boton_visible": true,
+      "filas": 3,
+      "antes_despues": "Antes y despues Taller Jairo 2 (demo): 550 → 450 Taller Andrea (demo): 0 → 100",
+      "impacto": "Impacto de tarifa (referencial) Con Taller Jairo 2 (demo): Sin tarifa (parcial $ 0) Con Taller Andrea (demo): Sin tarifa (parcial $ 0) El destino usa su propia tarifa vigente; no hereda la del taller de origen.",
+      "boton_habilitado": true,
+      "error_visible": true,
+      "error_texto": "0ab66d56-a3fe-3f5b-a50a-20eef2ef60b5: supera el maximo elegible (200).",
+      "scroll_modal": 400,
+      "scroll_pagina_tras_cerrar": 400,
+      "errores_pagina": []
+    }
+  ],
+  "errores": []
+}

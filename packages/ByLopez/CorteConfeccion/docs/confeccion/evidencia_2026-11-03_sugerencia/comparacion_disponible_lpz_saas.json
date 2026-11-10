@@ -1,0 +1,15 @@
+{
+    "base": "lpz_saas",
+    "canal": 1,
+    "variantes": 308,
+    "pedidos_f5_afectados": 0,
+    "unidades_f5_sin_reserva": 0,
+    "lineas_f5": [],
+    "conteo": {
+        "nueva_venta_vs_sugerencia": 0,
+        "indice_desactualizado": 0,
+        "cerco_vs_nueva_venta": 0,
+        "sin_indice": 3
+    },
+    "diferencias": []
+}

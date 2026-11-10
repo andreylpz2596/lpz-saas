@@ -1,0 +1,177 @@
+{
+  "etiqueta": "webkit-390",
+  "cantidad": 5,
+  "detalle": "798",
+  "pasos": [
+    {
+      "nombre": "pestaña activa evidente",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin @endif ni alerta suelta",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "cuatro indicadores",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "el contenido usa todo el ancho disponible",
+      "ok": true,
+      "detalle": "374/374"
+    },
+    {
+      "nombre": "celular: filtros plegados al entrar",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "celular: «Filtros» los despliega",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin desplazamiento horizontal: consolidado",
+      "ok": true,
+      "detalle": "390/390"
+    },
+    {
+      "nombre": "la variante despliega sus órdenes de origen",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin desplazamiento horizontal: variante desplegada",
+      "ok": true,
+      "detalle": "390/390"
+    },
+    {
+      "nombre": "modal abierta con teclado y foco en el primer campo",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "modal dentro de la pantalla (sin cortes ni desborde horizontal)",
+      "ok": true,
+      "detalle": "{\"izq\":33.90625,\"der\":356.09375,\"arriba\":32,\"abajo\":669,\"vw\":390,\"vh\":664,\"cuerpo\":\"hidden\"}"
+    },
+    {
+      "nombre": "scroll de la página bloqueado con la modal abierta",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "modal por encima del encabezado y el menú",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Tab no sale de la modal",
+      "ok": true,
+      "detalle": "fuera=0"
+    },
+    {
+      "nombre": "foco visible",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Escape cierra la modal",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "el foco vuelve al botón que la abrió",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "el scroll se restaura",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "decimal: error junto al campo y no se puede guardar",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "mayor al saldo: error junto al campo",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "vista previa «N pasarán a Alta · M seguirán en Normal»",
+      "ok": true,
+      "detalle": "5 pasarán a Alta · 75 seguirán en Normal"
+    },
+    {
+      "nombre": "guardado sin recargar la página",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "doble clic = una sola operación",
+      "ok": true,
+      "detalle": "4 -> 5"
+    },
+    {
+      "nombre": "indicador de altas actualizado",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "la fila muestra la nueva prioridad",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "la variante sigue desplegada",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "mensaje indica a quién se avisó",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin desplazamiento horizontal: tras guardar",
+      "ok": true,
+      "detalle": "390/390"
+    },
+    {
+      "nombre": "el aviso aparece en la campana nativa",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "abre el consolidado con el contexto de la alerta",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "resalta la orden del cambio",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "el taller no ve selector de taller ni botón de cambio",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin desplazamiento horizontal: consolidado del taller",
+      "ok": true,
+      "detalle": "390/390"
+    },
+    {
+      "nombre": "filtro de taller ajeno no amplía el alcance",
+      "ok": true,
+      "detalle": ""
+    }
+  ]
+}

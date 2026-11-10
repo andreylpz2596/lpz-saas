@@ -1,0 +1,16 @@
+[
+    {
+        "ok": false,
+        "clase": "validacion",
+        "errores": {
+            "operaciones": [
+                "Esta transferencia ya está registrada en AB-0160 (2026-11-01, $ 20.000). No se contabiliza dos veces."
+            ]
+        }
+    },
+    {
+        "ok": true,
+        "movimiento_id": 160,
+        "codigo": "AB-0160"
+    }
+]

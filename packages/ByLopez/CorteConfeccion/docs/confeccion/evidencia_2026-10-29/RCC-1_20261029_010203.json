@@ -1,0 +1,16 @@
+[
+    {
+        "ok": true,
+        "reasignacion_id": 157,
+        "orden_destino_id": 8342
+    },
+    {
+        "ok": false,
+        "clase": "validacion",
+        "errores": {
+            "lineas": [
+                "La cantidad supera lo que se puede reasignar (pendiente por reportar, sin las prendas declaradas en proceso)."
+            ]
+        }
+    }
+]

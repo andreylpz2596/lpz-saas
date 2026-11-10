@@ -1,0 +1,16 @@
+[
+    {
+        "ok": false,
+        "clase": "validacion",
+        "errores": {
+            "aplicaciones": [
+                "La aplicación supera el saldo de OF-000002 ($ 270.000)."
+            ]
+        }
+    },
+    {
+        "ok": true,
+        "movimiento_id": 162,
+        "codigo": "AB-0162"
+    }
+]

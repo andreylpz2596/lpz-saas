@@ -1,0 +1,15 @@
+[
+    {
+        "ok": false,
+        "clase": "validacion",
+        "errores": {
+            "lineas": [
+                "La cantidad supera lo que se puede reasignar (pendiente por reportar, sin las prendas declaradas en proceso)."
+            ]
+        }
+    },
+    {
+        "ok": true,
+        "retorno_id": 5672
+    }
+]

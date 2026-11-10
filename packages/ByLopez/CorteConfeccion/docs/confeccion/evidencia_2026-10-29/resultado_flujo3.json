@@ -1,0 +1,35 @@
+{
+  "resultados": [],
+  "flujo": [
+    {
+      "ancho": 1440,
+      "orden": 698,
+      "boton_visible": true,
+      "filas": 3,
+      "antes_despues": "Antes y despues Taller Jairo (demo): 500 → 400 Taller Andrea (demo): 500 → 600",
+      "impacto": "Impacto de tarifa (referencial) Con Taller Jairo (demo): Sin tarifa (parcial $ 0) Con Taller Andrea (demo): Sin tarifa (parcial $ 0) El destino usa su propia tarifa vigente; no hereda la del taller de origen.",
+      "boton_habilitado": true,
+      "error_visible": true,
+      "error_texto": "9a5e6ccb-7ade-3f34-99da-45a532c67bf9: supera el maximo elegible (100).",
+      "scroll_modal": 80,
+      "http_envio": 200,
+      "tras_enviar": "historial visible",
+      "errores_pagina": []
+    },
+    {
+      "ancho": 390,
+      "orden": 700,
+      "boton_visible": true,
+      "filas": 3,
+      "antes_despues": "Antes y despues Taller Jairo 2 (demo): 550 → 450 Taller Andrea (demo): 0 → 100",
+      "impacto": "Impacto de tarifa (referencial) Con Taller Jairo 2 (demo): Sin tarifa (parcial $ 0) Con Taller Andrea (demo): Sin tarifa (parcial $ 0) El destino usa su propia tarifa vigente; no hereda la del taller de origen.",
+      "boton_habilitado": true,
+      "error_visible": true,
+      "error_texto": "0ab66d56-a3fe-3f5b-a50a-20eef2ef60b5: supera el maximo elegible (200).",
+      "scroll_modal": 400,
+      "scroll_pagina_tras_cerrar": 400,
+      "errores_pagina": []
+    }
+  ],
+  "errores": []
+}

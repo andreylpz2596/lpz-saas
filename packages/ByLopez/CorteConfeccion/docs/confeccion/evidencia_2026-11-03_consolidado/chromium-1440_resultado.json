@@ -1,0 +1,192 @@
+{
+  "etiqueta": "chromium-1440",
+  "cantidad": 5,
+  "detalle": "798",
+  "pasos": [
+    {
+      "nombre": "pestaña activa evidente",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin @endif ni alerta suelta",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "cuatro indicadores",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "el contenido usa todo el ancho disponible",
+      "ok": true,
+      "detalle": "1138/1138"
+    },
+    {
+      "nombre": "escritorio: filtros visibles y compactos",
+      "ok": true,
+      "detalle": "alto=135"
+    },
+    {
+      "nombre": "sin desplazamiento horizontal: consolidado",
+      "ok": true,
+      "detalle": "1440/1440"
+    },
+    {
+      "nombre": "escritorio: nombre en una línea y fila compacta",
+      "ok": true,
+      "detalle": "nombre=17 fila=80"
+    },
+    {
+      "nombre": "escritorio: el código de orden no se parte en varias líneas",
+      "ok": true,
+      "detalle": "alto=17"
+    },
+    {
+      "nombre": "escritorio: encabezado y filas alineados",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "la variante despliega sus órdenes de origen",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin desplazamiento horizontal: variante desplegada",
+      "ok": true,
+      "detalle": "1440/1440"
+    },
+    {
+      "nombre": "modal abierta con teclado y foco en el primer campo",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "modal dentro de la pantalla (sin cortes ni desborde horizontal)",
+      "ok": true,
+      "detalle": "{\"izq\":460,\"der\":980,\"arriba\":180,\"abajo\":720,\"vw\":1440,\"vh\":900,\"cuerpo\":\"hidden\"}"
+    },
+    {
+      "nombre": "scroll de la página bloqueado con la modal abierta",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "escritorio: modal centrada",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "modal por encima del encabezado y el menú",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Tab no sale de la modal",
+      "ok": true,
+      "detalle": "fuera=0"
+    },
+    {
+      "nombre": "foco visible",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Escape cierra la modal",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "el foco vuelve al botón que la abrió",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "el scroll se restaura",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "decimal: error junto al campo y no se puede guardar",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "mayor al saldo: error junto al campo",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "vista previa «N pasarán a Alta · M seguirán en Normal»",
+      "ok": true,
+      "detalle": "5 pasarán a Alta · 70 seguirán en Normal"
+    },
+    {
+      "nombre": "guardado sin recargar la página",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "doble clic = una sola operación",
+      "ok": true,
+      "detalle": "5 -> 6"
+    },
+    {
+      "nombre": "indicador de altas actualizado",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "la fila muestra la nueva prioridad",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "la variante sigue desplegada",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "mensaje indica a quién se avisó",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin desplazamiento horizontal: tras guardar",
+      "ok": true,
+      "detalle": "1440/1440"
+    },
+    {
+      "nombre": "el aviso aparece en la campana nativa",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "abre el consolidado con el contexto de la alerta",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "resalta la orden del cambio",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "el taller no ve selector de taller ni botón de cambio",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin desplazamiento horizontal: consolidado del taller",
+      "ok": true,
+      "detalle": "1440/1440"
+    },
+    {
+      "nombre": "filtro de taller ajeno no amplía el alcance",
+      "ok": true,
+      "detalle": ""
+    }
+  ]
+}

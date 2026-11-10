@@ -1,0 +1,12 @@
+[
+    {
+        "ok": true,
+        "status": 302,
+        "cuerpo": "<!DOCTYPE html>\n<html>\n    <head>\n        <meta charset=\"UTF-8\" \/>\n        <meta http-equiv=\"refresh\" content=\"0;url='http:\/\/localhost\/admin\/corte-confeccion\/ordenes-corte\/view\/22132'\" \/>\n\n        <title>Redirecting to http:\/\/localhost\/admin\/corte-confeccion\/ordenes-corte\/view\/22132<\/title>\n    <\/head>\n    <body>\n        Redirecting to <a href=\"http:\/\/localhost\/admin\/corte-confeccion\/ordenes-corte"
+    },
+    {
+        "ok": false,
+        "status": 500,
+        "cuerpo": "{\n    \"message\": \"SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '22132' for key 'bylopez_cc_recepciones_corte_orden_corte_id_unique' (Connection: mysql, Host: 127.0.0.1, Port: 3306, Database: lpz_saas_testing, SQL: insert into `bylopez_cc_recepciones_corte` (`orden_corte_id`, `fecha_recepcion`, `merma_total`, `observacion`, `recibido_por`, `updated_at`, `created_at`) values"
+    }
+]

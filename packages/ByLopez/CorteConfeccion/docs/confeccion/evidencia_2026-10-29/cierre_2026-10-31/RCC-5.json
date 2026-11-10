@@ -1,0 +1,12 @@
+[
+    {
+        "ok": true,
+        "status": 302,
+        "cuerpo": "<!DOCTYPE html>\n<html>\n    <head>\n        <meta charset=\"UTF-8\" \/>\n        <meta http-equiv=\"refresh\" content=\"0;url='http:\/\/localhost\/admin\/corte-confeccion\/ordenes-corte\/view\/22131'\" \/>\n\n        <title>Redirecting to http:\/\/localhost\/admin\/corte-confeccion\/ordenes-corte\/view\/22131<\/title>\n    <\/head>\n    <body>\n        Redirecting to <a href=\"http:\/\/localhost\/admin\/corte-confeccion\/ordenes-corte"
+    },
+    {
+        "ok": true,
+        "status": 302,
+        "cuerpo": "<!DOCTYPE html>\n<html>\n    <head>\n        <meta charset=\"UTF-8\" \/>\n        <meta http-equiv=\"refresh\" content=\"0;url='http:\/\/localhost\/admin\/corte-confeccion\/ordenes-corte\/view\/22131'\" \/>\n\n        <title>Redirecting to http:\/\/localhost\/admin\/corte-confeccion\/ordenes-corte\/view\/22131<\/title>\n    <\/head>\n    <body>\n        Redirecting to <a href=\"http:\/\/localhost\/admin\/corte-confeccion\/ordenes-corte"
+    }
+]

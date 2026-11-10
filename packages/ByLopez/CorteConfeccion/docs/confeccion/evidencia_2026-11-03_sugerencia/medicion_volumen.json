@@ -1,0 +1,88 @@
+{
+    "base": "lpz_saas_cc_val_20261103",
+    "php": "8.3.33",
+    "mysql": "10.4.28-MariaDB",
+    "resultados": [
+        {
+            "escenario": "servicio sin filtros (admin)",
+            "consultas": 9,
+            "ms_sql": 592.4,
+            "ms_total": 1378,
+            "filas": 5000,
+            "variantes": 4719
+        },
+        {
+            "escenario": "servicio filtro taller",
+            "consultas": 9,
+            "ms_sql": 559,
+            "ms_total": 898,
+            "filas": 130,
+            "variantes": 124
+        },
+        {
+            "escenario": "servicio sugerencia=urgente",
+            "consultas": 9,
+            "ms_sql": 459.4,
+            "ms_total": 808.9,
+            "filas": 426,
+            "variantes": 405
+        },
+        {
+            "escenario": "servicio texto \"perf 12\"",
+            "consultas": 9,
+            "ms_sql": 587.1,
+            "ms_total": 1142.2,
+            "filas": 1507,
+            "variantes": 1427
+        },
+        {
+            "escenario": "servicio alcance 1 taller",
+            "consultas": 9,
+            "ms_sql": 75.7,
+            "ms_total": 101.2,
+            "filas": 130,
+            "variantes": 124
+        },
+        {
+            "escenario": "HTTP pagina 1",
+            "consultas": 30,
+            "ms_sql": 1109.9,
+            "ms_total": 2379.6,
+            "status": 200,
+            "kb": 459
+        },
+        {
+            "escenario": "HTTP pagina 20",
+            "consultas": 29,
+            "ms_sql": 1285.9,
+            "ms_total": 2302.2,
+            "status": 200,
+            "kb": 461
+        },
+        {
+            "escenario": "HTTP sugerencia=alta",
+            "consultas": 29,
+            "ms_sql": 2323.4,
+            "ms_total": 3071.1,
+            "status": 200,
+            "kb": 455
+        },
+        {
+            "escenario": "HTTP taller + talla 8",
+            "consultas": 29,
+            "ms_sql": 950.9,
+            "ms_total": 1549.3,
+            "status": 200,
+            "kb": 457
+        }
+    ],
+    "coherencia": {
+        "indicador_igual_suma_filas": true,
+        "indicador_igual_suma_grupos": true,
+        "paginas_cubren_variantes": true,
+        "filtros_sugerencia_suman_el_total": true,
+        "total_por_confeccionar": 330462,
+        "variantes": 4719,
+        "filas_detalle": 5000
+    }
+}

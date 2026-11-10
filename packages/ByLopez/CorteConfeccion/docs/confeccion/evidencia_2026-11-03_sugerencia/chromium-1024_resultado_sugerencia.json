@@ -1,0 +1,180 @@
+{
+  "etiqueta": "chromium-1024",
+  "pasos": [
+    {
+      "nombre": "hora del cálculo visible",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin disponible -> Urgente «Sin disponible»",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "positivo sin mínimo -> «Sin mínimo configurado»",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "mínimo guardado",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "la variante pasa a Alta «Bajo el mínimo»",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "botón «Guardar cambios» no queda tapado (Debugbar presente z=9000)",
+      "ok": true,
+      "detalle": "{\"existe\":true,\"libre\":true,\"barra\":true,\"z\":\"9000\"}"
+    },
+    {
+      "nombre": "sin desplazamiento horizontal: mínimos",
+      "ok": true,
+      "detalle": "1024/1024"
+    },
+    {
+      "nombre": "consolidado refleja el mínimo (Alta)",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "el administrador ve disponible y mínimo",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin desplazamiento horizontal: consolidado con sugerencia",
+      "ok": true,
+      "detalle": "1024/1024"
+    },
+    {
+      "nombre": "filtro por sugerencia = Alta",
+      "ok": true,
+      "detalle": "[\"alta\"]"
+    },
+    {
+      "nombre": "modal abierta desde la sugerencia",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "la modal muestra la sugerencia como referencia",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "la modal no copia el nivel sugerido",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "botón «Guardar prioridad» de la modal no queda tapado (Debugbar presente z=9000)",
+      "ok": true,
+      "detalle": "{\"existe\":true,\"libre\":true,\"barra\":true,\"z\":\"9000\"}"
+    },
+    {
+      "nombre": "la prioridad asignada (Alta) se guarda aunque la sugerencia sea Urgente",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "ficha: columnas «Prioridad asignada» y «Sugerencia por stock»",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin desplazamiento horizontal: ficha de la orden",
+      "ok": true,
+      "detalle": "1024/1024"
+    },
+    {
+      "nombre": "distribución: sugerencia por stock visible",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "distribución: hora del cálculo",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "el taller ve nivel y motivo",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "el taller NO ve cifras globales de inventario",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin desplazamiento horizontal: consolidado del taller",
+      "ok": true,
+      "detalle": "1024/1024"
+    },
+    {
+      "nombre": "reparto sugerido «3 Altas»",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "error si el reparto no suma la entrega",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "reparto ajustado «1 Alta + 2 Normales»",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "la revisión muestra el reparto",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "saldo cambiado: se informa y se pide revisar",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "lo escrito se conserva (cantidad y reparto)",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "sin desplazamiento horizontal: error de reparto",
+      "ok": true,
+      "detalle": "1024/1024"
+    },
+    {
+      "nombre": "nuevo sugerido con Urgente primero",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "botón «Confirmar entrega» no queda tapado (Debugbar presente z=9000)",
+      "ok": true,
+      "detalle": "{\"existe\":true,\"libre\":true,\"barra\":true,\"z\":\"9000\"}"
+    },
+    {
+      "nombre": "entrega registrada",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "el historial guarda el reparto confirmado",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "el taller no entra a mínimos (401/403)",
+      "ok": true,
+      "detalle": "401"
+    }
+  ]
+}

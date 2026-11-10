@@ -1,0 +1,78 @@
+[
+  {
+    "nombre": "sin ACL: la ficha abre y NO hay boton «Reasignar prendas»",
+    "ok": true
+  },
+  {
+    "nombre": "ficha sin desbordamiento horizontal",
+    "ok": true,
+    "detalle": {
+      "px": 0
+    }
+  },
+  {
+    "nombre": "la ficha se desplaza desde el centro antes de abrir el modal",
+    "ok": true,
+    "detalle": {
+      "scrollY": 300,
+      "alto": 2926
+    }
+  },
+  {
+    "nombre": "el modal se desplaza desde el centro",
+    "ok": true,
+    "detalle": {
+      "scrollTop": 350
+    }
+  },
+  {
+    "nombre": "todos los campos del modal tienen >= 16 px (sin zoom al enfocar)",
+    "ok": true,
+    "detalle": {
+      "campos": 10,
+      "minimo": 16
+    }
+  },
+  {
+    "nombre": "tras enfocar y escribir, la pagina no se amplio (escala 1)",
+    "ok": true,
+    "detalle": {
+      "escala": 1
+    }
+  },
+  {
+    "nombre": "con cantidad y motivo el boton «Reasignar prendas» queda habilitado",
+    "ok": true
+  },
+  {
+    "nombre": "tras cerrar el modal la ficha vuelve a desplazarse",
+    "ok": true,
+    "detalle": {
+      "scrollY": 300
+    }
+  },
+  {
+    "nombre": "confirmar la reasignacion responde HTTP 200",
+    "ok": true,
+    "detalle": {
+      "status": 200
+    }
+  },
+  {
+    "nombre": "el historial de reasignaciones aparece tras confirmar",
+    "ok": true
+  },
+  {
+    "nombre": "la ficha sigue desplazandose tras confirmar",
+    "ok": true
+  },
+  {
+    "nombre": "«Cancelar traslado» pide constancia de devolucion y confirmacion fisica",
+    "ok": true
+  },
+  {
+    "nombre": "sin errores de JavaScript en la pagina",
+    "ok": true,
+    "detalle": []
+  }
+]

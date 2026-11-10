@@ -1,0 +1,14 @@
+[
+    {
+        "ok": false,
+        "clase": "validacion",
+        "errores": {
+            "orden_confeccion_origen_id": [
+                "Solo se pueden reasignar prendas de una orden de confeccion activa o en confeccion."
+            ]
+        }
+    },
+    {
+        "ok": true
+    }
+]

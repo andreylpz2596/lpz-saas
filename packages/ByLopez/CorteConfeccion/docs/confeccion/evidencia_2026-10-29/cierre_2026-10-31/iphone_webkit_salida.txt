@@ -1,0 +1,13 @@
+OK  sin ACL: la ficha abre y NO hay boton «Reasignar prendas» 
+OK  ficha sin desbordamiento horizontal {"px":0}
+OK  la ficha se desplaza desde el centro antes de abrir el modal {"scrollY":300,"alto":2926}
+OK  el modal se desplaza desde el centro {"scrollTop":350}
+OK  todos los campos del modal tienen >= 16 px (sin zoom al enfocar) {"campos":10,"minimo":16}
+OK  tras enfocar y escribir, la pagina no se amplio (escala 1) {"escala":1}
+OK  con cantidad y motivo el boton «Reasignar prendas» queda habilitado 
+OK  tras cerrar el modal la ficha vuelve a desplazarse {"scrollY":300}
+OK  confirmar la reasignacion responde HTTP 200 {"status":200}
+OK  el historial de reasignaciones aparece tras confirmar 
+OK  la ficha sigue desplazandose tras confirmar 
+OK  «Cancelar traslado» pide constancia de devolucion y confirmacion fisica 
+OK  sin errores de JavaScript en la pagina []

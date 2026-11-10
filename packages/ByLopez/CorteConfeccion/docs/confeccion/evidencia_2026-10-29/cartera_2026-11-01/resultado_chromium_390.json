@@ -1,0 +1,119 @@
+[
+  {
+    "nombre": "listado de cartera abre (200) sin desbordamiento",
+    "ok": true,
+    "detalle": {
+      "px": 0
+    }
+  },
+  {
+    "nombre": "cuenta del satélite abre (200) sin desbordamiento horizontal",
+    "ok": true,
+    "detalle": {
+      "px": 0
+    }
+  },
+  {
+    "nombre": "muestra «Faltaría por pagar» $ 945.000 y $ 800.000 por lo recibido",
+    "ok": true,
+    "detalle": {
+      "nota": "solo vale con datos recien sembrados"
+    }
+  },
+  {
+    "nombre": "muestra Recibido por bodega y Pendiente de recibir",
+    "ok": true
+  },
+  {
+    "nombre": "al tocar la cifra se ve la cuenta (trabajo recibido, abonos)",
+    "ok": true
+  },
+  {
+    "nombre": "la cuenta se desplaza",
+    "ok": true
+  },
+  {
+    "nombre": "«Registrar movimiento» abre el modal",
+    "ok": true
+  },
+  {
+    "nombre": "campos visibles del modal con >= 16 px en móvil (sin zoom de Safari)",
+    "ok": true,
+    "detalle": {
+      "minimo": 16
+    }
+  },
+  {
+    "nombre": "el total del modal sigue la suma de las operaciones incluidas",
+    "ok": true,
+    "detalle": {
+      "valor": "$ 20.097"
+    }
+  },
+  {
+    "nombre": "el modal se desplaza",
+    "ok": true,
+    "detalle": {
+      "scrollTop": 1046
+    }
+  },
+  {
+    "nombre": "registrar un abono con detalle responde 200",
+    "ok": true,
+    "detalle": {
+      "status": 200
+    }
+  },
+  {
+    "nombre": "el historial muestra el nuevo abono",
+    "ok": true
+  },
+  {
+    "nombre": "el corte muestra descuento de $ 500.000 y queda por pagar",
+    "ok": true,
+    "detalle": {
+      "resumen": "Trabajo recibido sin liquidar $ 870.000 Abonos ya aplicados a esas órdenes − $ 90.097 Descuento de préstamo acordado − $ 500.000 Queda por pagar en este corte $ 279.903 Préstamo pendiente después de este corte: $ 1.000.0"
+    }
+  },
+  {
+    "nombre": "el corte avisa que no registra transferencia",
+    "ok": true
+  },
+  {
+    "nombre": "tras cerrar el modal la página sigue desplazándose",
+    "ok": true
+  },
+  {
+    "nombre": "la ficha del taller muestra la cuenta (resumen) y el enlace completo",
+    "ok": true,
+    "detalle": {
+      "desborde": 0
+    }
+  },
+  {
+    "nombre": "la orden muestra «Cuenta de esta orden»",
+    "ok": true,
+    "detalle": {
+      "desborde": 0
+    }
+  },
+  {
+    "nombre": "Mi cuenta (prestador) abre, es de consulta y sin botones de registro",
+    "ok": true,
+    "detalle": {
+      "desborde": 0
+    }
+  },
+  {
+    "nombre": "el prestador no abre la cuenta de otra persona",
+    "ok": true,
+    "detalle": {
+      "status": 401
+    }
+  },
+  {
+    "nombre": "sin errores de JavaScript ni HTTP 5xx",
+    "ok": true,
+    "detalle": []
+  }
+]
