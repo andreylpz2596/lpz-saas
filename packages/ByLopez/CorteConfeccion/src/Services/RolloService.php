@@ -5,6 +5,7 @@ namespace ByLopez\CorteConfeccion\Services;
 use ByLopez\CorteConfeccion\Enums\EstadoRollo;
 use ByLopez\CorteConfeccion\Models\Rollo;
 use ByLopez\CorteConfeccion\Repositories\RolloRepository;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Webkul\Attribute\Models\Attribute;
 use Webkul\Attribute\Models\AttributeOption;
@@ -35,6 +36,19 @@ class RolloService
             if ($pesoInicialCambio || $pesoDisponibleCambio) {
                 throw ValidationException::withMessages([
                     'peso_disponible' => trans('corteconfeccion::app.errors.rollo-reservado-no-editable'),
+                ]);
+            }
+        }
+
+        // H03: un rollo que ya participo en un corte (iniciado) o esta reservado en una orden abierta no cambia de
+        // pesos ni de costo: el peso consumido y el costo de lo cortado son historia. Un rollo cuyo unico vinculo es
+        // una orden anulada si puede corregirse (nunca llego a usarse).
+        if ($this->usadoOReservado($rollo)) {
+            $cambiaPeso = fn (string $campo) => array_key_exists($campo, $data) && round((float) $data[$campo], 3) !== round((float) $rollo->{$campo}, 3);
+
+            if ($cambiaPeso('peso_inicial') || $cambiaPeso('peso_disponible') || $cambiaPeso('costo_total')) {
+                throw ValidationException::withMessages([
+                    'peso_disponible' => trans('corteconfeccion::app.errors.rollo-usado-no-editable'),
                 ]);
             }
         }
@@ -155,9 +169,30 @@ class RolloService
 
     public function cancel(Rollo $rollo): Rollo
     {
-        $rollo->update(['estado' => EstadoRollo::Anulado->value]);
+        return DB::transaction(function () use ($rollo) {
+            // H03: estado y vinculos FRESCOS bajo bloqueo; anular un rollo reservado, agotado o usado deja una orden
+            // de corte apuntando a tela inexistente.
+            $fresco = Rollo::query()->lockForUpdate()->findOrFail($rollo->id);
 
-        return $rollo->refresh();
+            if ($fresco->estado === EstadoRollo::Anulado->value) {
+                return $fresco;
+            }
+
+            if (in_array($fresco->estado, [EstadoRollo::ReservadoEnCorte->value, EstadoRollo::Agotado->value], true) || $this->usadoOReservado($fresco)) {
+                throw ValidationException::withMessages([
+                    'estado' => trans('corteconfeccion::app.errors.rollo-no-anulable'),
+                ]);
+            }
+
+            $fresco->update(['estado' => EstadoRollo::Anulado->value]);
+
+            return $fresco->refresh();
+        });
+    }
+
+    protected function usadoOReservado(Rollo $rollo): bool
+    {
+        return in_array($rollo->vinculoConOrdenCorte(), [Rollo::VINCULO_INICIADA, Rollo::VINCULO_RESERVADA], true);
     }
 
     public function estadoPorPeso(float $pesoDisponible, float $pesoInicial): string

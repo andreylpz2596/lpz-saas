@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__.'/../Support/BaseExclusiva.php';
+
 use ByLopez\CorteConfeccion\DataGrids\OrdenConfeccionDataGrid;
 use ByLopez\CorteConfeccion\Enums\EstadoOrdenConfeccion;
 use ByLopez\CorteConfeccion\Enums\EstadoOrdenConfeccionRetorno;
@@ -2423,6 +2425,11 @@ test('RET-15 - dos solicitudes secuenciales de taller no pueden superar juntas e
 });
 
 test('RET-16 - el lockForUpdate() de reportarTaller bloquea una segunda conexion real hasta que la primera libera', function () {
+    // Confirma datos y borra admins/roles por "id > maximo previo": solo con la base para esta sesion.
+    if ($motivo = qa_motivo_base_compartida()) {
+        $this->markTestSkipped($motivo);
+    }
+
     // Marcas de "antes" para poder borrar en el finally EXACTAMENTE los
     // admins/roles que cree esta prueba (varios se crean dentro de los
     // helpers dist_crearOrdenCorteRecibida/dist_crearTaller, sin devolver

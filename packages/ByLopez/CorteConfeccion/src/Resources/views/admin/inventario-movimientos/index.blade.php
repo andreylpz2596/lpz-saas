@@ -98,6 +98,7 @@
             </div>
 
             <div class="px-5 pb-5 pt-4">
+                <v-movimiento-detalle v-slot="{ abrir }">
                 <x-admin::datagrid
                     :src="route('admin.corte_confeccion.inventario_movimientos.index')"
                     :isMultiRow="true"
@@ -182,20 +183,24 @@
                                     class="flex justify-end"
                                     v-if="record.actions?.length"
                                 >
-                                    <span
+                                    <button
+                                        type="button"
+                                        aria-label="Ver detalle del movimiento"
                                         class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-xl text-blue-600 transition-all hover:bg-blue-50 dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-950"
                                         :class="action.icon"
                                         :title="action.title"
                                         v-text="! action.icon ? action.title : ''"
                                         v-for="action in record.actions"
-                                        @click="performAction(action)"
-                                    ></span>
+                                        @click="abrir(action.url)"
+                                    ></button>
                                 </div>
                             </div>
                         </template>
                     </template>
                 </x-admin::datagrid>
+                </v-movimiento-detalle>
             </div>
         </div>
     </div>
+    @include('corteconfeccion::admin.inventario-movimientos.modal')
 </x-admin::layouts>

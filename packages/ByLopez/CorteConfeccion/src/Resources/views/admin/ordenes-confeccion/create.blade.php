@@ -3,7 +3,9 @@
 <x-admin::layouts>
     <x-slot:title>Distribuir Corte {{ $ordenCorte->codigo }}</x-slot>
 
-    <div class="bylopez-scope">
+    @include('corteconfeccion::admin.partials.debugbar-local')
+
+    <div class="bylopez-scope cc-pagina">
         <v-distribuir-confeccion
             orden-corte-id="{{ $ordenCorte->id }}"
             orden-corte-codigo="{{ $ordenCorte->codigo }}"
@@ -180,9 +182,14 @@
                 </div>
 
                 <div class="mt-6 flex items-center justify-between gap-3">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                        Disponibilidad para confeccion
-                    </p>
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                            Disponibilidad para confeccion
+                        </p>
+                        <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400" v-if="horaSugerencia" data-testid="sugerencia-calculada">
+                            Sugerencia por stock calculada a las @{{ horaSugerencia }} con el disponible actual. Solo orienta: tú eliges la prioridad asignada.
+                        </p>
+                    </div>
 
                     <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300" v-if="filasSeleccionables.length">
                         <input type="checkbox" v-model="todasSeleccionadas">
@@ -224,7 +231,7 @@
 
                 <div class="md:overflow-x-auto md:rounded-xl md:border md:bg-white md:shadow-sm dark:md:border-gray-800 dark:md:bg-gray-900" v-if="filasState.length">
                 <div
-                    class="hidden md:grid md:min-w-[1080px] md:grid-cols-[32px_minmax(220px,1fr)_120px_72px_88px_176px_170px_116px_84px] md:items-center md:gap-x-3 md:border-b md:bg-gray-50 md:px-4 md:py-3 md:text-[11px] md:font-semibold md:uppercase md:tracking-wide md:text-gray-500 dark:md:border-gray-800 dark:md:bg-gray-950 dark:md:text-gray-400"
+                    class="hidden md:grid md:min-w-[1220px] md:grid-cols-[32px_minmax(200px,1fr)_110px_72px_88px_176px_160px_116px_150px_84px] md:items-center md:gap-x-3 md:border-b md:bg-gray-50 md:px-4 md:py-3 md:text-[11px] md:font-semibold md:uppercase md:tracking-wide md:text-gray-500 dark:md:border-gray-800 dark:md:bg-gray-950 dark:md:text-gray-400"
                 >
                     <span></span>
                     <span>Producto / variante</span>
@@ -233,11 +240,12 @@
                     <span>Disponible</span>
                     <span>Cantidad a entregar</span>
                     <span>Taller</span>
-                    <span>Prioridad</span>
+                    <span>Prioridad asignada</span>
+                    <span>Sugerencia por stock</span>
                     <span class="text-right">Acciones</span>
                 </div>
 
-                <div class="space-y-3 md:min-w-[1080px] md:space-y-0 md:divide-y dark:md:divide-gray-800">
+                <div class="space-y-3 md:min-w-[1220px] md:space-y-0 md:divide-y dark:md:divide-gray-800">
                     <div
                         class="rounded-lg border p-4 dark:border-gray-800 md:rounded-none md:border-0 md:p-0"
                         v-for="fila in filasState"
@@ -246,7 +254,7 @@
                         <!-- Escritorio (>=768px): una fila por variante, misma logica/estado que la tarjeta movil de abajo -->
                         <div
                             data-testid="fila-compacta"
-                            class="hidden md:grid md:grid-cols-[32px_minmax(220px,1fr)_120px_72px_88px_176px_170px_116px_84px] md:items-center md:gap-x-3 md:px-4 md:py-3 hover:md:bg-gray-50 dark:hover:md:bg-gray-950"
+                            class="hidden md:grid md:grid-cols-[32px_minmax(200px,1fr)_110px_72px_88px_176px_160px_116px_150px_84px] md:items-center md:gap-x-3 md:px-4 md:py-3 hover:md:bg-gray-50 dark:hover:md:bg-gray-950"
                             :class="{ 'md:bg-blue-50/40': fila.seleccionada }"
                         >
                             <input
@@ -366,9 +374,18 @@
                                     <option value="alta">Alta</option>
                                     <option value="urgente">Urgente</option>
                                 </select>
-                                <span v-else class="text-sm font-semibold text-gray-800 dark:text-white">
-                                    @{{ prioridadMostrada(fila) === 'mixta' ? 'Mixta' : prioridadMostrada(fila) }}
+                                <span v-else class="text-xs font-semibold text-gray-800 dark:text-white" :title="'Prioridad por taller'">
+                                    @{{ textoPrioridadesDivididas(fila) }}
                                 </span>
+                            </div>
+
+                            <div class="min-w-0" data-testid="sugerencia-stock">
+                                <template v-if="fila.sugerencia">
+                                    <span class="inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold" :class="claseSugerencia(fila.sugerencia.nivel)">@{{ fila.sugerencia.etiqueta }}</span>
+                                    <p class="mt-0.5 text-[11px] leading-4 text-gray-600 dark:text-gray-300" :title="fila.sugerencia.detalle">@{{ fila.sugerencia.motivo }}</p>
+                                    <p class="text-[11px] font-semibold leading-4 text-amber-700 dark:text-amber-300" v-if="fila.sugerencia.priorizar_recepcion">Priorizar recepción · @{{ fila.sugerencia.pendiente_recibir }} pendientes</p>
+                                </template>
+                                <span v-else class="text-xs text-gray-400">Sin información</span>
                             </div>
 
                             <div class="flex flex-col items-end gap-1">
@@ -433,6 +450,16 @@
                             </div>
                         </div>
 
+                        <div class="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-950" data-testid="sugerencia-stock-movil">
+                            <span class="font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Sugerencia por stock</span>
+                            <template v-if="fila.sugerencia">
+                                <span class="whitespace-nowrap rounded-full border px-2 py-0.5 font-semibold" :class="claseSugerencia(fila.sugerencia.nivel)">@{{ fila.sugerencia.etiqueta }}</span>
+                                <span class="text-gray-600 dark:text-gray-300">@{{ fila.sugerencia.motivo }}</span>
+                                <span class="w-full font-semibold text-amber-700 dark:text-amber-300" v-if="fila.sugerencia.priorizar_recepcion">Priorizar recepción · @{{ fila.sugerencia.pendiente_recibir }} pendientes</span>
+                            </template>
+                            <span v-else class="text-gray-400">Sin información</span>
+                        </div>
+
                         <div class="mt-4 grid grid-cols-4 gap-4 max-md:grid-cols-2">
                             <div>
                                 <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Disponible corte</p>
@@ -489,7 +516,7 @@
                             <span>Ya distribuido: @{{ fila.ya_distribuido }}</span>
 
                             <span class="flex items-center gap-2 max-sm:w-full" v-if="fila.modo === 'simple'">
-                                <span>Prioridad</span>
+                                <span>Prioridad asignada</span>
                                 <select
                                     v-model="fila.prioridad"
                                     class="custom-select rounded-md border px-2 py-1 text-xs dark:border-gray-800 dark:bg-gray-900 dark:text-white"
@@ -499,7 +526,7 @@
                                     <option value="urgente">Urgente</option>
                                 </select>
                             </span>
-                            <span v-else>Prioridad: <strong>@{{ prioridadMostrada(fila) === 'mixta' ? 'Prioridad mixta' : prioridadMostrada(fila) }}</strong></span>
+                            <span v-else>Prioridad asignada: <strong>@{{ textoPrioridadesDivididas(fila) }}</strong></span>
 
                             <span class="ml-auto flex gap-3">
                                 <button
@@ -641,6 +668,10 @@
                         </div>
                     </div>
 
+                    <p class="mt-3 text-xs text-gray-500 dark:text-gray-400" v-if="!resultadoIncierto">
+                        La sugerencia por stock es del inventario global de cada variante: si la variante va a varios talleres se repite en cada uno y no indica que haga falta más cantidad. La prioridad que guardas es la asignada.
+                    </p>
+
                     <div class="mt-4 space-y-4" v-if="!resultadoIncierto" data-testid="resumen-por-taller">
                         <div class="rounded border p-4 dark:border-gray-800" v-for="grupo in resumenPorTaller" :key="grupo.taller_id">
                             <div class="flex flex-wrap items-baseline justify-between gap-2">
@@ -661,7 +692,8 @@
                                     </div>
                                     <div class="shrink-0 text-right">
                                         <p class="font-semibold text-gray-900 dark:text-white">@{{ detalle.cantidad }}</p>
-                                        <p class="text-xs uppercase text-gray-500 dark:text-gray-400">@{{ detalle.prioridad }}</p>
+                                        <p class="text-xs uppercase text-gray-500 dark:text-gray-400">Asignada: @{{ detalle.prioridad }}</p>
+                                        <p class="text-[11px] text-gray-500 dark:text-gray-400" v-if="detalle.fila && detalle.fila.sugerencia">Stock: @{{ detalle.fila.sugerencia.etiqueta }} · @{{ detalle.fila.sugerencia.motivo }}</p>
                                     </div>
                                 </div>
                             </div>
@@ -833,6 +865,12 @@
                         return this.filasState.find((f) => f.product_id === this.filaEnEdicionId) ?? null;
                     },
 
+                    horaSugerencia() {
+                        const conSugerencia = this.filasState.find((f) => f.sugerencia);
+
+                        return conSugerencia ? conSugerencia.sugerencia.calculada_en : null;
+                    },
+
                     asignadoDraft() {
                         return this.repartosDraft.reduce((total, r) => total + Number(r.cantidad || 0), 0);
                     },
@@ -981,6 +1019,28 @@
                         const valores = new Set(fila.repartos.map((r) => r.prioridad));
 
                         return valores.size === 1 ? [...valores][0] : 'mixta';
+                    },
+
+                    /**
+                     * Prioridad asignada de una fila dividida con sus cantidades («Urgente 20 · Normal 30»): si mezcla
+                     * niveles nunca se resume en una sola etiqueta.
+                     */
+                    textoPrioridadesDivididas(fila) {
+                        const nombres = { urgente: 'Urgente', alta: 'Alta', normal: 'Normal' };
+                        const suma = { urgente: 0, alta: 0, normal: 0 };
+
+                        fila.repartos.forEach((r) => { suma[r.prioridad || 'normal'] += Number(r.cantidad || 0); });
+
+                        return ['urgente', 'alta', 'normal'].filter((k) => suma[k] > 0).map((k) => nombres[k] + ' ' + suma[k]).join(' · ') || '—';
+                    },
+
+                    // Sugerencia por stock (solo informa; nunca cambia la prioridad elegida). Clases literales para Tailwind.
+                    claseSugerencia(nivel) {
+                        return {
+                            urgente: 'border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300',
+                            alta: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300',
+                            normal: 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+                        }[nivel] || 'border-dashed border-gray-300 text-gray-600 dark:border-gray-700 dark:text-gray-300';
                     },
 
                     /**
@@ -1374,6 +1434,7 @@
                             fila.apta_confeccion = nueva.apta_confeccion;
                             fila.ya_distribuido = nueva.ya_distribuido;
                             fila.stock_actual = nueva.stock_actual;
+                            fila.sugerencia = nueva.sugerencia;
 
                             fila._disponibleAnterior = this.filaEntregarActual(fila) > fila.disponible_confeccion
                                 ? disponibleAnterior

@@ -76,10 +76,14 @@ test('un super-admin (permission_type=all) ve todo el arbol de menu de corte_con
     // "Recepciones de corte" se retiro del menu (se integro dentro de la vista de
     // Orden de Corte); sus rutas/controlador/datos siguen accesibles por URL directa.
     expect($corteMenu)->not->toBeNull()
-        ->and($corteMenu->getChildren()->count())->toBe(8)
+        // 8 anteriores + «Cartera» y «Mi cuenta» (2026-11-01) + «Mínimos de stock» (2026-11-03).
+        ->and($corteMenu->getChildren()->count())->toBe(11)
         ->and($corteMenu->getChildren()->pluck('key')->all())
         ->not->toContain('corte_confeccion.recepciones_corte')
         ->not->toContain('corte_confeccion.mis_ordenes')
+        ->toContain('corte_confeccion.stock_minimos')
         ->toContain('corte_confeccion.ordenes_confeccion')
-        ->toContain('corte_confeccion.cortadores');
+        ->toContain('corte_confeccion.cortadores')
+        ->toContain('corte_confeccion.cartera')
+        ->toContain('corte_confeccion.mi_cuenta');
 });

@@ -56,6 +56,14 @@ class CompraTelaService
             $vinculados = $this->rollosVinculadosAOrdenes($compra);
             $this->validarRollosVinculados($vinculados, $rollos);
 
+            // H09: el proveedor es parte de la identidad de los rollos (proveedor_tela_id + snapshot) y de sus
+            // referencias; con rollos vinculados a un corte no puede cambiar sin desincronizar el historial.
+            if ($vinculados->isNotEmpty() && (int) $data['proveedor_id'] !== (int) $compra->proveedor_id) {
+                throw ValidationException::withMessages([
+                    'proveedor_id' => trans('corteconfeccion::app.errors.compra-proveedor-con-rollos-vinculados'),
+                ]);
+            }
+
             $rollos = $this->normalizarRollosBloqueados($rollos, $vinculados);
             $this->validarCodigosUnicos($rollos);
 

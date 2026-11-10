@@ -32,13 +32,20 @@
         $hexDeColor = fn (?string $color) => $color ? ($hexPorColor[mb_strtolower(trim($color))] ?? null) : null;
 
         $detallesResumen = $orden->detalles
-            ->map(function ($detalle) use ($prioridadPeso, $datosVariante, $hexDeColor) {
+            ->map(function ($detalle) use ($prioridadPeso, $datosVariante, $hexDeColor, $sugerencias) {
                 $reportada = (int) $detalle->retornosDetalles->sum('cantidad_reportada');
                 $recibida = (int) $detalle->retornosDetalles->sum('cantidad_recibida');
                 $defectuosa = (int) $detalle->retornosDetalles->sum('cantidad_defectuosa');
                 $faltante = (int) $detalle->retornosDetalles->sum('cantidad_faltante');
-                $pendiente = max((int) $detalle->cantidad_entregada - $reportada, 0);
-                $prioridad = $detalle->prioridad ?: \ByLopez\CorteConfeccion\Enums\PrioridadOrdenConfeccion::Normal->value;
+                $pendiente = $detalle->pendientePorReportar();
+                // Prioridad POR CANTIDAD de lo pendiente (Doc. 09); la de asignacion queda como respaldo del orden.
+                $prioridades = $detalle->prioridadesPorConfeccionar();
+                $prioridad = match (true) {
+                    $prioridades['urgente'] > 0 => 'urgente',
+                    $prioridades['alta'] > 0 => 'alta',
+                    $pendiente > 0 => 'normal',
+                    default => $detalle->prioridad ?: \ByLopez\CorteConfeccion\Enums\PrioridadOrdenConfeccion::Normal->value,
+                };
                 $variante = $datosVariante($detalle->product_id);
 
                 return [
@@ -49,8 +56,13 @@
                     'color_hex' => $hexDeColor($variante['color'] ?? null),
                     'talla' => $detalle->talla ?: ($variante['talla'] ?? null) ?: '-',
                     'prioridad' => $prioridad,
+                    'prioridades' => $prioridades,
+                    'sugerencia' => $sugerencias->get((int) $detalle->product_id),
                     'prioridad_orden' => $prioridadPeso[$prioridad] ?? 2,
-                    'entregada' => (int) $detalle->cantidad_entregada,
+                    'entregada' => $detalle->cantidad_vigente,
+                    'original' => (int) $detalle->cantidad_entregada,
+                    'cedida' => (int) $detalle->cantidad_reasignada_salida,
+                    'en_transito' => (int) $detalle->cantidad_en_transito,
                     'reportada' => $reportada,
                     'recibida' => $recibida,
                     'defectuosa' => $defectuosa,
@@ -58,21 +70,26 @@
                     'pendiente' => $pendiente,
                 ];
             })
-            ->sortBy(fn ($fila) => sprintf('%02d-%s-%s', $fila['prioridad_orden'], $fila['sku'], $fila['talla']))
+            // La prioridad asignada manda; entre iguales, la sugerencia por stock.
+            ->sortBy(fn ($fila) => sprintf('%02d-%02d-%s-%s', $fila['prioridad_orden'], \ByLopez\CorteConfeccion\Services\SugerenciaStockService::PESO[$fila['sugerencia']['nivel'] ?? 'sin_informacion'], $fila['sku'], $fila['talla']))
             ->values();
+        $horaSugerencia = $sugerencias->first()['calculada_en'] ?? null;
 
         $totalEntregado = (int) $detallesResumen->sum('entregada');
         $totalReportado = (int) $detallesResumen->sum('reportada');
         $totalRecibido = (int) $detallesResumen->sum('recibida');
         $totalDefectuoso = (int) $detallesResumen->sum('defectuosa');
         $totalFaltante = (int) $detallesResumen->sum('faltante');
-        $totalPendiente = max($totalEntregado - $totalReportado, 0);
+        // Pendiente = lo que el taller aun puede reportar (vigente - reportado - en transito); misma definicion que el backend.
+        $totalPendiente = (int) $detallesResumen->sum('pendiente');
         $porcentajeReportado = $totalEntregado > 0 ? min(100, round(($totalReportado / $totalEntregado) * 100)) : 0;
         $variantesCompletas = $detallesResumen->where('pendiente', 0)->count();
         $variantesConPendiente = $detallesResumen->count() - $variantesCompletas;
         $retornos = $orden->retornos->sortByDesc('numero')->values();
         $retornosPendientesLista = $retornos->where('estado', $estadoRetornoPendiente)->values();
         $retornosPendientes = $retornosPendientesLista->count();
+        $puedeReasignar = \ByLopez\CorteConfeccion\Support\ReasignacionGate::puedeReasignar();
+        $puedeReasignarAhora = $puedeReasignar && in_array($orden->estado, [$estadoActiva, $estadoEnConfeccion], true) && $totalPendiente > 0;
         $puedeReportarAhora = $puedeReportarTaller && in_array($orden->estado, [$estadoActiva, $estadoEnConfeccion], true) && $totalPendiente > 0;
         // Una orden anulada o cerrada nunca debe exponer la recepcion como
         // mutable, aunque quedara historicamente un retorno en
@@ -113,7 +130,9 @@
         .bylopez-scope (ver el comentario de arriba). Un <style> plano dentro
         del slot del layout se descarta, por eso todo usa utilities.
     --}}
-    <div class="bylopez-scope -m-4 min-h-[calc(100vh-64px)] bg-slate-50 p-4 max-sm:-m-3 max-sm:p-3 dark:bg-gray-950">
+    @include('corteconfeccion::admin.partials.debugbar-local')
+
+    <div class="bylopez-scope cc-pagina -m-4 min-h-[calc(100vh-64px)] bg-slate-50 p-4 max-sm:-m-3 max-sm:p-3 dark:bg-gray-950">
         <div class="mb-3 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
             <span>Corte y Confeccion</span>
             <i class="icon-arrow-right text-sm"></i>
@@ -157,6 +176,10 @@
 
                 <div class="flex flex-wrap gap-2">
                     <a href="{{ route($listadoVolverRoute) }}" class="secondary-button whitespace-nowrap">Volver al listado</a>
+
+                    @if ($puedeReasignarAhora)
+                        <button type="button" class="primary-button whitespace-nowrap" data-reasignar-abrir>Reasignar prendas</button>
+                    @endif
 
                     @if ($orden->estado === $estadoActiva && bouncer()->hasPermission('corte_confeccion.ordenes_confeccion.operar'))
                         <form
@@ -239,6 +262,13 @@
             @include('corteconfeccion::admin.partials.cuenta-orden', ['cuentaOrden' => \ByLopez\CorteConfeccion\Support\CarteraVista::cuentaOrden($orden)])
         </div>
 
+        @include('corteconfeccion::admin.partials.reasignaciones-orden', [
+            'orden' => $orden,
+            'reasignaciones' => $reasignaciones,
+            'puedeReasignar' => $puedeReasignar,
+            'puedeReasignarAhora' => $puedeReasignarAhora,
+        ])
+
         {{-- Navegacion por pestanas: una sola visible a la vez. Todos los
         paneles se renderizan (solo se ocultan) para conservar formularios,
         anclas y validaciones existentes. Los contadores salen de datos ya
@@ -268,6 +298,12 @@
                     <div class="{{ $tarjeta }} p-5">
                         <p class="text-base font-semibold text-gray-900 dark:text-white">Produccion por variante</p>
                         <p class="text-xs text-slate-500 dark:text-gray-400">Cantidades asignadas, reportadas y pendientes por variante.</p>
+                        <p class="mt-1 text-xs text-slate-500 dark:text-gray-400" data-testid="sugerencia-calculada">
+                            La <b>prioridad asignada</b> manda. La <b>sugerencia por stock</b> solo ayuda a elegir entre variantes con la misma prioridad asignada.
+                            @if ($horaSugerencia)
+                                Calculada a las {{ $horaSugerencia->format('H:i:s') }} con el disponible actual.
+                            @endif
+                        </p>
 
                         @if ($puedeReportarTaller && ! $puedeReportarAhora && $totalPendiente === 0 && $ordenPermiteRecibir)
                             {{-- El taller ya reporto todo lo asignado. No es un estado nuevo:
@@ -288,6 +324,10 @@
                                     @error('detalles')
                                         <p class="mt-3 text-sm text-red-600">{{ $message }}</p>
                                     @enderror
+                                    @if (collect($errors->keys())->contains(fn ($k) => str_ends_with($k, '.reparto')))
+                                        <p class="mt-3 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300" role="alert">No se registró la entrega: revisa el reparto por prioridad marcado abajo. Tus cantidades se conservaron.</p>
+                                    @endif
+                                    <p class="mt-3 text-xs text-slate-500 dark:text-gray-400">Al entregar se descuenta primero lo <b>Urgente</b>, luego <b>Alta</b> y al final <b>Normal</b>. Si confeccionaste otro nivel, usa «Ajustar».</p>
 
                                     <div class="mt-3 overflow-x-auto">
                                         {{-- Compacta: Color y Talla en una sola columna, SKU bajo el nombre
@@ -300,20 +340,27 @@
                                                     <th>Producto / variante</th>
                                                     <th>Color / Talla</th>
                                                     <th class="max-lg:hidden">SKU</th>
-                                                    <th>Prioridad</th>
+                                                    <th>Prioridad asignada</th>
+                                                    <th>Sugerencia por stock</th>
                                                     <th>Asig.</th>
                                                     <th>Report.</th>
                                                     <th>Pend.</th>
-                                                    <th class="min-w-[120px]">Entrega actual</th>
+                                                    <th class="min-w-[150px]">Entrega actual</th>
                                                     <th>Acciones</th>
                                                 </tr>
                                             </thead>
 
                                             <tbody>
-                                                @foreach ($detallesResumen as $i => $fila)
+                                                @foreach ($detallesResumen as $fila)
                                                     @php
                                                         $detalle = $fila['detalle'];
+                                                        // Indice = id del detalle: el orden de las filas puede cambiar entre envios (prioridad,
+                                                        // sugerencia) y lo escrito debe volver a SU variante tras un error.
+                                                        $i = $detalle->id;
                                                         $cantidadOld = old("detalles.$i.cantidad");
+                                                        $disp = $fila['prioridades'];
+                                                        $soloNormal = $disp['urgente'] + $disp['alta'] === 0;
+                                                        $ajusteOld = collect(['urgente', 'alta', 'normal'])->contains(fn ($n) => old("detalles.$i.$n") !== null);
                                                     @endphp
 
                                                     <tr class="border-b dark:border-gray-800 {{ $fila['pendiente'] === 0 ? 'bg-green-50/40 dark:bg-green-950/20' : '' }} max-md:mb-2 max-md:grid max-md:grid-cols-2 max-md:gap-x-3 max-md:rounded-lg max-md:border max-md:p-1" data-reporte-card data-sku="{{ $fila['sku'] }}" data-talla="{{ $fila['talla'] }}">
@@ -331,8 +378,9 @@
                                                             </div>
                                                         </td>
                                                         <td class="font-mono text-xs text-gray-600 dark:text-gray-300 max-lg:hidden">{{ $fila['sku'] }}</td>
-                                                        <td class="max-md:col-span-2">{!! $prioridadOrdenConfeccion::badgeHtml($fila['prioridad']) !!}</td>
-                                                        <td class="text-gray-800 dark:text-white max-md:before:block max-md:before:text-[10px] max-md:before:uppercase max-md:before:text-slate-400 max-md:before:content-['Asignadas']">{{ $fila['entregada'] }}</td>
+                                                        <td class="max-md:col-span-2 max-md:before:block max-md:before:text-[10px] max-md:before:uppercase max-md:before:text-slate-400 max-md:before:content-['Prioridad_asignada']" data-testid="prioridad-asignada">@include('corteconfeccion::admin.ordenes-confeccion.partials.prioridades', ['p' => $fila['prioridades']])</td>
+                                                        <td class="max-md:col-span-2 max-md:before:block max-md:before:text-[10px] max-md:before:uppercase max-md:before:text-slate-400 max-md:before:content-['Sugerencia_por_stock']" data-testid="sugerencia-stock">@include('corteconfeccion::admin.ordenes-confeccion.partials.sugerencia-stock', ['s' => $fila['sugerencia'], 'conCifras' => $verCifrasStock])</td>
+                                                        <td class="text-gray-800 dark:text-white max-md:before:block max-md:before:text-[10px] max-md:before:uppercase max-md:before:text-slate-400 max-md:before:content-['Asignadas']">{{ $fila['entregada'] }}@if ($fila['cedida'] > 0)<span class="block text-[10px] font-normal text-amber-600">orig. {{ $fila['original'] }} · cedidas {{ $fila['cedida'] }}</span>@endif @if ($fila['en_transito'] > 0)<span class="block text-[10px] font-normal text-amber-600">{{ $fila['en_transito'] }} en transito</span>@endif</td>
                                                         <td class="text-gray-800 dark:text-white max-md:before:block max-md:before:text-[10px] max-md:before:uppercase max-md:before:text-slate-400 max-md:before:content-['Reportadas']">{{ $fila['reportada'] }}</td>
                                                         <td class="font-semibold text-gray-800 dark:text-white max-md:before:block max-md:before:text-[10px] max-md:before:font-normal max-md:before:uppercase max-md:before:text-slate-400 max-md:before:content-['Pendientes']">
                                                             @if ($fila['pendiente'] === 0)
@@ -341,7 +389,7 @@
                                                                 {{ $fila['pendiente'] }}
                                                             @endif
                                                         </td>
-                                                        <td class="max-md:col-span-1">
+                                                        <td class="max-md:col-span-2">
                                                             <input type="hidden" name="detalles[{{ $i }}][id]" value="{{ $detalle->id }}" data-report-id>
                                                             <input
                                                                 name="detalles[{{ $i }}][cantidad]"
@@ -358,6 +406,38 @@
                                                             @error("detalles.$i.cantidad")
                                                                 <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
                                                             @enderror
+
+                                                            {{-- P1: reparto por prioridad de lo que se entrega. Sin «Ajustar», el servidor aplica el sugerido
+                                                            (Urgente -> Alta -> Normal); `base` permite detectar si el saldo cambio entretanto. --}}
+                                                            <div class="mt-1 text-[11px] text-gray-600 dark:text-gray-300" data-reparto data-u="{{ $disp['urgente'] }}" data-a="{{ $disp['alta'] }}" data-n="{{ $disp['normal'] }}" data-solo-normal="{{ $soloNormal ? '1' : '0' }}">
+                                                                <input type="hidden" name="detalles[{{ $i }}][base]" value="{{ implode(':', $disp) }}" data-reparto-campo>
+                                                                <span data-reparto-texto></span>
+                                                                @unless ($soloNormal)
+                                                                    <button type="button" class="ml-1 font-semibold text-blue-600 hover:underline dark:text-blue-400" data-reparto-ajustar aria-expanded="{{ $ajusteOld ? 'true' : 'false' }}">{{ $ajusteOld ? 'Usar sugerido' : 'Ajustar' }}</button>
+                                                                    <div class="mt-1 grid grid-cols-3 gap-1 {{ $ajusteOld ? '' : 'hidden' }}" data-reparto-panel>
+                                                                        @foreach (['urgente' => 'Urgente', 'alta' => 'Alta', 'normal' => 'Normal'] as $nivel => $nombreNivel)
+                                                                            <label class="block text-[10px] text-gray-500 dark:text-gray-400">
+                                                                                {{ $nombreNivel }} <span class="whitespace-nowrap">(máx. {{ $disp[$nivel] }})</span>
+                                                                                <input
+                                                                                    type="text"
+                                                                                    inputmode="numeric"
+                                                                                    autocomplete="off"
+                                                                                    name="detalles[{{ $i }}][{{ $nivel }}]"
+                                                                                    value="{{ old("detalles.$i.$nivel") }}"
+                                                                                    class="mt-0.5 w-full rounded border px-1.5 py-1 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-white"
+                                                                                    data-reparto-campo
+                                                                                    data-reparto-nivel="{{ $nivel }}"
+                                                                                    @disabled(! $ajusteOld)
+                                                                                >
+                                                                            </label>
+                                                                        @endforeach
+                                                                    </div>
+                                                                @endunless
+                                                                <p class="mt-0.5 hidden text-red-600" data-reparto-error role="alert"></p>
+                                                                @error("detalles.$i.reparto")
+                                                                    <p class="mt-0.5 text-xs text-red-600" role="alert">{{ $message }}</p>
+                                                                @enderror
+                                                            </div>
                                                         </td>
                                                         <td class="max-md:col-span-1">
                                                             <button type="button" class="secondary-button whitespace-nowrap {{ $fila['pendiente'] === 0 ? 'cursor-not-allowed opacity-50' : '' }}" data-fill-row @disabled($fila['pendiente'] === 0) @if ($fila['pendiente'] === 0) title="Sin pendiente: variante completada" @endif>Entregar todo</button>
@@ -368,8 +448,8 @@
 
                                             <tfoot>
                                                 <tr class="border-t-2 dark:border-gray-700">
-                                                    <td colspan="4" class="font-semibold text-gray-800 dark:text-white lg:hidden">Total</td>
-                                                    <td colspan="5" class="font-semibold text-gray-800 dark:text-white max-lg:hidden">Total</td>
+                                                    <td colspan="5" class="font-semibold text-gray-800 dark:text-white lg:hidden">Total</td>
+                                                    <td colspan="6" class="font-semibold text-gray-800 dark:text-white max-lg:hidden">Total</td>
                                                     <td class="font-semibold text-gray-800 dark:text-white">{{ $totalEntregado }}</td>
                                                     <td class="font-semibold text-gray-800 dark:text-white">{{ $totalReportado }}</td>
                                                     <td class="font-semibold text-gray-800 dark:text-white">{{ $totalPendiente }}</td>
@@ -430,7 +510,8 @@
                                             <th>Producto / variante</th>
                                             <th>Color / Talla</th>
                                             <th class="max-lg:hidden">SKU</th>
-                                            <th>Prioridad</th>
+                                            <th>Prioridad asignada</th>
+                                            <th>Sugerencia por stock</th>
                                             <th>Asig.</th>
                                             <th>Report.</th>
                                             <th>Pend.</th>
@@ -451,8 +532,9 @@
                                                     </div>
                                                 </td>
                                                 <td class="font-mono text-xs text-gray-600 dark:text-gray-300 max-lg:hidden">{{ $fila['sku'] }}</td>
-                                                <td class="max-md:col-span-3">{!! $prioridadOrdenConfeccion::badgeHtml($fila['prioridad']) !!}</td>
-                                                <td class="text-gray-800 dark:text-white max-md:before:block max-md:before:text-[10px] max-md:before:uppercase max-md:before:text-slate-400 max-md:before:content-['Asignadas']">{{ $fila['entregada'] }}</td>
+                                                <td class="max-md:col-span-3 max-md:before:block max-md:before:text-[10px] max-md:before:uppercase max-md:before:text-slate-400 max-md:before:content-['Prioridad_asignada']" data-testid="prioridad-asignada">@include('corteconfeccion::admin.ordenes-confeccion.partials.prioridades', ['p' => $fila['prioridades']])</td>
+                                                <td class="max-md:col-span-3 max-md:before:block max-md:before:text-[10px] max-md:before:uppercase max-md:before:text-slate-400 max-md:before:content-['Sugerencia_por_stock']" data-testid="sugerencia-stock">@include('corteconfeccion::admin.ordenes-confeccion.partials.sugerencia-stock', ['s' => $fila['sugerencia'], 'conCifras' => $verCifrasStock])</td>
+                                                <td class="text-gray-800 dark:text-white max-md:before:block max-md:before:text-[10px] max-md:before:uppercase max-md:before:text-slate-400 max-md:before:content-['Asignadas']">{{ $fila['entregada'] }}@if ($fila['cedida'] > 0)<span class="block text-[10px] font-normal text-amber-600">orig. {{ $fila['original'] }} · cedidas {{ $fila['cedida'] }}</span>@endif @if ($fila['en_transito'] > 0)<span class="block text-[10px] font-normal text-amber-600">{{ $fila['en_transito'] }} en transito</span>@endif</td>
                                                 <td class="text-gray-800 dark:text-white max-md:before:block max-md:before:text-[10px] max-md:before:uppercase max-md:before:text-slate-400 max-md:before:content-['Reportadas']">{{ $fila['reportada'] }}</td>
                                                 <td class="font-semibold text-gray-800 dark:text-white max-md:before:block max-md:before:text-[10px] max-md:before:font-normal max-md:before:uppercase max-md:before:text-slate-400 max-md:before:content-['Pendientes']">
                                                     @if ($fila['pendiente'] === 0)
@@ -467,8 +549,8 @@
 
                                     <tfoot>
                                         <tr class="border-t-2 dark:border-gray-700">
-                                            <td colspan="3" class="font-semibold text-gray-800 dark:text-white lg:hidden">Total</td>
-                                            <td colspan="4" class="font-semibold text-gray-800 dark:text-white max-lg:hidden">Total</td>
+                                            <td colspan="4" class="font-semibold text-gray-800 dark:text-white lg:hidden">Total</td>
+                                            <td colspan="5" class="font-semibold text-gray-800 dark:text-white max-lg:hidden">Total</td>
                                             <td class="font-semibold text-gray-800 dark:text-white">{{ $totalEntregado }}</td>
                                             <td class="font-semibold text-gray-800 dark:text-white">{{ $totalReportado }}</td>
                                             <td class="font-semibold text-gray-800 dark:text-white">{{ $totalPendiente }}</td>
@@ -836,7 +918,15 @@
                                                     <span>Talla {{ $tallaHist }}</span>
                                                 </p>
                                             </div>
-                                            <p class="text-gray-700 dark:text-gray-300">Reportadas: <span class="font-semibold">{{ $detalleRetorno->cantidad_reportada }}</span></p>
+                                            <p class="text-gray-700 dark:text-gray-300">
+                                                Reportadas: <span class="font-semibold">{{ $detalleRetorno->cantidad_reportada }}</span>
+                                                {{-- Reparto confirmado al reportar (P1). Los reportes anteriores no lo registraban y no se reinterpretan. --}}
+                                                @if ($detalleRetorno->cantidad_urgente !== null)
+                                                    <span class="block text-xs text-gray-500 dark:text-gray-400" data-reparto-reportado>{{ \ByLopez\CorteConfeccion\Services\PrioridadConfeccionService::repartoTexto(['urgente' => (int) $detalleRetorno->cantidad_urgente, 'alta' => (int) $detalleRetorno->cantidad_alta, 'normal' => (int) $detalleRetorno->cantidad_reportada - (int) $detalleRetorno->cantidad_urgente - (int) $detalleRetorno->cantidad_alta]) }}</span>
+                                                @else
+                                                    <span class="block text-xs text-gray-400">Reparto por prioridad no registrado (reporte anterior)</span>
+                                                @endif
+                                            </p>
                                             @if ($yaRecibido)
                                                 <p class="text-gray-700 dark:text-gray-300">Buenas / aprobadas: {{ (int) $detalleRetorno->cantidad_recibida }}</p>
                                                 <p class="text-gray-700 dark:text-gray-300">Defectuosas: {{ (int) $detalleRetorno->cantidad_defectuosa }}</p>
@@ -943,10 +1033,110 @@
                     return Number.isFinite(pendiente) ? pendiente : 0;
                 }
 
+                /*
+                 * P1: reparto por prioridad de lo que se entrega. Sugerido Urgente -> Alta -> Normal sobre el saldo de
+                 * cada nivel; con «Ajustar» el taller lo corrige (debe sumar la cantidad y no superar cada nivel). El
+                 * servidor vuelve a validar todo bajo bloqueo.
+                 */
+                var NIVELES = [['urgente', 'Urgente', 'Urgentes'], ['alta', 'Alta', 'Altas'], ['normal', 'Normal', 'Normales']];
+
+                function repartoTexto(r) {
+                    var partes = NIVELES.filter(function (n) { return r[n[0]] > 0; }).map(function (n) {
+                        return r[n[0]] + ' ' + (r[n[0]] === 1 ? n[1] : n[2]);
+                    });
+
+                    return partes.length ? partes.join(' + ') : '';
+                }
+
+                function estadoReparto(card) {
+                    var caja = card.querySelector('[data-reparto]');
+                    var cantidad = cantidadValida(card.querySelector('[data-report-input]'));
+
+                    if (! caja) {
+                        return { valido: true, texto: '', ajustado: false };
+                    }
+
+                    var disp = { urgente: +caja.dataset.u || 0, alta: +caja.dataset.a || 0, normal: +caja.dataset.n || 0 };
+                    var panel = caja.querySelector('[data-reparto-panel]');
+                    var ajustado = !! panel && ! panel.classList.contains('hidden');
+                    var r = {};
+                    var error = '';
+
+                    if (ajustado) {
+                        NIVELES.forEach(function (n) {
+                            var v = caja.querySelector('[data-reparto-nivel="' + n[0] + '"]').value.trim();
+                            r[n[0]] = v === '' ? 0 : (/^\d+$/.test(v) ? parseInt(v, 10) : NaN);
+                        });
+
+                        var suma = r.urgente + r.alta + r.normal;
+
+                        if ([r.urgente, r.alta, r.normal].some(function (v) { return ! Number.isFinite(v); })) {
+                            error = 'Usa números enteros (0 o más).';
+                        } else if (cantidad > 0 && suma !== cantidad) {
+                            error = 'El reparto suma ' + suma + ' y debe sumar ' + cantidad + '.';
+                        } else {
+                            NIVELES.forEach(function (n) {
+                                if (! error && r[n[0]] > disp[n[0]]) { error = 'Solo hay ' + disp[n[0]] + ' en ' + n[1] + '.'; }
+                            });
+                        }
+                    } else {
+                        r.urgente = Math.min(cantidad, disp.urgente);
+                        r.alta = Math.min(cantidad - r.urgente, disp.alta);
+                        r.normal = Math.max(cantidad - r.urgente - r.alta, 0);
+                    }
+
+                    return { valido: ! error || cantidad === 0, error: cantidad > 0 ? error : '', texto: cantidad > 0 && ! error ? repartoTexto(r) : '', ajustado: ajustado, reparto: r };
+                }
+
+                function pintarReparto(card) {
+                    var caja = card.querySelector('[data-reparto]');
+
+                    if (! caja) {
+                        return;
+                    }
+
+                    var estado = estadoReparto(card);
+                    var texto = caja.querySelector('[data-reparto-texto]');
+                    var error = caja.querySelector('[data-reparto-error]');
+
+                    texto.textContent = estado.texto ? 'Descuenta: ' + estado.texto + (estado.ajustado ? '' : ' (sugerido)') : '';
+                    error.textContent = estado.error || '';
+                    error.classList.toggle('hidden', ! estado.error);
+                }
+
+                function alternarAjuste(card, abrir) {
+                    var caja = card.querySelector('[data-reparto]');
+                    var panel = caja && caja.querySelector('[data-reparto-panel]');
+                    var boton = caja && caja.querySelector('[data-reparto-ajustar]');
+
+                    if (! panel) {
+                        return;
+                    }
+
+                    var sugerido = estadoReparto(card).reparto;
+
+                    panel.classList.toggle('hidden', ! abrir);
+                    boton.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+                    boton.textContent = abrir ? 'Usar sugerido' : 'Ajustar';
+
+                    panel.querySelectorAll('[data-reparto-nivel]').forEach(function (campo) {
+                        campo.disabled = ! abrir;
+                        // Al abrir se parte del sugerido; al cerrar se vacia (el servidor aplicara el sugerido).
+                        campo.value = abrir ? String(sugerido[campo.dataset.repartoNivel] || 0) : '';
+                    });
+
+                    pintarReparto(card);
+
+                    if (abrir) {
+                        panel.querySelector('[data-reparto-nivel]').focus();
+                    }
+                }
+
                 function filasConCantidad(form) {
                     var rows = [];
                     var total = 0;
                     var excedePendiente = false;
+                    var repartoInvalido = false;
 
                     form.querySelectorAll('[data-reporte-card]').forEach(function (card) {
                         var input = card.querySelector('[data-report-input]');
@@ -958,6 +1148,13 @@
                         }
 
                         if (cantidad > 0) {
+                            var reparto = estadoReparto(card);
+
+                            if (! reparto.valido) {
+                                repartoInvalido = true;
+                                pintarReparto(card);
+                            }
+
                             total += cantidad;
                             rows.push({
                                 card: card,
@@ -965,11 +1162,12 @@
                                 sku: card.dataset.sku,
                                 talla: card.dataset.talla,
                                 cantidad: cantidad,
+                                reparto: reparto.texto,
                             });
                         }
                     });
 
-                    return { rows: rows, total: total, excedePendiente: excedePendiente };
+                    return { rows: rows, total: total, excedePendiente: excedePendiente, repartoInvalido: repartoInvalido };
                 }
 
                 function prepararEnvio(form) {
@@ -979,6 +1177,7 @@
                         var input = card.querySelector('[data-report-input]');
                         var hiddenId = card.querySelector('[data-report-id]');
                         var enviarFila = cantidadValida(input) > 0;
+                        var ajustado = estadoReparto(card).ajustado;
 
                         if (hiddenId) {
                             hiddenId.disabled = ! enviarFila;
@@ -987,9 +1186,23 @@
                         if (input) {
                             input.disabled = ! enviarFila;
                         }
+
+                        card.querySelectorAll('[data-reparto-campo]').forEach(function (campo) {
+                            campo.disabled = ! enviarFila || (campo.hasAttribute('data-reparto-nivel') && ! ajustado);
+                        });
                     });
 
                     return seleccion;
+                }
+
+                function restaurarCampos(form) {
+                    form.querySelectorAll('[data-reporte-card]').forEach(function (card) {
+                        var ajustado = estadoReparto(card).ajustado;
+
+                        card.querySelectorAll('[data-report-id], [data-report-input], [data-reparto-campo]').forEach(function (campo) {
+                            campo.disabled = campo.hasAttribute('data-reparto-nivel') ? ! ajustado : (campo.matches('[data-report-input]') && pendienteFila(campo) === 0);
+                        });
+                    });
                 }
 
                 // Resumen lateral de recepcion: solo LEE los campos ya calculados
@@ -1090,6 +1303,16 @@
                             checkbox.checked = cantidadValida(reportInput) > 0;
                         }
 
+                        pintarReparto(card);
+
+                        return;
+                    }
+
+                    var campoReparto = event.target.closest('[data-reparto-nivel]');
+
+                    if (campoReparto) {
+                        pintarReparto(campoReparto.closest('[data-reporte-card]'));
+
                         return;
                     }
 
@@ -1118,6 +1341,14 @@
                 });
 
                 document.addEventListener('click', function (event) {
+                    var ajustarButton = event.target.closest('[data-reparto-ajustar]');
+
+                    if (ajustarButton) {
+                        alternarAjuste(ajustarButton.closest('[data-reporte-card]'), ajustarButton.getAttribute('aria-expanded') !== 'true');
+
+                        return;
+                    }
+
                     var fillRowButton = event.target.closest('[data-fill-row]');
 
                     if (fillRowButton) {
@@ -1126,6 +1357,7 @@
 
                         input.value = input.dataset.max || 0;
                         card.querySelector('[data-select-row]').checked = true;
+                        pintarReparto(card);
 
                         return;
                     }
@@ -1142,6 +1374,7 @@
                             if (checkbox && input && ! input.disabled) {
                                 checkbox.checked = true;
                                 input.value = input.dataset.max || '';
+                                pintarReparto(card);
                             }
                         });
 
@@ -1159,6 +1392,7 @@
 
                             if (checkbox && checkbox.checked && input && ! input.disabled) {
                                 input.value = input.dataset.max || 0;
+                                pintarReparto(card);
                             }
                         });
 
@@ -1187,6 +1421,12 @@
                             if (hiddenId) {
                                 hiddenId.disabled = false;
                             }
+
+                            if (card.querySelector('[data-reparto-panel]:not(.hidden)')) {
+                                alternarAjuste(card, false);
+                            }
+
+                            pintarReparto(card);
                         });
 
                         return;
@@ -1213,6 +1453,15 @@
                             return;
                         }
 
+                        if (seleccion.repartoInvalido) {
+                            var primerError = form.querySelector('[data-reparto-error]:not(.hidden)');
+
+                            window.alert('Revisa el reparto por prioridad marcado en rojo: debe sumar la cantidad entregada.');
+                            primerError?.closest('[data-reparto]')?.querySelector('[data-reparto-nivel]')?.focus();
+
+                            return;
+                        }
+
                         reviewList.innerHTML = '';
 
                         seleccion.rows.forEach(function (row) {
@@ -1234,6 +1483,15 @@
 
                             variant.appendChild(label);
                             variant.appendChild(sku);
+
+                            if (row.reparto) {
+                                var reparto = document.createElement('p');
+
+                                reparto.className = 'mt-1 text-xs text-gray-600 dark:text-gray-300';
+                                reparto.dataset.reviewReparto = '';
+                                reparto.textContent = 'Descuenta: ' + row.reparto;
+                                variant.appendChild(reparto);
+                            }
                             item.appendChild(variant);
                             item.appendChild(quantity);
                             reviewList.appendChild(item);
@@ -1274,20 +1532,29 @@
                     var reporteForm = event.target.closest('[data-reporte-taller]');
 
                     if (reporteForm) {
-                        var seleccion = prepararEnvio(reporteForm);
-
-                        if (seleccion.excedePendiente || ! seleccion.rows.length) {
+                        if (reporteForm.dataset.enviando) {
+                            // Doble clic en «Confirmar entrega»: el primer envio ya va en camino.
                             event.preventDefault();
 
-                            reporteForm.querySelectorAll('[data-report-id], [data-report-input]').forEach(function (field) {
-                                field.disabled = false;
-                            });
+                            return;
+                        }
+
+                        var seleccion = prepararEnvio(reporteForm);
+
+                        if (seleccion.excedePendiente || ! seleccion.rows.length || seleccion.repartoInvalido) {
+                            event.preventDefault();
+                            restaurarCampos(reporteForm);
 
                             window.alert(seleccion.excedePendiente
                                 ? 'La cantidad no puede superar el pendiente de la variante.'
-                                : 'Ingresa al menos una cantidad para reportar.'
+                                : (seleccion.repartoInvalido ? 'Revisa el reparto por prioridad marcado en rojo.' : 'Ingresa al menos una cantidad para reportar.')
                             );
+
+                            return;
                         }
+
+                        reporteForm.dataset.enviando = '1';
+                        reporteForm.querySelectorAll('button[type="submit"]').forEach(function (b) { b.disabled = true; });
 
                         return;
                     }
@@ -1316,6 +1583,9 @@
                 // DOMContentLoaded como en window.load para cubrir el mismo
                 // retraso de insercion que motivo este cambio.
                 function inicializarFilasRecepcion() {
+                    // Reparto por prioridad: texto inicial (incluido lo que volvio tras un error de validacion).
+                    document.querySelectorAll('[data-reporte-card]').forEach(pintarReparto);
+
                     document.querySelectorAll('[data-recepcion-fila]').forEach(function (fila) {
                         if (fila.dataset.recepcionInicializada) {
                             return;

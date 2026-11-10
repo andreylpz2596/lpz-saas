@@ -2,13 +2,16 @@
 
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\CarteraController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\CompraTelaController;
+use ByLopez\CorteConfeccion\Http\Controllers\Admin\ConsolidadoConfeccionController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\CortadorController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\InventarioMovimientoController;
+use ByLopez\CorteConfeccion\Http\Controllers\Admin\NotificacionController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\OrdenConfeccionController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\OrdenCorteController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\ProveedorTelaController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\RecepcionCorteController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\RolloController;
+use ByLopez\CorteConfeccion\Http\Controllers\Admin\StockMinimoController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\TallerController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\TarifaPrestadorController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\UsuarioRolController;
@@ -107,6 +110,29 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
             Route::post('reportar/{id}', 'reportarTaller')->name('admin.corte_confeccion.ordenes_confeccion.reportar_taller');
             Route::post('retornos/{retornoId}/recibir', 'recibirBodega')->name('admin.corte_confeccion.ordenes_confeccion.recibir_bodega');
             Route::post('cancel/{id}', 'cancel')->name('admin.corte_confeccion.ordenes_confeccion.cancel');
+            Route::get('reasignar/{id}', 'reasignarContexto')->name('admin.corte_confeccion.ordenes_confeccion.reasignar.contexto');
+            Route::post('reasignar/{id}', 'reasignarStore')->name('admin.corte_confeccion.ordenes_confeccion.reasignar.store');
+            Route::post('reasignaciones/{id}/recibir', 'reasignacionRecibir')->name('admin.corte_confeccion.ordenes_confeccion.reasignaciones.recibir');
+            Route::post('reasignaciones/{id}/revertir', 'reasignacionRevertir')->name('admin.corte_confeccion.ordenes_confeccion.reasignaciones.revertir');
+        });
+
+        // Consolidado general y prioridad por cantidad (Doc. 09).
+        Route::controller(ConsolidadoConfeccionController::class)->prefix('ordenes-confeccion')->group(function () {
+            Route::get('consolidado', 'index')->name('admin.corte_confeccion.ordenes_confeccion.consolidado');
+            Route::post('prioridad', 'cambiarPrioridad')->name('admin.corte_confeccion.ordenes_confeccion.prioridad');
+        });
+
+        // Minimos de stock por variante: base de la sugerencia por stock (Doc. 09 §9).
+        Route::controller(StockMinimoController::class)->prefix('stock-minimos')->group(function () {
+            Route::get('', 'index')->name('admin.corte_confeccion.stock_minimos.index');
+            Route::post('', 'guardar')->name('admin.corte_confeccion.stock_minimos.guardar');
+        });
+
+        // Avisos del modulo dentro de la campana y el listado de notificaciones de Bagisto.
+        Route::controller(NotificacionController::class)->prefix('notificaciones')->group(function () {
+            Route::get('', 'lista')->name('admin.corte_confeccion.notificaciones.lista');
+            Route::get('abrir/{id}', 'abrir')->name('admin.corte_confeccion.notificaciones.abrir');
+            Route::post('leer-todas', 'leerTodas')->name('admin.corte_confeccion.notificaciones.leer_todas');
         });
 
         // Referencias y precios (Doc. 05). `tipo`: 'taller' = taller / orden de confeccion; 'cortador' = cortador /

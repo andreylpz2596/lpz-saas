@@ -19,6 +19,8 @@ class OrdenConfeccionRetornoDetalle extends Model implements OrdenConfeccionReto
         'producto_nombre',
         'talla',
         'cantidad_reportada',
+        'cantidad_urgente',
+        'cantidad_alta',
         'cantidad_recibida',
         'cantidad_defectuosa',
         'cantidad_faltante',

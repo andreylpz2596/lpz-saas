@@ -18,6 +18,7 @@ class OrdenConfeccion extends Model implements OrdenConfeccionContract
         'fecha_entrega',
         'estado',
         'observacion',
+        'reasignacion_origen_id',
     ];
 
     protected $casts = [
@@ -43,6 +44,18 @@ class OrdenConfeccion extends Model implements OrdenConfeccionContract
     public function tarifas(): HasMany
     {
         return $this->hasMany(OrdenTarifa::class, 'orden_confeccion_id');
+    }
+
+    /** Reasignaciones donde esta orden cedio prendas a otro taller. */
+    public function reasignacionesSalida(): HasMany
+    {
+        return $this->hasMany(Reasignacion::class, 'orden_confeccion_origen_id');
+    }
+
+    /** Reasignaciones que alimentaron esta orden (normalmente una: la que la creo). */
+    public function reasignacionesEntrada(): HasMany
+    {
+        return $this->hasMany(Reasignacion::class, 'orden_confeccion_destino_id');
     }
 
     public function retornos(): HasMany

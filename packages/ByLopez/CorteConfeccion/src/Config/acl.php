@@ -287,6 +287,11 @@ return [
             'admin.corte_confeccion.ordenes_confeccion.mis_ordenes.show',
             'admin.corte_confeccion.usuarios.cortadores',
             'admin.corte_confeccion.usuarios.taller_confeccion',
+            // Consolidado y avisos: el alcance por taller lo decide ConsolidadoConfeccionGate (vinculo), no esta llave.
+            'admin.corte_confeccion.ordenes_confeccion.consolidado',
+            'admin.corte_confeccion.notificaciones.lista',
+            'admin.corte_confeccion.notificaciones.abrir',
+            'admin.corte_confeccion.notificaciones.leer_todas',
         ],
         'sort' => 8,
     ], [
@@ -329,6 +334,23 @@ return [
         'route' => 'admin.corte_confeccion.ordenes_confeccion.recibir_bodega',
         'sort' => 4,
     ], [
+        'key' => 'corte_confeccion.ordenes_confeccion.reasignar',
+        'name' => 'corteconfeccion::app.acl.reasignar',
+        'route' => [
+            'admin.corte_confeccion.ordenes_confeccion.reasignar.contexto',
+            'admin.corte_confeccion.ordenes_confeccion.reasignar.store',
+            'admin.corte_confeccion.ordenes_confeccion.reasignaciones.recibir',
+            'admin.corte_confeccion.ordenes_confeccion.reasignaciones.revertir',
+        ],
+        'sort' => 5,
+    ], [
+        'key' => 'corte_confeccion.ordenes_confeccion.prioridad',
+        'name' => 'corteconfeccion::app.acl.prioridad',
+        'route' => [
+            'admin.corte_confeccion.ordenes_confeccion.prioridad',
+        ],
+        'sort' => 6,
+    ], [
         'key' => 'corte_confeccion.inventario_movimientos',
         'name' => 'corteconfeccion::app.acl.inventario-movimientos',
         'route' => 'admin.corte_confeccion.inventario_movimientos.index',
@@ -341,6 +363,17 @@ return [
             'admin.corte_confeccion.inventario_movimientos.show',
         ],
         'sort' => 8,
+    ], [
+        // Minimos de stock por variante (sugerencia por stock, Doc. 09 §9). Consultar y configurar son llaves separadas.
+        'key' => 'corte_confeccion.stock_minimos',
+        'name' => 'corteconfeccion::app.acl.stock-minimos',
+        'route' => 'admin.corte_confeccion.stock_minimos.index',
+        'sort' => 8,
+    ], [
+        'key' => 'corte_confeccion.stock_minimos.editar',
+        'name' => 'corteconfeccion::app.acl.stock-minimos-editar',
+        'route' => 'admin.corte_confeccion.stock_minimos.guardar',
+        'sort' => 1,
     ], [
         'key' => 'corte_confeccion.cartera',
         'name' => 'corteconfeccion::app.acl.cartera',

@@ -45,6 +45,12 @@ class ReportarOrdenConfeccionRequest extends FormRequest
             'detalles' => ['required', 'array', 'min:1'],
             'detalles.*.id' => ['required', 'integer', 'exists:bylopez_cc_ordenes_confeccion_detalles,id'],
             'detalles.*.cantidad' => ['required', 'integer', 'gt:0'],
+            // Reparto por prioridad (P1): opcional; sin el, el servicio aplica el sugerido. El servicio valida enteros,
+            // suma y saldo por nivel bajo bloqueo. `base` = saldo por nivel que vio la pantalla («u:a:n»).
+            'detalles.*.urgente' => ['nullable'],
+            'detalles.*.alta' => ['nullable'],
+            'detalles.*.normal' => ['nullable'],
+            'detalles.*.base' => ['nullable', 'string', 'max:40'],
         ];
     }
 
@@ -69,7 +75,7 @@ class ReportarOrdenConfeccionRequest extends FormRequest
 
                 $reportada = (int) ($detalleInput['cantidad'] ?? 0);
 
-                if ($reportada > (int) $detalle->cantidad_entregada) {
+                if ($reportada > $detalle->cantidad_vigente) {
                     $validator->errors()->add("detalles.{$index}.cantidad", trans('corteconfeccion::app.errors.cantidad-retorno-excede-entregada'));
                 }
             }

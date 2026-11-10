@@ -49,7 +49,9 @@ class DisponibilidadConfeccionService
             ->where('estado', '!=', EstadoOrdenConfeccion::Anulada->value)
             ->flatMap(fn ($ordenConfeccion) => $ordenConfeccion->detalles)
             ->groupBy('product_id')
-            ->map(fn ($items) => (int) $items->sum('cantidad_entregada'));
+            // Responsabilidad VIGENTE (asignado - reasignado a otro taller): una reasignacion mueve la
+            // responsabilidad entre ordenes sin alterar lo que ya esta fuera del pool de distribucion.
+            ->map(fn ($items) => (int) $items->sum(fn ($detalle) => $detalle->cantidad_vigente));
 
         return collect($ordenCorte->recepcion?->detalles ?? [])
             // Nunca fusionar filas sin product_id entre si (edge case teorico:

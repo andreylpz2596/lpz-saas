@@ -4,6 +4,7 @@ namespace ByLopez\CorteConfeccion\DataGrids;
 
 use ByLopez\CorteConfeccion\Enums\EstadoOrdenConfeccion;
 use ByLopez\CorteConfeccion\Enums\EstadoOrdenConfeccionRetorno;
+use ByLopez\CorteConfeccion\Repositories\TallerRepository;
 use ByLopez\CorteConfeccion\Support\OrdenConfeccionGate;
 use Illuminate\Support\Facades\DB;
 use Webkul\DataGrid\DataGrid;
@@ -17,7 +18,7 @@ class OrdenConfeccionDataGrid extends DataGrid
         $detallesResumen = DB::table('bylopez_cc_ordenes_confeccion_detalles')
             ->select(
                 'orden_confeccion_id',
-                DB::raw('SUM(cantidad_entregada) as total_entregado')
+                DB::raw('SUM(cantidad_entregada - cantidad_reasignada_salida) as total_entregado')
             )
             ->groupBy('orden_confeccion_id');
 
@@ -110,7 +111,31 @@ class OrdenConfeccionDataGrid extends DataGrid
             }
 
             if ($index === 'estado') {
+                $column['filterable_type'] = 'dropdown';
+                $column['allow_multiple_values'] = false;
+                $column['filterable_options'] = array_merge(
+                    [['label' => 'Todos', 'value' => '__todos__']],
+                    array_map(fn ($estado) => ['label' => $estado->label(), 'value' => $estado->value], EstadoOrdenConfeccion::cases())
+                );
                 $column['closure'] = fn ($row) => EstadoOrdenConfeccion::badgeHtml($row->estado);
+            }
+
+            if ($index === 'taller_nombre') {
+                $column['filterable_type'] = 'dropdown';
+                $column['allow_multiple_values'] = false;
+                $column['filterable_options'] = app(TallerRepository::class)
+                    ->scopeQuery(function ($query) {
+                        if (OrdenConfeccionGate::debeFiltrarListadoPorTaller()) {
+                            $query = $query->where('usuario_id', auth()->guard('admin')->id());
+                        }
+
+                        return $query->orderBy('nombre');
+                    })
+                    ->all(['nombre'])
+                    ->unique('nombre')
+                    ->map(fn ($taller) => ['label' => $taller->nombre, 'value' => $taller->nombre])
+                    ->values()
+                    ->all();
             }
 
             if ($index === 'orden_corte_codigo') {
@@ -127,6 +152,16 @@ class OrdenConfeccionDataGrid extends DataGrid
 
             $this->addColumn($column);
         }
+    }
+
+    protected function processRequestedFilters(array $requestedFilters)
+    {
+        // "Todos" omite solo el estado; conserva los demas filtros y el alcance por taller.
+        if (in_array('__todos__', (array) ($requestedFilters['estado'] ?? []), true)) {
+            unset($requestedFilters['estado']);
+        }
+
+        parent::processRequestedFilters($requestedFilters);
     }
 
     protected function progresoHtml($row): string

@@ -10,6 +10,8 @@ enum EstadoOrdenConfeccion: string
     case RecibidaBodega = 'recibida_bodega';
     case Cerrada = 'cerrada';
     case Anulada = 'anulada';
+    /** Responsabilidad neta cero: todo su saldo se reasigno a otros talleres (el historial queda intacto). */
+    case Reasignada = 'reasignada';
 
     public function label(): string
     {
@@ -20,6 +22,7 @@ enum EstadoOrdenConfeccion: string
             self::RecibidaBodega => 'Recibida en bodega',
             self::Cerrada => 'Cerrada',
             self::Anulada => 'Anulada',
+            self::Reasignada => 'Reasignada',
         };
     }
 
@@ -32,6 +35,7 @@ enum EstadoOrdenConfeccion: string
             self::RecibidaBodega => 'label-completed',
             self::Cerrada => 'label-closed',
             self::Anulada => 'label-canceled',
+            self::Reasignada => 'label-closed',
         };
     }
 

@@ -10,6 +10,7 @@ use ByLopez\CorteConfeccion\Comprobantes\LectorTesseract;
 use ByLopez\CorteConfeccion\Console\Commands\DiagnosticarCatalogoCorte;
 use ByLopez\CorteConfeccion\Services\CarteraFuenteOperaciones;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Webkul\Core\Http\Middleware\PreventRequestsDuringMaintenance;
@@ -44,6 +45,10 @@ class CorteConfeccionServiceProvider extends ServiceProvider
         $this->loadTranslationsFrom(__DIR__.'/../Resources/lang', 'corteconfeccion');
         $this->loadViewsFrom(__DIR__.'/../Resources/views', 'corteconfeccion');
         Blade::anonymousComponentPath(__DIR__.'/../Resources/views/components', 'corteconfeccion');
+
+        // Avisos del modulo en la campana y el listado de notificaciones NATIVOS de Bagisto (puntos de extension oficiales).
+        Event::listen('bagisto.admin.layout.vue-app-mount.before', fn ($manager) => $manager->addTemplate('corteconfeccion::admin.notificaciones.campana'));
+        Event::listen('bagisto.admin.marketing.notifications.create.before', fn ($manager) => $manager->addTemplate('corteconfeccion::admin.notificaciones.listado'));
 
         if ($this->app->runningInConsole()) {
             $this->commands([DiagnosticarCatalogoCorte::class]);

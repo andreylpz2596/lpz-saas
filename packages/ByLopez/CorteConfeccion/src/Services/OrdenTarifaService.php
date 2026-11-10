@@ -4,6 +4,7 @@ namespace ByLopez\CorteConfeccion\Services;
 
 use ByLopez\CorteConfeccion\Models\Cortador;
 use ByLopez\CorteConfeccion\Models\OrdenConfeccion;
+use ByLopez\CorteConfeccion\Models\OrdenConfeccionDetalle;
 use ByLopez\CorteConfeccion\Models\OrdenCorte;
 use ByLopez\CorteConfeccion\Models\OrdenTarifa;
 use ByLopez\CorteConfeccion\Models\Taller;
@@ -75,8 +76,8 @@ class OrdenTarifaService
         $tipoTelaId = $this->tipoTelaDe($ordenCorte);
 
         $detalles = $orden instanceof OrdenConfeccion
-            ? $orden->detalles()->get(['product_id', 'cantidad_entregada as cantidad'])
-            : $orden->detalles()->get(['product_id', 'cantidad_real_cortada as cantidad']);
+            ? $orden->detalles()->selectRaw('product_id, attribute_family_id, '.OrdenConfeccionDetalle::SQL_VIGENTE.' as cantidad')->get()
+            : $orden->detalles()->get(['product_id', 'attribute_family_id', 'cantidad_real_cortada as cantidad']);
 
         $familias = DB::table('products')
             ->whereIn('id', $detalles->pluck('product_id')->filter()->unique())
@@ -94,8 +95,9 @@ class OrdenTarifaService
 
         $lineas = $tipoTelaId
             ? $detalles
-                ->filter(fn ($detalle) => $detalle->product_id && $familias->get($detalle->product_id))
-                ->groupBy(fn ($detalle) => (int) $familias->get($detalle->product_id))
+                // H07: la familia CONSERVADA al crear el detalle manda; la actual del catalogo solo es respaldo.
+                ->filter(fn ($detalle) => $detalle->product_id && ($detalle->attribute_family_id ?: $familias->get($detalle->product_id)))
+                ->groupBy(fn ($detalle) => (int) ($detalle->attribute_family_id ?: $familias->get($detalle->product_id)))
                 ->map(fn (Collection $grupo, $familiaId) => [
                     'tipo_tela_id' => $tipoTelaId,
                     'attribute_family_id' => (int) $familiaId,

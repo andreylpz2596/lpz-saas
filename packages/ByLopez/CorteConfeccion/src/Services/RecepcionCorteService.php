@@ -26,6 +26,10 @@ class RecepcionCorteService
         }
 
         return DB::transaction(function () use ($orden, $data) {
+            // H10: estado FRESCO bajo bloqueo de la fila: una instancia cargada antes de otra transaccion
+            // (doble envio, dos usuarios) no puede decidir con datos viejos.
+            OrdenCorte::query()->lockForUpdate()->findOrFail($orden->id);
+            $orden->refresh();
             $orden->load(['recepcion', 'detalles']);
 
             if (! OrdenCorteEstadoMachine::puedeTransicionar($orden->estado, EstadoOrdenCorte::RecibidoBodega->value)) {
@@ -76,6 +80,14 @@ class RecepcionCorteService
                 }
 
                 $idsUsados[$detalleOrdenId] = true;
+            }
+
+            // H04: la recepcion es UNICA por orden (UNIQUE orden_corte_id); omitir un detalle dejaria esas
+            // unidades fuera para siempre. Deben venir TODOS los detalles (con 0 si no se recibio nada).
+            if (count($idsUsados) !== $detallesOrdenPorId->count()) {
+                throw ValidationException::withMessages([
+                    'detalles' => trans('corteconfeccion::app.errors.recepcion-detalles-incompletos'),
+                ]);
             }
 
             // Payload explicito (nunca $data completo): los pesos historicos

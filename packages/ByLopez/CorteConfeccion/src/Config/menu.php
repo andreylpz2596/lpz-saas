@@ -68,6 +68,12 @@ return [
         'sort' => 8,
         'icon' => '',
     ], [
+        'key' => 'corte_confeccion.stock_minimos',
+        'name' => 'corteconfeccion::app.menu.stock-minimos',
+        'route' => 'admin.corte_confeccion.stock_minimos.index',
+        'sort' => 8,
+        'icon' => '',
+    ], [
         'key' => 'corte_confeccion.cartera',
         'name' => 'corteconfeccion::app.menu.cartera',
         'route' => 'admin.corte_confeccion.cartera.index',

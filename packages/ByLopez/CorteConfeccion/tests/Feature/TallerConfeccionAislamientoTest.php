@@ -202,6 +202,20 @@ test('listado unico y cancel respetan ownership de TALLER CONFECCION', function 
     $codigos = app(OrdenConfeccionDataGrid::class)->prepareQueryBuilder()->pluck('codigo')->all();
     expect($codigos)->toContain($ordenS4->codigo)->not->toContain($ordenS2->codigo);
 
+    $url = route('admin.corte_confeccion.ordenes_confeccion.index');
+    $listado = $this->actingAs($jairo, 'admin')->getJson($url.'?'.http_build_query([
+        'filters' => ['estado' => ['__todos__'], 'taller_nombre' => [$s4->nombre]],
+    ]), ['X-Requested-With' => 'XMLHttpRequest'])->assertOk()->json();
+
+    expect(collect($listado['records'])->pluck('id')->all())->toBe([$ordenS4->id]);
+    $opcionesTaller = collect($listado['columns'])->firstWhere('index', 'taller_nombre');
+    expect(array_column($opcionesTaller['filterable_options'], 'value'))
+        ->toContain($s4->nombre)->not->toContain($s2->nombre);
+
+    $this->actingAs($jairo, 'admin')->getJson($url.'?'.http_build_query([
+        'filters' => ['estado' => ['cerrada']],
+    ]), ['X-Requested-With' => 'XMLHttpRequest'])->assertOk()->assertJsonPath('records', []);
+
     $this->actingAs($jairo, 'admin')->post(route('admin.corte_confeccion.ordenes_confeccion.cancel', $ordenS2->id))->assertForbidden();
     expect($ordenS2->fresh()->estado)->toBe(EstadoOrdenConfeccion::Activa->value);
 

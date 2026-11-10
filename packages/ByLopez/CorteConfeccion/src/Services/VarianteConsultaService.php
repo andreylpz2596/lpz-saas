@@ -122,25 +122,7 @@ class VarianteConsultaService
                 ->get()
                 ->groupBy('product_id');
 
-        // Canal resuelto UNA sola vez para todo el lote. Si no se recibe
-        // explicito, se resuelve con getDefaultChannel() (determinista, via
-        // config('app.channel')) y NUNCA con getCurrentChannel() (depende
-        // del Host HTTP de la request -- incorrecto para un contexto Admin,
-        // ver docs/confeccion/04A_STOCK_VARIANTE_DISENO.md §6).
-        $channelResuelto = $channelId ?? core()->getDefaultChannel()?->id;
-
-        // product_inventory_indices.qty YA es stock vendible/indexado (fisico
-        // de fuentes activas del canal, menos lo ya reservado) -- nunca
-        // product_inventories.qty (fisico bruto). Los productos `configurable`
-        // nunca tienen fila aqui (Bagisto los excluye de la reindexacion),
-        // asi que si algun product_id defensivamente resultara ser
-        // configurable, esto ya devuelve null de forma natural.
-        $stocksPorProducto = $channelResuelto
-            ? DB::table('product_inventory_indices')
-                ->whereIn('product_id', $ids)
-                ->where('channel_id', $channelResuelto)
-                ->pluck('qty', 'product_id')
-            : collect();
+        $stocksPorProducto = $this->stockVendible($ids, $channelId);
 
         foreach ($ids as $id) {
             $producto = $productos->get($id);
@@ -174,6 +156,35 @@ class VarianteConsultaService
         }
 
         return $resultado;
+    }
+
+    /**
+     * Stock vendible por variante: UNICA lectura del modulo (distribucion, sugerencia por stock).
+     *
+     * Canal resuelto UNA sola vez para todo el lote. Si no se recibe explicito, se resuelve con getDefaultChannel()
+     * (determinista, via config('app.channel')) y NUNCA con getCurrentChannel() (depende del Host HTTP de la request --
+     * incorrecto para un contexto Admin, ver docs/confeccion/04A_STOCK_VARIANTE_DISENO.md §6).
+     *
+     * product_inventory_indices.qty YA es stock vendible/indexado (fisico de fuentes activas del canal, menos lo ya
+     * reservado) -- nunca product_inventories.qty (fisico bruto) y nunca se vuelven a restar reservas. Los productos
+     * `configurable` nunca tienen fila aqui (Bagisto los excluye de la reindexacion). Sin fila = sin dato (no 0).
+     *
+     * @return Collection<int, int> product_id => qty, solo las variantes con indice
+     */
+    public function stockVendible(iterable $productIds, ?int $channelId = null): Collection
+    {
+        $ids = collect($productIds)->map(fn ($id) => (int) $id)->filter(fn ($id) => $id > 0)->unique()->values();
+        $channelResuelto = $channelId ?? core()->getDefaultChannel()?->id;
+
+        if ($ids->isEmpty() || ! $channelResuelto) {
+            return collect();
+        }
+
+        return DB::table('product_inventory_indices')
+            ->whereIn('product_id', $ids)
+            ->where('channel_id', $channelResuelto)
+            ->pluck('qty', 'product_id')
+            ->mapWithKeys(fn ($qty, $id) => [(int) $id => (int) $qty]);
     }
 
     /**

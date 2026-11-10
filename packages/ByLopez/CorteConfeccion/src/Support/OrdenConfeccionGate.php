@@ -15,11 +15,22 @@ class OrdenConfeccionGate
             return false;
         }
 
-        if (TallerConfeccionAccess::esUsuarioTaller($user)) {
+        // Aislamiento por rol «TALLER CONFECCION» o por VINCULO con un taller (aunque el rol se llame distinto).
+        if (TallerConfeccionAccess::esUsuarioTaller($user) || self::vinculadoATaller($user)) {
             $tieneAclConsulta = bouncer()->hasPermission('corte_confeccion.ordenes_confeccion')
                 || bouncer()->hasPermission('corte_confeccion.ordenes_confeccion.reportar_taller');
 
-            return $tieneAclConsulta && ($orden ? TallerConfeccionAccess::puedeAccederOrden($orden, $user) : true);
+            if (! $tieneAclConsulta) {
+                return false;
+            }
+
+            if (! $orden) {
+                return true;
+            }
+
+            $orden->loadMissing('taller');
+
+            return (int) $orden->taller?->usuario_id === (int) $user->id;
         }
 
         if (bouncer()->hasPermission('corte_confeccion.ordenes_confeccion')) {
@@ -57,7 +68,16 @@ class OrdenConfeccionGate
     {
         $user ??= auth()->guard('admin')->user();
 
-        if (! $user || ! $user->role || ! bouncer()->hasPermission('corte_confeccion.ordenes_confeccion.operar')) {
+        if (! $user || ! $user->role) {
+            return false;
+        }
+
+        // H11: el cortador no opera (anula) ordenes de confeccion ni con la ACL «operar» ni con permission_type=all.
+        if (TallerConfeccionAccess::roleName($user) === 'cortador') {
+            return false;
+        }
+
+        if (! bouncer()->hasPermission('corte_confeccion.ordenes_confeccion.operar')) {
             return false;
         }
 
@@ -87,6 +107,11 @@ class OrdenConfeccionGate
     {
         $user ??= auth()->guard('admin')->user();
 
-        return $user && TallerConfeccionAccess::esUsuarioTaller($user);
+        return $user && (TallerConfeccionAccess::esUsuarioTaller($user) || self::vinculadoATaller($user));
+    }
+
+    public static function vinculadoATaller(Admin $user): bool
+    {
+        return ConsolidadoConfeccionGate::tallerIdsVinculados($user) !== [];
     }
 }

@@ -14,6 +14,10 @@
             <p class="text-xl font-bold text-gray-800 dark:text-white">{{ $titulo ?? 'Ordenes de confeccion' }}</p>
         </div>
 
+        @if (\ByLopez\CorteConfeccion\Support\ConsolidadoConfeccionGate::puedeVer())
+            @include('corteconfeccion::admin.ordenes-confeccion.partials.pestanas', ['activa' => 'ordenes'])
+        @endif
+
         <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
             {{ $descripcion ?? 'Las ordenes de confeccion se crean desde una orden de corte ya recibida en bodega, usando el boton "Distribuir a talleres".' }}
         </p>

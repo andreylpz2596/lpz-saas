@@ -6,6 +6,7 @@ use ByLopez\CorteConfeccion\DataGrids\TallerDataGrid;
 use ByLopez\CorteConfeccion\Enums\EstadoOrdenConfeccion;
 use ByLopez\CorteConfeccion\Http\Requests\StoreTallerRequest;
 use ByLopez\CorteConfeccion\Http\Requests\UpdateTallerRequest;
+use ByLopez\CorteConfeccion\Models\Reasignacion;
 use ByLopez\CorteConfeccion\Models\Taller;
 use ByLopez\CorteConfeccion\Repositories\TallerRepository;
 use ByLopez\CorteConfeccion\Services\TallerService;
@@ -70,7 +71,15 @@ class TallerController extends Controller
         $tarifaGeneralAnterior = $this->tarifaService->avisoTarifaGeneral($taller);
         $puedeGestionarTarifas = TarifaPrestadorGate::puedeGestionar(TarifaPrestadorGate::TIPO_TALLER);
 
-        return view('corteconfeccion::admin.talleres.show', compact('taller', 'tallerPayload', 'usuariosTaller', 'resumen', 'opcionesTarifa', 'tarifaGeneralAnterior', 'puedeGestionarTarifas'));
+        // Historial de reasignaciones en ambos sentidos (el taller cedio o recibio prendas).
+        $reasignacionesTaller = Reasignacion::query()
+            ->where(fn ($q) => $q->where('taller_origen_id', $taller->id)->orWhere('taller_destino_id', $taller->id))
+            ->with(['lineas', 'tallerOrigen', 'tallerDestino', 'ordenOrigen', 'ordenDestino'])
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get();
+
+        return view('corteconfeccion::admin.talleres.show', compact('taller', 'tallerPayload', 'usuariosTaller', 'resumen', 'opcionesTarifa', 'tarifaGeneralAnterior', 'puedeGestionarTarifas', 'reasignacionesTaller'));
     }
 
     /**
@@ -84,7 +93,7 @@ class TallerController extends Controller
     protected function resumenTaller(int $tallerId): array
     {
         $detallesPorOrden = DB::table('bylopez_cc_ordenes_confeccion_detalles')
-            ->select('orden_confeccion_id', DB::raw('SUM(cantidad_entregada) as entregado'))
+            ->select('orden_confeccion_id', DB::raw('SUM(cantidad_entregada - cantidad_reasignada_salida) as entregado'))
             ->groupBy('orden_confeccion_id');
 
         $retornosPorOrden = DB::table('bylopez_cc_ordenes_confeccion_retornos as r')

@@ -49,6 +49,13 @@ class InventarioMovimientoController extends Controller
             ->with(['product', 'inventorySource', 'ordenConfeccion', 'retorno', 'retornoDetalle', 'admin'])
             ->findOrFail($id);
 
+        if (request()->ajax()) {
+            return view('corteconfeccion::admin.inventario-movimientos.detalle', [
+                'movimiento' => $movimiento,
+                'enModal' => true,
+            ]);
+        }
+
         return view('corteconfeccion::admin.inventario-movimientos.show', compact('movimiento'));
     }
 

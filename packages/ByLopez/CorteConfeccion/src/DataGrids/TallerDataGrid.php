@@ -21,7 +21,7 @@ class TallerDataGrid extends DataGrid
          * filas y las sumas saldrian infladas.
          */
         $detallesPorOrden = DB::table('bylopez_cc_ordenes_confeccion_detalles')
-            ->select('orden_confeccion_id', DB::raw('SUM(cantidad_entregada) as entregado'))
+            ->select('orden_confeccion_id', DB::raw('SUM(cantidad_entregada - cantidad_reasignada_salida) as entregado'))
             ->groupBy('orden_confeccion_id');
 
         $retornosPorOrden = DB::table('bylopez_cc_ordenes_confeccion_retornos as r')

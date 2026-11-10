@@ -222,6 +222,10 @@ class OrdenCorteService
     public function reportarResultado(OrdenCorte $orden, array $data): OrdenCorte
     {
         return DB::transaction(function () use ($orden, $data) {
+            // H10: estado FRESCO bajo bloqueo de la fila: una instancia cargada antes de otra transaccion
+            // (doble envio, dos usuarios) no puede decidir con datos viejos.
+            OrdenCorte::query()->lockForUpdate()->findOrFail($orden->id);
+            $orden->refresh();
             $orden->load('detalles');
 
             if (! OrdenCorteEstadoMachine::puedeTransicionar($orden->estado, EstadoOrdenCorte::ReportadoPorCortador->value)) {
@@ -399,6 +403,9 @@ class OrdenCorteService
 
             $this->validarSolicitudEditable($orden);
 
+            // H05: este camino antiguo no puede esquivar el contrato V2 (variante simple de la tela y color de los rollos).
+            $this->validarProductoDelContrato($orden, (int) ($data['product_id'] ?? 0));
+
             $orden->detalles()->create(array_merge(
                 $this->productLookupService->snapshot((int) ($data['product_id'] ?? 0)),
                 [
@@ -420,6 +427,45 @@ class OrdenCorteService
 
             return $orden->refresh();
         });
+    }
+
+    /**
+     * H05: un detalle agregado por el camino antiguo (POST view/{id}/detalles) debe ser una variante SIMPLE (hija de un
+     * configurable) cuyo tipo de tela (en el padre) y color (en la variante) coincidan con los rollos de la orden.
+     * Si el atributo no se puede verificar, falla cerrado.
+     */
+    protected function validarProductoDelContrato(OrdenCorte $orden, int $productId): void
+    {
+        $falla = fn () => ValidationException::withMessages([
+            'product_id' => trans('corteconfeccion::app.errors.producto-fuera-del-contrato-corte'),
+        ]);
+
+        $producto = DB::table('products')->where('id', $productId)->first(['id', 'type', 'parent_id']);
+
+        if (! $producto || $producto->type !== 'simple' || ! $producto->parent_id) {
+            throw $falla();
+        }
+
+        $rollos = $this->rollosDeOrden($orden);
+        $atributos = DB::table('attributes')->whereIn('code', ['color', 'tipo_tela'])->pluck('id', 'code');
+
+        $valores = fn (int $id, string $code) => DB::table('product_attribute_values')
+            ->where('product_id', $id)
+            ->where('attribute_id', $atributos[$code] ?? 0)
+            ->whereNotNull('integer_value')
+            ->pluck('integer_value')
+            ->map(fn ($v) => (int) $v);
+
+        $coloresRollos = $rollos->pluck('color_option_id')->filter()->map(fn ($v) => (int) $v)->unique();
+        $telasRollos = $rollos->pluck('tipo_tela_id')->filter()->map(fn ($v) => (int) $v)->unique();
+
+        if ($coloresRollos->isNotEmpty() && $coloresRollos->intersect($valores($producto->id, 'color'))->isEmpty()) {
+            throw $falla();
+        }
+
+        if ($telasRollos->isNotEmpty() && $telasRollos->intersect($valores((int) $producto->parent_id, 'tipo_tela'))->isEmpty()) {
+            throw $falla();
+        }
     }
 
     public function agregarRollo(OrdenCorte $orden, int $rolloId): OrdenCorte
@@ -551,6 +597,10 @@ class OrdenCorteService
     public function cerrar(OrdenCorte $orden): OrdenCorte
     {
         return DB::transaction(function () use ($orden) {
+            // H10: estado FRESCO bajo bloqueo de la fila: una instancia cargada antes de otra transaccion
+            // (doble envio, dos usuarios) no puede decidir con datos viejos.
+            OrdenCorte::query()->lockForUpdate()->findOrFail($orden->id);
+            $orden->refresh();
             $orden->load(['rollosCorte.rollo', 'recepcion.detalles', 'detalles']);
 
             if (in_array($orden->estado, [EstadoOrdenCorte::Anulado->value, EstadoOrdenCorte::Cerrado->value], true)) {
@@ -561,10 +611,12 @@ class OrdenCorteService
                 throw ValidationException::withMessages(['recepcion' => trans('corteconfeccion::app.errors.orden-sin-recepcion')]);
             }
 
-            $totalPiezas = (int) $orden->detalles->sum('cantidad_real_cortada');
+            // H08: lo VERIFICADO por bodega manda (es lo que la recepcion ya dejo en la orden); lo reportado por el
+            // cortador permanece intacto en cada detalle y solo es el respaldo cuando no hay piezas recibidas.
+            $totalPiezas = (int) $orden->recepcion->detalles->sum('cantidad_recibida');
 
             if ($totalPiezas <= 0) {
-                $totalPiezas = (int) $orden->recepcion->detalles->sum('cantidad_recibida');
+                $totalPiezas = (int) $orden->detalles->sum('cantidad_real_cortada');
             }
 
             if ($totalPiezas <= 0) {

@@ -269,7 +269,7 @@
                                         <p class="text-sm text-gray-600 dark:text-gray-300">{{ $ordenConfeccion->taller?->nombre ?? 'Taller no registrado' }}</p>
                                     </div>
                                     <div class="text-right max-sm:text-left">
-                                        <p class="font-semibold text-gray-800 dark:text-white">{{ number_format((int) $ordenConfeccion->detalles->sum('cantidad_entregada'), 0, ',', '.') }} unidades</p>
+                                        <p class="font-semibold text-gray-800 dark:text-white">{{ number_format((int) $ordenConfeccion->detalles->sum(fn ($d) => $d->cantidad_vigente), 0, ',', '.') }} unidades</p>
                                         {!! \ByLopez\CorteConfeccion\Enums\EstadoOrdenConfeccion::badgeHtml($ordenConfeccion->estado) !!}
                                     </div>
                                 </div>

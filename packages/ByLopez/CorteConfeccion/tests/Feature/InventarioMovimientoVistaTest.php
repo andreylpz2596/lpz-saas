@@ -478,6 +478,17 @@ test('IM-05 - Admin y Bodega pueden acceder a index y show de Movimientos de inv
         $this->actingAs($persona, 'admin')
             ->get(route('admin.corte_confeccion.inventario_movimientos.show', $movimiento->id))
             ->assertOk();
+
+        $this->actingAs($persona, 'admin')
+            ->get(route('admin.corte_confeccion.inventario_movimientos.show', $movimiento->id), ['X-Requested-With' => 'XMLHttpRequest'])
+            ->assertOk()
+            ->assertSee('data-movimiento-detalle', false)
+            ->assertSee('Stock anterior')
+            ->assertSee('Stock nuevo')
+            ->assertSee($orden->codigo)
+            ->assertSee($retorno->codigo)
+            ->assertDontSee('<html', false)
+            ->assertDontSee('Volver al listado');
     }
 });
 
@@ -525,6 +536,10 @@ test('IM-06 - Taller (confeccion/cortador) es rechazado en Movimientos de invent
 
         $this->actingAs($persona, 'admin')
             ->get(route('admin.corte_confeccion.inventario_movimientos.show', $movimiento->id))
+            ->assertStatus(401);
+
+        $this->actingAs($persona, 'admin')
+            ->get(route('admin.corte_confeccion.inventario_movimientos.show', $movimiento->id), ['X-Requested-With' => 'XMLHttpRequest'])
             ->assertStatus(401);
     }
 

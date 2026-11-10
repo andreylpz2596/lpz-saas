@@ -2,6 +2,7 @@
 
 namespace ByLopez\CorteConfeccion\Http\Requests;
 
+use ByLopez\CorteConfeccion\Support\DistribucionConfeccionGate;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreOrdenConfeccionRequest extends FormRequest
@@ -18,7 +19,8 @@ class StoreOrdenConfeccionRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return bouncer()->hasPermission('corte_confeccion.ordenes_confeccion.create');
+        // H02: misma defensa que distribuir (lista de bloqueo por rol + ACL), tambien con permission_type=all.
+        return DistribucionConfeccionGate::puedeDistribuir();
     }
 
     public function rules(): array

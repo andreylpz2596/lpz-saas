@@ -229,6 +229,8 @@
                             </div>
                         </div>
 
+                        @include('corteconfeccion::admin.partials.reasignaciones-taller', ['reasignacionesTaller' => $reasignacionesTaller, 'tallerId' => $taller->id])
+
                         <v-referencias-tarifa
                             titulo="Referencias y precios de confeccion"
                             subtitulo="Valor de confeccion por unidad para cada tipo de tela y referencia de producto. Cada referencia se configura por separado."

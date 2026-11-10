@@ -4,6 +4,7 @@ namespace ByLopez\CorteConfeccion\Services;
 
 use ByLopez\CorteConfeccion\Enums\EstadoOrdenConfeccion;
 use ByLopez\CorteConfeccion\Enums\EstadoOrdenConfeccionRetorno;
+use ByLopez\CorteConfeccion\Enums\EstadoReasignacion;
 use ByLopez\CorteConfeccion\Enums\PrioridadOrdenConfeccion;
 use ByLopez\CorteConfeccion\Models\OrdenConfeccion;
 use ByLopez\CorteConfeccion\Models\OrdenConfeccionRetorno;
@@ -23,6 +24,7 @@ class OrdenConfeccionService
         protected ProductLookupService $productLookupService,
         protected InventarioMovimientoService $inventarioMovimientoService,
         protected OrdenTarifaService $ordenTarifaService,
+        protected PrioridadConfeccionService $prioridadConfeccionService,
     ) {}
 
     public function create(array $data): OrdenConfeccion
@@ -52,13 +54,14 @@ class OrdenConfeccionService
 
             $this->validarProductosSimples(collect($detalles)->pluck('product_id'));
 
-            foreach ($detalles as $detalle) {
-                $disponible = $this->disponibilidadConfeccionService->disponiblePara(
-                    $ordenCorte,
-                    (int) $detalle['product_id']
-                );
+            // H01: se compara el TOTAL solicitado por variante (varias filas del mismo
+            // product_id se consolidan), nunca cada fila por separado.
+            $solicitadoPorProducto = collect($detalles)
+                ->groupBy(fn ($detalle) => (int) $detalle['product_id'])
+                ->map(fn ($items) => (int) $items->sum('cantidad_entregada'));
 
-                if ((int) $detalle['cantidad_entregada'] > $disponible) {
+            foreach ($solicitadoPorProducto as $productId => $solicitado) {
+                if ($solicitado > $this->disponibilidadConfeccionService->disponiblePara($ordenCorte, $productId)) {
                     throw ValidationException::withMessages([
                         'detalles' => trans('corteconfeccion::app.errors.cantidad-excede-disponible'),
                     ]);
@@ -219,17 +222,43 @@ class OrdenConfeccionService
 
     public function cancel(OrdenConfeccion $orden): OrdenConfeccion
     {
-        if ($orden->estado === EstadoOrdenConfeccion::Anulada->value) {
-            throw ValidationException::withMessages(['estado' => trans('corteconfeccion::app.errors.orden-confeccion-ya-anulada')]);
-        }
+        return DB::transaction(function () use ($orden) {
+            // H06: mismo orden de bloqueo que reasignar/distribuir (recepcion -> orden) y estado FRESCO bajo
+            // bloqueo: una instancia cargada antes de que el taller reportara no puede anular lo ya trabajado.
+            RecepcionCorte::query()->where('orden_corte_id', $orden->orden_corte_id)->lockForUpdate()->first();
 
-        if ($orden->estado !== EstadoOrdenConfeccion::Activa->value) {
-            throw ValidationException::withMessages(['estado' => trans('corteconfeccion::app.errors.orden-confeccion-no-anulable')]);
-        }
+            $fresca = OrdenConfeccion::query()->lockForUpdate()->findOrFail($orden->id);
 
-        $orden->update(['estado' => EstadoOrdenConfeccion::Anulada->value]);
+            if ($fresca->estado === EstadoOrdenConfeccion::Anulada->value) {
+                throw ValidationException::withMessages(['estado' => trans('corteconfeccion::app.errors.orden-confeccion-ya-anulada')]);
+            }
 
-        return $orden->refresh();
+            if ($fresca->estado !== EstadoOrdenConfeccion::Activa->value) {
+                throw ValidationException::withMessages(['estado' => trans('corteconfeccion::app.errors.orden-confeccion-no-anulable')]);
+            }
+
+            // Anular libera las unidades al pool: nunca las ya reportadas/recibidas ni las que participan de una
+            // reasignacion vigente (esas se compensan con la reversion de la reasignacion).
+            if ($fresca->retornos()->exists() || $this->tieneReasignacionVigente($fresca)) {
+                throw ValidationException::withMessages(['estado' => trans('corteconfeccion::app.errors.orden-confeccion-no-anulable')]);
+            }
+
+            $fresca->update(['estado' => EstadoOrdenConfeccion::Anulada->value]);
+
+            // Una orden anulada ya no tiene pendiente: tampoco cantidades prioritarias (la prioridad de asignacion queda).
+            $fresca->detalles()->update(['cantidad_urgente' => 0, 'cantidad_alta' => 0]);
+
+            return $orden->refresh();
+        });
+    }
+
+    /** Orden que cedio o recibio prendas en una reasignacion que sigue moviendo responsabilidad. */
+    public function tieneReasignacionVigente(OrdenConfeccion $orden): bool
+    {
+        $vigentes = [EstadoReasignacion::EnTransito->value, EstadoReasignacion::Aplicada->value];
+
+        return $orden->reasignacionesSalida()->whereIn('estado', $vigentes)->exists()
+            || $orden->reasignacionesEntrada()->whereIn('estado', $vigentes)->exists();
     }
 
     public function reportarTaller(OrdenConfeccion $orden, array $data): OrdenConfeccionRetorno
@@ -264,7 +293,7 @@ class OrdenConfeccionService
                 'observacion_taller' => $data['observacion_taller'] ?? null,
             ]);
 
-            foreach ($detallesInput as $detalleInput) {
+            foreach ($detallesInput as $indice => $detalleInput) {
                 $detalle = $detallesOrden->get((int) $detalleInput['id']);
                 $reportada = (int) $detalleInput['cantidad'];
                 $pendiente = $this->pendientePorReportar($detalle);
@@ -281,6 +310,10 @@ class OrdenConfeccionService
                     ]);
                 }
 
+                // P1: reparto por prioridad de lo reportado (sugerido Urgente -> Alta -> Normal o el que ajusto el taller),
+                // validado contra el saldo por nivel ANTES de registrar el reporte.
+                $reparto = $this->prioridadConfeccionService->resolverReparto($detalle, $reportada, (array) $detalleInput, "detalles.{$indice}.reparto");
+
                 $retorno->detalles()->create([
                     'orden_confeccion_detalle_id' => $detalle->id,
                     'product_id' => $detalle->product_id,
@@ -288,7 +321,11 @@ class OrdenConfeccionService
                     'producto_nombre' => $detalle->producto_nombre,
                     'talla' => $detalle->talla,
                     'cantidad_reportada' => $reportada,
+                    'cantidad_urgente' => $reparto['urgente'],
+                    'cantidad_alta' => $reparto['alta'],
                 ]);
+
+                $this->prioridadConfeccionService->descontar($detalle, $reparto);
             }
 
             $this->actualizarEstadoProduccion($orden);
@@ -389,7 +426,7 @@ class OrdenConfeccionService
      * en el calculo de disponibilidad. Se rechaza toda la operacion si
      * cualquiera de los product_id recibidos es configurable.
      */
-    protected function validarProductosSimples(Collection $productIds): void
+    public function validarProductosSimples(Collection $productIds): void
     {
         $ids = $productIds->map(fn ($id) => (int) $id)->filter()->unique()->values();
 
@@ -431,14 +468,24 @@ class OrdenConfeccionService
 
     protected function pendientePorReportar($detalle): int
     {
-        return max((int) $detalle->cantidad_entregada - (int) $detalle->retornosDetalles->sum('cantidad_reportada'), 0);
+        return $detalle->pendientePorReportar();
+    }
+
+    /** Recalcula el estado desde las cantidades VIGENTES (usado tras reasignar/revertir). No toca ordenes anuladas. */
+    public function recalcularEstado(OrdenConfeccion $orden): void
+    {
+        if ($orden->estado !== EstadoOrdenConfeccion::Anulada->value) {
+            $this->actualizarEstadoProduccion($orden);
+        }
     }
 
     protected function actualizarEstadoProduccion(OrdenConfeccion $orden): void
     {
         $orden->load(['detalles.retornosDetalles.movimientosInventario', 'retornos']);
 
-        $totalEntregado = (int) $orden->detalles->sum('cantidad_entregada');
+        // Responsabilidad VIGENTE (asignado - cedido por reasignacion), no lo asignado originalmente.
+        $totalEntregado = (int) $orden->detalles->sum(fn ($detalle) => $detalle->cantidad_vigente);
+        $cedido = (int) $orden->detalles->sum('cantidad_reasignada_salida');
         $retornosDetalles = $orden->detalles->flatMap(fn ($detalle) => $detalle->retornosDetalles);
         $totalReportado = (int) $retornosDetalles->sum('cantidad_reportada');
         $totalRecibidoControlado = (int) $retornosDetalles
@@ -453,6 +500,8 @@ class OrdenConfeccionService
             ->sum('cantidad_movimiento');
 
         $estado = match (true) {
+            // Responsabilidad neta cero por haberla reasignado toda: resolucion explicita, no "activa" eterna.
+            $totalEntregado === 0 && $cedido > 0 => EstadoOrdenConfeccion::Reasignada->value,
             $totalEntregado > 0
                 && $totalReportado >= $totalEntregado
                 && $totalRecibidoControlado >= $totalReportado
@@ -467,7 +516,7 @@ class OrdenConfeccionService
         $orden->update(['estado' => $estado]);
     }
 
-    protected function generarCodigo(): string
+    public function generarCodigo(): string
     {
         $ultimoConsecutivo = (int) DB::table('bylopez_cc_ordenes_confeccion')
             ->where('codigo', 'regexp', '^OF-[0-9]{6}$')
