@@ -241,6 +241,8 @@
                             :aviso="tarifaGeneralAnterior"
                         ></v-referencias-tarifa>
 
+                        @include('corteconfeccion::admin.partials.cartera-resumen', ['carteraResumen' => \ByLopez\CorteConfeccion\Support\CarteraVista::resumenFicha($taller)])
+
                         {{--
                             Segundo bloque, reservado. Misma envoltura que la card "Facturas"
                             de Cliente. Todavia no hay un dato real de pagos, movimientos o

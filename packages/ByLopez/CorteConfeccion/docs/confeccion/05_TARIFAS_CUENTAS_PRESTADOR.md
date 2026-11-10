@@ -1,6 +1,7 @@
 # 05 — Tarifas y cuentas por pagar de talleres y cortadores
 
 Estado: **FASE 1 COMPLETADA. FASE 2 IMPLEMENTADA Y AJUSTADA A TARIFAS POR REFERENCIA (2026-10-14), PENDIENTE DE PRUEBA MANUAL DE CAMILO. Fase 3 pendiente de N1.**
+**Actualización 2026-11-01:** la Fase 3 (cuenta, abonos, anticipos, préstamos, corte de cuentas, historial) se rediseñó e implementó en dev: ver `08_CARTERA_PRESTADORES.md` (reemplaza el modelo de §4.3 y §4.4, que no contemplaba préstamos, corte de cuentas ni saldo inicial). La familia ya se conserva por detalle (H07).
 Alcance: `packages/ByLopez/CorteConfeccion/` únicamente. `packages/Webkul/` no se toca.
 
 Terminología: **prestador** = Taller de confección o Cortador. Se evita «proveedor» porque en el

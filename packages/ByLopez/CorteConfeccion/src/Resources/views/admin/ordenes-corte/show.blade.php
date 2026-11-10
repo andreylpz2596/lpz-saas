@@ -287,6 +287,10 @@
             'ruta' => 'admin.corte_confeccion.ordenes_corte.tarifa',
         ])
 
+        <div class="mt-4">
+            @include('corteconfeccion::admin.partials.cuenta-orden', ['cuentaOrden' => \ByLopez\CorteConfeccion\Support\CarteraVista::cuentaOrden($orden)])
+        </div>
+
         @include('corteconfeccion::admin.ordenes-corte.partials.card-productos', [
             'orden' => $orden,
             'detallesSolicitud' => $detallesSolicitud,

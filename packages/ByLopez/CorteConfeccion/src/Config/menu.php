@@ -67,5 +67,17 @@ return [
         'route' => 'admin.corte_confeccion.inventario_movimientos.index',
         'sort' => 8,
         'icon' => '',
+    ], [
+        'key' => 'corte_confeccion.cartera',
+        'name' => 'corteconfeccion::app.menu.cartera',
+        'route' => 'admin.corte_confeccion.cartera.index',
+        'sort' => 9,
+        'icon' => '',
+    ], [
+        'key' => 'corte_confeccion.mi_cuenta',
+        'name' => 'corteconfeccion::app.menu.mi-cuenta',
+        'route' => 'admin.corte_confeccion.cartera.mi_cuenta',
+        'sort' => 10,
+        'icon' => '',
     ],
 ];

@@ -1,5 +1,6 @@
 <?php
 
+use ByLopez\CorteConfeccion\Http\Controllers\Admin\CarteraController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\CompraTelaController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\CortadorController;
 use ByLopez\CorteConfeccion\Http\Controllers\Admin\InventarioMovimientoController;
@@ -127,6 +128,24 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
             Route::get('', 'index')->name('admin.corte_confeccion.inventario_movimientos.index');
             Route::post('ajuste-manual', 'ajusteManual')->name('admin.corte_confeccion.inventario_movimientos.ajuste_manual');
             Route::get('view/{id}', 'show')->name('admin.corte_confeccion.inventario_movimientos.show');
+        });
+
+        // Cartera de talleres y cortadores. `tipo`: taller | cortador. Cada accion se autoriza ademas en servidor (CarteraGate).
+        Route::controller(CarteraController::class)->prefix('cartera')->group(function () {
+            Route::get('', 'index')->name('admin.corte_confeccion.cartera.index');
+            Route::get('mi-cuenta', 'miCuenta')->name('admin.corte_confeccion.cartera.mi_cuenta');
+            Route::post('arranque', 'arranque')->name('admin.corte_confeccion.cartera.arranque');
+            Route::get('soportes/{id}', 'soporte')->name('admin.corte_confeccion.cartera.soporte');
+            Route::post('movimientos/{id}/aplicar', 'aplicar')->name('admin.corte_confeccion.cartera.movimientos.aplicar');
+            Route::post('movimientos/{id}/reversar', 'reversarMovimiento')->name('admin.corte_confeccion.cartera.movimientos.reversar');
+            Route::post('aplicaciones/{id}/anular', 'anularAplicacion')->name('admin.corte_confeccion.cartera.aplicaciones.anular');
+            Route::post('cortes/{id}/reversar', 'corteReversar')->name('admin.corte_confeccion.cartera.corte.reversar');
+            Route::get('{tipo}/{id}', 'cuenta')->whereIn('tipo', ['taller', 'cortador'])->name('admin.corte_confeccion.cartera.cuenta');
+            Route::post('{tipo}/{id}/movimientos', 'registrarMovimiento')->whereIn('tipo', ['taller', 'cortador'])->name('admin.corte_confeccion.cartera.movimientos.store');
+            Route::post('{tipo}/{id}/prestamos', 'registrarPrestamo')->whereIn('tipo', ['taller', 'cortador'])->name('admin.corte_confeccion.cartera.prestamos.store');
+            Route::post('{tipo}/{id}/comprobantes', 'leerComprobantes')->whereIn('tipo', ['taller', 'cortador'])->name('admin.corte_confeccion.cartera.comprobantes.leer');
+            Route::get('{tipo}/{id}/corte', 'corteVista')->whereIn('tipo', ['taller', 'cortador'])->name('admin.corte_confeccion.cartera.corte.vista');
+            Route::post('{tipo}/{id}/corte', 'corteConfirmar')->whereIn('tipo', ['taller', 'cortador'])->name('admin.corte_confeccion.cartera.corte.confirmar');
         });
 
         Route::controller(UsuarioRolController::class)->prefix('usuarios')->group(function () {

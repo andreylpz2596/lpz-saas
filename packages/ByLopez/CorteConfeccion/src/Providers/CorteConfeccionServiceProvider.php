@@ -2,7 +2,13 @@
 
 namespace ByLopez\CorteConfeccion\Providers;
 
+use ByLopez\CorteConfeccion\Comprobantes\ComprobanteLector;
+use ByLopez\CorteConfeccion\Comprobantes\FuenteOperacionesExistentes;
+use ByLopez\CorteConfeccion\Comprobantes\LectorClaudeVision;
+use ByLopez\CorteConfeccion\Comprobantes\LectorNoDisponible;
+use ByLopez\CorteConfeccion\Comprobantes\LectorTesseract;
 use ByLopez\CorteConfeccion\Console\Commands\DiagnosticarCatalogoCorte;
+use ByLopez\CorteConfeccion\Services\CarteraFuenteOperaciones;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -14,6 +20,20 @@ class CorteConfeccionServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../Config/menu.php', 'menu.admin');
         $this->mergeConfigFrom(__DIR__.'/../Config/acl.php', 'acl');
+        $this->mergeConfigFrom(__DIR__.'/../Config/comprobantes.php', 'corteconfeccion.comprobantes');
+
+        // Lectura asistida de comprobantes: sin credenciales o sin activar, el lector responde «no disponible».
+        $this->app->bind(ComprobanteLector::class, function () {
+            $config = (array) config('corteconfeccion.comprobantes');
+            $lector = match ($config['lector'] ?? 'tesseract') {
+                'anthropic' => new LectorClaudeVision($config),
+                'tesseract' => new LectorTesseract($config),
+                default => new LectorNoDisponible,
+            };
+
+            return $lector->disponible() ? $lector : new LectorNoDisponible;
+        });
+        $this->app->bind(FuenteOperacionesExistentes::class, CarteraFuenteOperaciones::class);
     }
 
     public function boot(): void

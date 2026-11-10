@@ -108,6 +108,8 @@
                             :aviso="tarifaGeneralAnterior"
                         ></v-referencias-tarifa>
 
+                        @include('corteconfeccion::admin.partials.cartera-resumen', ['carteraResumen' => \ByLopez\CorteConfeccion\Support\CarteraVista::resumenFicha($cortador)])
+
                         <div class="box-shadow min-w-0 overflow-hidden rounded bg-white p-4 dark:bg-gray-900">
                             <p class="text-base font-semibold leading-none text-gray-800 dark:text-white">
                                 Historial del cortador

@@ -2,6 +2,8 @@
 
 return [
     'menu' => [
+        'cartera' => 'Cartera',
+        'mi-cuenta' => 'Mi cuenta',
         'title' => 'Corte y Confeccion',
         'compras-tela' => 'Compras de tela',
         'proveedores-tela' => 'Proveedores de tela',
@@ -16,6 +18,13 @@ return [
     ],
 
     'acl' => [
+        'cartera' => 'Cartera de prestadores (ver cuentas)',
+        'cartera-registrar' => 'Registrar movimientos de cartera',
+        'cartera-prestamos' => 'Registrar préstamos y devoluciones',
+        'cartera-corte' => 'Hacer corte de cuentas',
+        'cartera-reversar' => 'Reversar movimientos y cortes',
+        'cartera-arranque' => 'Definir arranque y saldos iniciales',
+        'mi-cuenta' => 'Mi cuenta (prestador: solo consulta)',
         'title' => 'Corte y Confeccion',
         'compras-tela' => 'Compras de tela',
         'proveedores-tela' => 'Proveedores de tela',

@@ -235,6 +235,10 @@
             ])
         </div>
 
+        <div class="mt-4">
+            @include('corteconfeccion::admin.partials.cuenta-orden', ['cuentaOrden' => \ByLopez\CorteConfeccion\Support\CarteraVista::cuentaOrden($orden)])
+        </div>
+
         {{-- Navegacion por pestanas: una sola visible a la vez. Todos los
         paneles se renderizan (solo se ocultan) para conservar formularios,
         anclas y validaciones existentes. Los contadores salen de datos ya

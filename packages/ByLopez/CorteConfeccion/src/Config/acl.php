@@ -341,5 +341,55 @@ return [
             'admin.corte_confeccion.inventario_movimientos.show',
         ],
         'sort' => 8,
+    ], [
+        'key' => 'corte_confeccion.cartera',
+        'name' => 'corteconfeccion::app.acl.cartera',
+        'route' => [
+            'admin.corte_confeccion.cartera.index',
+            'admin.corte_confeccion.cartera.cuenta',
+            'admin.corte_confeccion.cartera.soporte',
+        ],
+        'sort' => 9,
+    ], [
+        'key' => 'corte_confeccion.cartera.registrar',
+        'name' => 'corteconfeccion::app.acl.cartera-registrar',
+        'route' => [
+            'admin.corte_confeccion.cartera.movimientos.store',
+            'admin.corte_confeccion.cartera.movimientos.aplicar',
+            'admin.corte_confeccion.cartera.aplicaciones.anular',
+            'admin.corte_confeccion.cartera.comprobantes.leer',
+        ],
+        'sort' => 1,
+    ], [
+        'key' => 'corte_confeccion.cartera.prestamos',
+        'name' => 'corteconfeccion::app.acl.cartera-prestamos',
+        'route' => 'admin.corte_confeccion.cartera.prestamos.store',
+        'sort' => 2,
+    ], [
+        'key' => 'corte_confeccion.cartera.corte',
+        'name' => 'corteconfeccion::app.acl.cartera-corte',
+        'route' => [
+            'admin.corte_confeccion.cartera.corte.vista',
+            'admin.corte_confeccion.cartera.corte.confirmar',
+        ],
+        'sort' => 3,
+    ], [
+        'key' => 'corte_confeccion.cartera.reversar',
+        'name' => 'corteconfeccion::app.acl.cartera-reversar',
+        'route' => [
+            'admin.corte_confeccion.cartera.movimientos.reversar',
+            'admin.corte_confeccion.cartera.corte.reversar',
+        ],
+        'sort' => 4,
+    ], [
+        'key' => 'corte_confeccion.cartera.arranque',
+        'name' => 'corteconfeccion::app.acl.cartera-arranque',
+        'route' => 'admin.corte_confeccion.cartera.arranque',
+        'sort' => 5,
+    ], [
+        'key' => 'corte_confeccion.mi_cuenta',
+        'name' => 'corteconfeccion::app.acl.mi-cuenta',
+        'route' => 'admin.corte_confeccion.cartera.mi_cuenta',
+        'sort' => 10,
     ],
 ];
