@@ -52,6 +52,8 @@ class VentasAsesorServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../Config/menu.php', 'menu.admin');
         $this->mergeConfigFrom(__DIR__.'/../Config/acl.php', 'acl');
+        // Configuracion > Ventas Asesor > Cotizaciones (datos de pago, condiciones y vigencia editables por el administrador).
+        $this->mergeConfigFrom(__DIR__.'/../Config/system.php', 'core');
 
         $this->app->register(EventServiceProvider::class);
 

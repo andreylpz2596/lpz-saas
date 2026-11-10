@@ -72,6 +72,13 @@ return [
         'sort' => 7,
         'icon' => '',
     ], [
+        // Cotizaciones: datos de pago, vigencia y condiciones del PDF (abre Configuracion > Ventas Asesor > Cotizaciones).
+        'key' => 'ventas_asesor.cotizaciones_datos',
+        'name' => 'ventasasesor::app.menu.cotizaciones-datos',
+        'route' => 'admin.ventas_asesor.nueva_venta.cotizaciones.datos',
+        'sort' => 8,
+        'icon' => '',
+    ], [
         'key' => 'ventas_asesor.pedidos.create',
         'name' => 'ventasasesor::app.menu.nueva-venta',
         'route' => 'admin.ventas_asesor.nueva_venta.pantalla',

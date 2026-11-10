@@ -96,6 +96,10 @@ return [
             'admin.ventas_asesor.nueva_venta.grupo.historial',
             // R2 (Doc. 23): advertencia de rentabilidad del propio borrador (sin costos para el asesor).
             'admin.ventas_asesor.nueva_venta.rentabilidad',
+            // Cotizaciones de la venta en curso (crear, historial y PDF): quien puede crear una venta puede cotizarla.
+            'admin.ventas_asesor.nueva_venta.cotizaciones.store',
+            'admin.ventas_asesor.nueva_venta.cotizaciones.index',
+            'admin.ventas_asesor.nueva_venta.cotizaciones.pdf',
             // D-58: autocomplete «Departamento — Municipio» del formulario de direccion.
             'admin.ventas_asesor.ubicaciones.buscar',
         ],
@@ -411,6 +415,16 @@ return [
             'admin.ventas_asesor.rentabilidad.estados_costo.store',
         ],
         'sort' => 2,
+    ], [
+        // Cotizaciones: acceso del administrador a los datos de pago del PDF. Solo es el ENLACE del menu: la pantalla real es
+        // Configuracion de Bagisto y exige su propia clave `configuration`. Sin asignar a ningun rol.
+        'key' => 'ventas_asesor.cotizaciones_datos',
+        'name' => 'ventasasesor::app.acl.cotizaciones-datos',
+        'route' => [
+            $inicio,
+            'admin.ventas_asesor.nueva_venta.cotizaciones.datos',
+        ],
+        'sort' => 12,
     ], [
         // Debe ser la ultima entrada: ver la regla 2 del encabezado.
         'key' => 'ventas_asesor',

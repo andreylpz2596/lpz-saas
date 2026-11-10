@@ -5,6 +5,7 @@ use ByLopez\VentasAsesor\Http\Controllers\Admin\CarteraClienteController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CarteraController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\ComisionesController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\ControlCostosController;
+use ByLopez\VentasAsesor\Http\Controllers\Admin\CotizacionController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CreditoClienteController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\GuiaPedidoController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\InicioController;
@@ -123,7 +124,13 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
             Route::get('productos/{producto}/matriz', [NuevaVentaController::class, 'matriz'])->name('productos.matriz');
             Route::get('matrices', [NuevaVentaController::class, 'matrices'])->name('matrices');
             Route::get('clientes/{cliente}/direcciones', [NuevaVentaController::class, 'direccionesCliente'])->name('clientes.direcciones');
+            // Cotizaciones: el PDF sale de la foto guardada; crear/listar son de UNA venta en curso.
+            // Enlace del menu hacia Configuracion > Ventas Asesor > Cotizaciones (la pantalla es la de Bagisto, con su propio ACL).
+            Route::get('cotizaciones/datos', [CotizacionController::class, 'datos'])->name('cotizaciones.datos');
+            Route::get('cotizaciones/{cotizacion}/pdf', [CotizacionController::class, 'pdf'])->whereNumber('cotizacion')->name('cotizaciones.pdf');
             Route::get('{borrador}', [NuevaVentaController::class, 'estado'])->name('estado');
+            Route::get('{borrador}/cotizaciones', [CotizacionController::class, 'index'])->whereNumber('borrador')->name('cotizaciones.index');
+            Route::post('{borrador}/cotizaciones', [CotizacionController::class, 'store'])->whereNumber('borrador')->name('cotizaciones.store');
             Route::post('{borrador}/tallas', [NuevaVentaController::class, 'aplicarTallas'])->name('tallas');
             Route::post('{borrador}/entrega', [NuevaVentaController::class, 'entrega'])->name('entrega');
             Route::post('{borrador}/domiciliario', [NuevaVentaController::class, 'domiciliario'])->name('domiciliario');

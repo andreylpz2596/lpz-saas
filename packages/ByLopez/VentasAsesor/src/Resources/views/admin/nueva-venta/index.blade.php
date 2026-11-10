@@ -13,6 +13,20 @@
     {{-- Boton «Ver tallas»: entrada al activarse (una vez, ~0.5 s) y micro-pulso al cambiar la seleccion. Nunca infinito. --}}
     @pushOnce('styles')
         <style>
+            /* Cotizacion: panel bajo «Confirmar venta». Tailwind no escanea ByLopez, por eso estas reglas son propias. */
+            .nv-cot { margin-top: 12px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+            .nv-cot-fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+            .nv-cot-num { font-weight: 700; }
+            .nv-cot-meta { margin-top: 2px; color: #6b7280; font-size: 12px; }
+            .nv-cot-acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+            .nv-cot-badge { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 11px; font-weight: 700; background: #dcfce7; color: #166534; }
+            .nv-cot-badge--vencida, .nv-cot-badge--reemplazada { background: #f3f4f6; color: #4b5563; }
+            .nv-cot-badge--convertida { background: #dbeafe; color: #1e40af; }
+            .nv-cot-error { margin-top: 6px; color: #b91c1c; font-size: 12px; }
+            .nv-cot-aviso { margin-top: 6px; border-radius: 6px; background: #fffbeb; color: #92400e; padding: 4px 8px; font-size: 12px; }
+            html.dark .nv-cot { border-color: #374151; }
+            html.dark .nv-cot-meta { color: #9ca3af; }
+
             @keyframes nv-cta-entrada {
                 0% { transform: scale(.92); box-shadow: 0 0 0 0 rgba(37, 99, 235, .45); }
                 60% { transform: scale(1.04); box-shadow: 0 0 0 6px rgba(37, 99, 235, .18); }
@@ -1682,6 +1696,47 @@
                                     ></span>
                                     CONFIRMAR VENTA
                                 </button>
+
+                                <!-- Cotizacion: PDF para el cliente. No crea pedido, no reserva stock; el domicilio se cobra por aparte. -->
+                                <button
+                                    type="button"
+                                    class="secondary-button mt-2 w-full justify-center py-2"
+                                    data-cotizar
+                                    :disabled="! puedeCotizar || cotizando"
+                                    @click="cotizar"
+                                >
+                                    <span
+                                        v-if="cotizando"
+                                        class="h-4 w-4 animate-spin rounded-full border-2 border-gray-500 border-t-transparent"
+                                    ></span>
+                                    Cotizar
+                                </button>
+
+                                <p v-if="! cotizacion" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                    Genera un PDF para enviar al cliente. No crea el pedido ni reserva inventario.
+                                </p>
+
+                                <div v-if="cotizacion" class="nv-cot" data-cotizacion-panel>
+                                    <div class="nv-cot-fila">
+                                        <span class="nv-cot-num">@{{ cotizacion.numero }}</span>
+                                        <span :class="'nv-cot-badge nv-cot-badge--' + cotizacion.estado">@{{ etiquetaEstadoCotizacion(cotizacion.estado) }}</span>
+                                    </div>
+
+                                    <p class="nv-cot-meta">
+                                        Total productos @{{ precio(cotizacion.total) }} · válida hasta @{{ fechaCotizacion(cotizacion.valida_hasta) }}
+                                    </p>
+
+                                    <p v-if="cotizacionDesactualizada" class="nv-cot-aviso">
+                                        La venta cambió después de esta cotización. Pulsa «Cotizar» para generar una nueva.
+                                    </p>
+
+                                    <div class="nv-cot-acciones">
+                                        <a :href="cotizacion.url_pdf" target="_blank" rel="noopener" class="secondary-button">Abrir PDF</a>
+                                        <button type="button" class="secondary-button" @click="copiarCotizacion">Copiar texto</button>
+                                    </div>
+                                </div>
+
+                                <p v-if="errorCotizacion" class="nv-cot-error" role="alert">@{{ errorCotizacion }}</p>
                             </template>
                         </div>
                     </div>
@@ -2368,6 +2423,10 @@
                         confirmacion: null,
                         errorGeneral: null,
 
+                        // Cotizacion de ESTA venta (foto del servidor; el PDF se abre siempre desde ella).
+                        cotizacion: null,
+                        cotizando: false,
+                        errorCotizacion: null,
 
                         // D10 V1: saldo a favor del cliente (solo informativo hasta que el administrador decide aplicarlo).
                         creditoCliente: null,
@@ -2510,6 +2569,24 @@
                             && this.estado.borrador.estado === 'activo'
                             && ! this.cargando.confirmar
                             && ! this.confirmacion;
+                    },
+
+                    /** Cotizar pide cliente y al menos una linea; el servidor lo vuelve a exigir. */
+                    puedeCotizar() {
+                        return this.ventaEditable && !! this.estado?.borrador?.cliente && (this.estado?.lineas?.length || 0) > 0;
+                    },
+
+                    /** El total cotizado es el de los productos: gran total del carrito menos el envio (se cobra por aparte). */
+                    totalProductosVenta() {
+                        const t = this.estado?.borrador?.totales;
+
+                        return t ? Number(t.grand_total) - Number(t.shipping_amount || 0) : null;
+                    },
+
+                    cotizacionDesactualizada() {
+                        return !! this.cotizacion
+                            && this.totalProductosVenta !== null
+                            && Math.abs(Number(this.cotizacion.total) - this.totalProductosVenta) > 0.5;
                     },
 
                     /** Entrega en vuelo: tipo/metodo de envio, domiciliario o direccion. */
@@ -4297,6 +4374,75 @@
                             .finally(() => { this.cargando.confirmar = false; });
                     },
 
+                    /**
+                     * Cotizar: el servidor guarda una foto (cliente, lineas, totales y datos de pago) y devuelve la misma si nada cambio.
+                     * No crea pedido ni reserva stock. El PDF se abre con un enlace (no con window.open tras la peticion: el navegador
+                     * lo bloquearia como ventana emergente).
+                     */
+                    cotizar() {
+                        if (this.cotizando || ! this.puedeCotizar) {
+                            return;
+                        }
+
+                        this.cotizando = true;
+                        this.errorCotizacion = null;
+
+                        this.$axios.post("{{ url(route('admin.ventas_asesor.nueva_venta.cotizaciones.store', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {})
+                            .then((response) => { this.cotizacion = response.data; })
+                            .catch((error) => {
+                                this.errorCotizacion = error?.response?.data?.mensaje || 'No se pudo generar la cotización. Intenta de nuevo.';
+                            })
+                            .finally(() => { this.cotizando = false; });
+                    },
+
+                    /** Al reanudar una venta se muestra su ultima cotizacion (la mas nueva), si existe. */
+                    cargarCotizacion() {
+                        const id = this.borradorId;
+
+                        this.$axios.get("{{ url(route('admin.ventas_asesor.nueva_venta.cotizaciones.index', ['borrador' => '__ID__'])) }}".replace('__ID__', id))
+                            .then((response) => {
+                                if (this.borradorId === id) {
+                                    this.cotizacion = response.data[0] || null;
+                                }
+                            })
+                            .catch(() => { /* informativo: sin cotizacion previa visible no se bloquea la venta */ });
+                    },
+
+                    copiarCotizacion() {
+                        const texto = this.cotizacion?.texto || '';
+                        const listo = () => this.$emitter.emit('add-flash', { type: 'success', message: 'Texto copiado. Pégalo en WhatsApp junto al PDF.' });
+                        const respaldo = () => {
+                            const area = document.createElement('textarea');
+                            area.value = texto;
+                            area.style.position = 'fixed';
+                            area.style.opacity = '0';
+                            document.body.appendChild(area);
+                            area.select();
+
+                            try {
+                                document.execCommand('copy') ? listo() : this.$emitter.emit('add-flash', { type: 'warning', message: 'No se pudo copiar el texto.' });
+                            } finally {
+                                document.body.removeChild(area);
+                            }
+                        };
+
+                        if (navigator.clipboard?.writeText) {
+                            navigator.clipboard.writeText(texto).then(listo).catch(respaldo);
+                        } else {
+                            respaldo();
+                        }
+                    },
+
+                    etiquetaEstadoCotizacion(estado) {
+                        return { vigente: 'Vigente', vencida: 'Vencida', convertida: 'Convertida en venta', reemplazada: 'Reemplazada' }[estado] || estado;
+                    },
+
+                    fechaCotizacion(fecha) {
+                        const [a, m, d] = String(fecha || '').split('-');
+
+                        return d ? `${d}/${m}/${a}` : '';
+                    },
+
                     /** GRP-01: abre la modal para cambiar (o restaurar) el grupo de ESTA venta. */
                     abrirModalGrupo(modo) {
                         if (! this.puedeCambiarGrupo || ! this.ventaEditable) {
@@ -4429,13 +4575,18 @@
                         this.formDireccion.abierto = false;
                         this._direccionesCargadasPara = null;
                         this.pago = null;
+                        this.cotizacion = null;
+                        this.errorCotizacion = null;
 
                         this.borradorId = borradorId;
                         this.$refs.drawerEnCurso.close();
                         this.refrescarEstado(true).then(() => { this.pago = this.estado?.pago || null; });
+                        this.cargarCotizacion();
                     },
 
                     reiniciar() {
+                        this.cotizacion = null;
+                        this.errorCotizacion = null;
                         this.tipoOperacion = 'venta_normal';
                         this.venderPara = '';
                         this.rentabilidad = null;

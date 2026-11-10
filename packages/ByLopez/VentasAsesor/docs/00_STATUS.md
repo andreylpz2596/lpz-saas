@@ -2,6 +2,11 @@
 
 Estado consolidado de las fases del módulo `ByLopez\VentasAsesor`.
 
+**2026-11-04 — Cotizaciones de una venta en curso (dev, sin commit, sin producción):** `30_COTIZACIONES.md`. PDF A4 con el estilo de la factura de
+Bagisto; foto congelada y versionada (no crea pedido ni reserva stock); el domicilio no entra en el total; datos de pago editables en
+Configuración › Ventas Asesor › Cotizaciones. Migración `2026_11_04_000001` aplicada solo en `lpz_saas_testing`. Pendiente: número de cuenta
+de Bancolombia, decisión de permiso propio y prueba manual en pantalla.
+
 **2026-11-03 — Comisiones claras, avance de la asesora, cuenta del asesor y comprobantes de abono (commits locales, sin push, sin despliegue):** `29_COMISIONES_AVANCE_CUENTA_COMPROBANTES.md`.
 **IMPLEMENTADO · PROBADO (testing):** panel por pedido con «Ver cálculo», tarjeta «Tu avance del mes» + simulador, comparativo en Asesores, cuenta del asesor y lectura de comprobantes (Com06 8/8, Com07 7/7, Com04, Com05, Asesor01, PagF y Fase05a verdes; Com03·COM03-1 falla igual que el 2026-10-29). **PROBADO EN DEMO:** capturas escritorio y móvil 390 px, claro/oscuro, sin scroll horizontal. **NO PROBADO:** dos procesos simultáneos sobre una misma operación, Safari/iPhone físico, flujo de abono con comprobante en la demo (sin liquidación con saldo). **PENDIENTE:** D3/D4/D5/D6/D10/D12; migración de soportes no aplicada en dev; la lectura depende de código de CorteConfeccion sin commit; la vista de administración hace ~15 consultas por pedido (límite de escala).
 
