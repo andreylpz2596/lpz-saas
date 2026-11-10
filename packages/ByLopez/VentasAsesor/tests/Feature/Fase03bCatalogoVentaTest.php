@@ -145,6 +145,17 @@ test('buscarProductos: encuentra el configurable por nombre y nunca devuelve var
         ->and($encontrados->pluck('productId')->intersect($this->configurable->variants()->pluck('id'))->all())->toBe([]);
 });
 
+test('buscarProductos por SKU del padre: las variantes (con product_flat.parent_id NULL, como en Bagisto 2.4) no se cuelan', function () {
+    $variantes = $this->configurable->variants()->pluck('id');
+    DB::table('products')->whereIn('id', $variantes)->get()->each(fn ($v) => expect($v->parent_id)->toBe($this->configurable->id));
+    expect(DB::table('product_flat')->whereIn('product_id', $variantes)->whereNotNull('parent_id')->count())->toBe(0);   // el indexador no la llena
+
+    $encontrados = collect($this->catalogo->buscarProductos($this->configurable->sku, 50));               // el SKU del padre está contenido en el de sus variantes
+
+    expect($encontrados->pluck('productId')->all())->toBe([$this->configurable->id])
+        ->and(count($this->catalogo->variantes($this->configurable->id, $this->cliente->id)))->toBe($variantes->count());
+});
+
 test('D-36/D-37: 100 pedidos con 30 vendibles → 30 para entrega inmediata; produccion DESCONOCIDA (null, nunca 0)', function () {
     $hijo = $this->configurable->variants()->first();
     f03b_stock($hijo, 30);

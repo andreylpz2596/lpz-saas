@@ -71,7 +71,7 @@ class CatalogoVentaService
             ->select(['product_id', 'type', 'sku', 'name'])
             ->where('channel', core()->getDefaultChannel()->code)
             ->where('locale', core()->getDefaultLocaleCodeFromDefaultChannel())
-            ->whereNull('parent_id')
+            ->whereIn('product_id', $this->productosSinPadre())
             ->whereIn('type', ['configurable', 'simple'])
             ->where('status', 1);
 
@@ -249,7 +249,7 @@ class CatalogoVentaService
             ->select(['product_id', 'type', 'sku', 'name'])
             ->where('channel', core()->getDefaultChannel()->code)
             ->where('locale', core()->getDefaultLocaleCodeFromDefaultChannel())
-            ->whereNull('parent_id')
+            ->whereIn('product_id', $this->productosSinPadre())
             ->whereIn('type', ['configurable', 'simple'])
             ->where('status', 1)
             ->whereIn('product_id', fn ($q) => $q->select('product_id')->from('product_categories')->whereIn('category_id', $categorias))
@@ -289,6 +289,17 @@ class CatalogoVentaService
 
                 return $colores->map(fn (ColorDeLinea $c) => $c->conDisponibilidad($disponibilidad[$c->productId]))->all();
             });
+    }
+
+    /**
+     * Subconsulta de productos de PRIMER NIVEL por `products.parent_id`, la fuente de verdad del vinculo padre-variante.
+     * `product_flat.parent_id` NO sirve: en Bagisto 2.4 el indexador Flat no la escribe (el importador y Configurable
+     * guardan el vinculo solo en `products`), asi que vale NULL tambien para las variantes y estas se colaban en la
+     * busqueda para luego ser rechazadas por productoVendible().
+     */
+    protected function productosSinPadre(): Closure
+    {
+        return fn ($q) => $q->select('id')->from('products')->whereNull('parent_id');
     }
 
     /** Variante por SKU EXACTO (hijo o simple), verificada contra su padre. */
