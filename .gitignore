@@ -42,3 +42,24 @@ skills-lock.json
 /vendor
 yarn.lock
 yarn-error.log
+
+# ByLopez: exportaciones reales de proveedores (99 Envíos, Cartera) y sus copias de prueba contienen DATOS PERSONALES.
+# Nunca al repositorio. Los ejemplos versionables deben ser sintéticos y en CSV (p. ej. envios_ejemplo_sintetico.csv).
+/packages/ByLopez/**/*.xlsx
+/packages/ByLopez/**/*.xls
+/packages/ByLopez/**/*.xlsm
+# Plantillas de tipos de cargue: solo ejemplos SINTETICOS (generadas por docs/plantillas/generar_plantillas.php).
+!/packages/ByLopez/Cargues/docs/plantillas/*.xlsx
+
+# ByLopez (C-01/C-02, 2026-11-09): datos personales y basura de entorno. Nunca al repositorio.
+# Exportaciones reales de proveedores/cartera en la raiz de docs/ y sus copias de prueba.
+/docs/*.xlsx
+/docs/*.xls
+/docs/pruebas_cargues/
+# Copias comprimidas del codigo y volcados de crash de Git Bash/Cygwin.
+*.rar
+*.stackdump
+# Evidencia con comprobantes de pago reales (OCR local): solo se versiona el LEEME de aviso.
+/packages/ByLopez/**/evidencia_*/lectura_local_*/*
+!/packages/ByLopez/**/evidencia_*/lectura_local_*/LEEME.md
+/packages/ByLopez/**/evaluacion_ocr_*.json
