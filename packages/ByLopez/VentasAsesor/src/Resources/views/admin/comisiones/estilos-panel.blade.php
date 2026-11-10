@@ -93,4 +93,27 @@
     .va-asesora__cifras dt { font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: #64748b; }
     .dark .va-asesora__cifras dt { color: #9ca3af; }
     .va-asesora__cifras dd { margin: 1px 0 0; font-size: 16px; font-weight: 700; }
+    /* Porcentaje de devolucion total por asesora: color + icono + texto (el color nunca va solo). */
+    .va-dev { display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; padding: 10px 12px; border: 1px solid #bbf7d0; border-radius: 10px; background: #f0fdf4; color: #14532d; }
+    .va-dev__icono { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 30px; height: 30px; border-radius: 999px; background: #dcfce7; }
+    .va-dev__titulo { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .85; }
+    .va-dev__valor { font-size: 20px; font-weight: 700; line-height: 1.2; }
+    .va-dev__estado { margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgba(255,255,255,.65); vertical-align: middle; }
+    .va-dev__detalle { margin-top: 2px; font-size: 12px; opacity: .9; }
+    .va-dev--aviso { border-color: #fde68a; background: #fffbeb; color: #78350f; }
+    .va-dev--aviso .va-dev__icono { background: #fef3c7; }
+    .va-dev--alerta { border-color: #fecaca; background: #fef2f2; color: #7f1d1d; }
+    .va-dev--alerta .va-dev__icono { background: #fee2e2; }
+    .va-dev--sin_datos { border-color: #e2e8f0; background: #f8fafc; color: #475569; }
+    .va-dev--sin_datos .va-dev__icono { background: #e2e8f0; }
+    .dark .va-dev { border-color: #14532d; background: #07210f; color: #bbf7d0; }
+    .dark .va-dev__icono { background: #14532d; }
+    .dark .va-dev__estado { background: rgba(0,0,0,.35); }
+    .dark .va-dev--aviso { border-color: #78350f; background: #1c1308; color: #fcd34d; }
+    .dark .va-dev--aviso .va-dev__icono { background: #78350f; }
+    .dark .va-dev--alerta { border-color: #7f1d1d; background: #240c0c; color: #fecaca; }
+    .dark .va-dev--alerta .va-dev__icono { background: #7f1d1d; }
+    .dark .va-dev--sin_datos { border-color: #1f2937; background: #111827; color: #cbd5e1; }
+    .dark .va-dev--sin_datos .va-dev__icono { background: #1f2937; }
 </style>
+

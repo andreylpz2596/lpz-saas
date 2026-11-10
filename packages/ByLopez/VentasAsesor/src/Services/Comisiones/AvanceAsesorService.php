@@ -23,13 +23,18 @@ use Illuminate\Support\Facades\DB;
  */
 class AvanceAsesorService
 {
+    /** Franjas VISUALES del porcentaje de devolucion total (guia de lectura, no una regla de negocio: no bloquea ni paga nada). */
+    public const DEVOLUCION_AVISO = 10;
+
+    public const DEVOLUCION_ALERTA = 25;
+
     public function __construct(
         protected UmbralMensualService $umbral,
         protected LiquidacionesComisionService $liquidaciones,
     ) {}
 
     /**
-     * @return array{asesor_id: int, mes: string, estado_umbral: string, umbral: ?int, computables: int, faltante: ?int, comisionables: int, avance: ?int, situacion: string, estimada: ?string, estimada_parcial: ?string, sin_calcular: int, despachadas: int, entregadas: int}
+     * @return array{devolucion: array{paquetes: int, devueltos: int, recibidos: int, por_recibir: int, porcentaje: ?float, nivel: string}, asesor_id: int, mes: string, estado_umbral: string, umbral: ?int, computables: int, faltante: ?int, comisionables: int, avance: ?int, situacion: string, estimada: ?string, estimada_parcial: ?string, sin_calcular: int, despachadas: int, entregadas: int}
      */
     public function deAsesor(int $asesorId, string $mes): array
     {
@@ -47,6 +52,7 @@ class AvanceAsesorService
         }
 
         [$despachadas, $entregadas] = $this->despachosYEntregas($lineas->pluck('order_id')->unique()->all(), $lineas->pluck('order_item_id')->all());
+        $devolucion = $this->devolucionTotal($lineas->pluck('order_id')->unique()->all(), $lineas->pluck('order_item_id')->all());
 
         return [
             'asesor_id' => $asesorId,
@@ -63,6 +69,7 @@ class AvanceAsesorService
             'sin_calcular' => $sinCalcular,
             'despachadas' => $despachadas,
             'entregadas' => $entregadas,
+            'devolucion' => $devolucion,
         ];
     }
 
@@ -105,6 +112,58 @@ class AvanceAsesorService
             $computables === $umbral => 'exacto',
             default => 'despues',
         };
+    }
+
+    /**
+     * Porcentaje de DEVOLUCION TOTAL de la asesora: paquetes (envios) con TODAS sus unidades devueltas sobre los paquetes despachados de sus
+     * pedidos del mes. La devolucion parcial no cuenta aqui (queda en el detalle del pedido). Una devolucion cuenta cuando la
+     * transportadora la devolvio (retorno confirmado); «recibidos» son los que Bodega ya recibio fisicamente y «por_recibir» los que vienen en camino.
+     * Es informacion: no cambia comisiones (la politica D-devolucion sigue sin aprobar).
+     *
+     * @param  list<int>  $orderIds
+     * @param  list<int>  $itemIds
+     * @return array{paquetes: int, devueltos: int, recibidos: int, por_recibir: int, porcentaje: ?float, nivel: string}
+     */
+    protected function devolucionTotal(array $orderIds, array $itemIds): array
+    {
+        $vacio = ['paquetes' => 0, 'devueltos' => 0, 'recibidos' => 0, 'por_recibir' => 0, 'porcentaje' => null, 'nivel' => 'sin_datos'];
+
+        if ($orderIds === []) {
+            return $vacio;
+        }
+
+        $enviadas = DB::table('shipment_items as si')->join('shipments as s', 's.id', '=', 'si.shipment_id')
+            ->whereIn('s.order_id', $orderIds)->whereIn('si.order_item_id', $itemIds)
+            ->selectRaw('si.shipment_id, SUM(si.qty) as q')->groupBy('si.shipment_id')->pluck('q', 'shipment_id')->map(fn ($q) => (int) $q)->all();
+
+        if ($enviadas === []) {
+            return $vacio;
+        }
+
+        $devueltas = DB::table('bylopez_lg_retorno_items as ri')->join('bylopez_lg_retornos as r', 'r.id', '=', 'ri.retorno_id')
+            ->where('r.estado', 'confirmado')->whereIn('r.shipment_id', array_keys($enviadas))
+            ->selectRaw('r.shipment_id, SUM(ri.cantidad) as q')->groupBy('r.shipment_id')->pluck('q', 'shipment_id')->map(fn ($q) => (int) $q)->all();
+        $recibidas = DB::table('bylopez_lg_recepcion_devolucion_items as i')->join('bylopez_lg_recepciones_devolucion as r', 'r.id', '=', 'i.recepcion_id')
+            ->where('r.estado', 'confirmado')->whereIn('r.shipment_id', array_keys($enviadas))
+            ->selectRaw('r.shipment_id, SUM(i.recibidas) as q')->groupBy('r.shipment_id')->pluck('q', 'shipment_id')->map(fn ($q) => (int) $q)->all();
+
+        $totales = array_filter($enviadas, fn (int $q, int $envio) => $q > 0 && ($devueltas[$envio] ?? 0) >= $q, ARRAY_FILTER_USE_BOTH);
+        $recibidos = count(array_filter($totales, fn (int $q, int $envio) => ($recibidas[$envio] ?? 0) >= ($devueltas[$envio] ?? 0), ARRAY_FILTER_USE_BOTH));
+        $paquetes = count($enviadas);
+        $pct = round(count($totales) * 100 / $paquetes, 1);
+
+        return [
+            'paquetes' => $paquetes,
+            'devueltos' => count($totales),
+            'recibidos' => $recibidos,
+            'por_recibir' => count($totales) - $recibidos,
+            'porcentaje' => $pct,
+            'nivel' => match (true) {
+                $pct >= self::DEVOLUCION_ALERTA => 'alerta',
+                $pct >= self::DEVOLUCION_AVISO => 'aviso',
+                default => 'ok',
+            },
+        ];
     }
 
     /**

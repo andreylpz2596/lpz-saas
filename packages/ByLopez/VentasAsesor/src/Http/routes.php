@@ -81,27 +81,27 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
         Route::prefix('comisiones')->name('admin.ventas_asesor.comisiones.')->group(function () {
             Route::get('', [ComisionesController::class, 'index'])->name('index');
             Route::get('mias', [ComisionesController::class, 'mias'])->name('mias');
+            // «Simular próxima venta»: solo lectura (no crea pedidos ni guarda movimientos).
+            Route::post('simular', [ComisionesController::class, 'simular'])->name('simular');
             Route::post('evaluar', [ComisionesController::class, 'evaluar'])->name('evaluar');
             Route::post('acuerdos/{asesor}', [ComisionesController::class, 'guardarAcuerdo'])->whereNumber('asesor')->name('acuerdos.store');
             Route::post('liquidaciones', [ComisionesController::class, 'crearLiquidacion'])->name('liquidaciones.store');
             Route::post('liquidaciones/{liquidacion}/aprobar', [ComisionesController::class, 'aprobarLiquidacion'])->whereNumber('liquidacion')->name('liquidaciones.aprobar');
             Route::post('liquidaciones/{liquidacion}/anular', [ComisionesController::class, 'anularLiquidacion'])->whereNumber('liquidacion')->name('liquidaciones.anular');
             Route::post('liquidaciones/{liquidacion}/abonos', [ComisionesController::class, 'registrarAbono'])->whereNumber('liquidacion')->name('abonos.store');
+            // Lectura asistida de comprobantes: cargar+leer (NO registra nada) y ver el archivo cargado antes de confirmar el abono.
+            Route::post('liquidaciones/{liquidacion}/soportes', [ComisionesController::class, 'leerSoporte'])->whereNumber('liquidacion')->name('soportes.leer');
+            Route::get('soportes/{soporte}', [ComisionesController::class, 'verSoporte'])->whereNumber('soporte')->name('soportes.ver');
             Route::post('abonos/{abono}/revertir', [ComisionesController::class, 'revertirAbono'])->whereNumber('abono')->name('abonos.revertir');
             Route::get('abonos/{abono}/comprobante', [ComisionesController::class, 'comprobante'])->whereNumber('abono')->name('abonos.comprobante');
             Route::post('ajustes', [ComisionesController::class, 'crearAjuste'])->name('ajustes.store');
             Route::post('ajustes/{ajuste}/resolver', [ComisionesController::class, 'resolverAjuste'])->whereNumber('ajuste')->name('ajustes.resolver');
-            // «Simular próxima venta»: solo lectura (no crea pedidos ni guarda movimientos).
-            Route::post('simular', [ComisionesController::class, 'simular'])->name('simular');
             // Doc. 23 §10.3: resolver una incidencia («mantener»). Misma clave que aprobar liquidaciones y ajustes.
             Route::post('incidencias/{incidencia}/resolver', [ComisionesController::class, 'resolverIncidencia'])->whereNumber('incidencia')->name('incidencias.resolver');
         });
 
         // Doc. 23 (R1/R4): Rentabilidad (diagnostico, configuracion y panel mensual). Solo administracion.
         Route::prefix('rentabilidad')->name('admin.ventas_asesor.rentabilidad.')->group(function () {
-            // Lectura asistida de comprobantes: cargar+leer (NO registra nada) y ver el archivo cargado antes de confirmar el abono.
-            Route::post('liquidaciones/{liquidacion}/soportes', [ComisionesController::class, 'leerSoporte'])->whereNumber('liquidacion')->name('soportes.leer');
-            Route::get('soportes/{soporte}', [ComisionesController::class, 'verSoporte'])->whereNumber('soporte')->name('soportes.ver');
             Route::get('', [RentabilidadController::class, 'index'])->name('index');
             Route::post('politicas', [RentabilidadController::class, 'guardarPolitica'])->name('politicas.store');
             Route::post('costos-directos', [RentabilidadController::class, 'guardarCostoDirecto'])->name('costos_directos.store');

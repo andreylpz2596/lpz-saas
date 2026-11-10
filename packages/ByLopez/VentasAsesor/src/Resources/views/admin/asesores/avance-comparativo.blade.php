@@ -53,6 +53,8 @@
                         </div>
                         <div><dt>@lang('ventasasesor::comisiones.panel.saldo-aprobado')</dt><dd data-cifra="saldo-aprobado">{{ $dineroA($c['saldo_aprobado']) }}</dd></div>
                     </dl>
+
+                    @include('ventasasesor::admin.asesores.devolucion', ['devolucion' => $c['devolucion']])
                 </article>
             @endforeach
         </div>

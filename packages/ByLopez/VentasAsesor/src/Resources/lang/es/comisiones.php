@@ -399,6 +399,17 @@ return [
     ],
 
     /*
+     * Devolucion TOTAL por asesora (informativa): paquetes devueltos completos sobre paquetes despachados del mes.
+     */
+    'devolucion' => [
+        'titulo' => 'Devoluciones totales',
+        'detalle' => ':devueltos de :paquetes paquetes despachados volvieron completos',
+        'por_recibir' => ':n por recibir en bodega',
+        'sin_envios' => 'Aún no hay paquetes despachados este mes',
+        'nivel' => ['ok' => 'Bajo control', 'aviso' => 'Atención', 'alerta' => 'Alto', 'sin_datos' => 'Sin datos'],
+    ],
+
+    /*
      * Panel de comisiones (jornada 2026-11-02): avance de la asesora, situacion por pedido y motivos en lenguaje comprensible.
      * `corto` = lo que se ve junto al pedido; `motivos.*` (arriba) = la explicacion completa. Ninguno nombra costos ni margenes.
      */

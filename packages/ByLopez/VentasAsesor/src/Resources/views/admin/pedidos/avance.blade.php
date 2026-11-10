@@ -51,6 +51,8 @@
         @endif
     </dl>
 
+    @include('ventasasesor::admin.asesores.devolucion', ['devolucion' => $avance['devolucion']])
+
     @if ($verEstimacion && $sit === 'despues')
         <p class="va-avance__nota">
             @if ($avance['estimada'] !== null)

@@ -397,6 +397,15 @@ return [
         'politicas' => 'Algunos bloqueos esperan una decisión de administración (por ejemplo, un pedido que cruza el umbral o una devolución). Mientras no se apruebe, ese importe no se habilita.',
     ],
 
+    /* TOTAL returns per advisor (informational): packages returned in full over packages shipped this month. */
+    'devolucion' => [
+        'titulo' => 'Total returns',
+        'detalle' => ':devueltos of :paquetes shipped packages came back in full',
+        'por_recibir' => ':n still to be received at the warehouse',
+        'sin_envios' => 'No packages shipped this month yet',
+        'nivel' => ['ok' => 'Under control', 'aviso' => 'Watch', 'alerta' => 'High', 'sin_datos' => 'No data'],
+    ],
+
     /* Commission panel (2026-11-02): advisor progress, per-order status and plain-language reasons. None of them mentions costs or margins. */
     'avance' => [
         'titulo' => 'Your progress this month',
