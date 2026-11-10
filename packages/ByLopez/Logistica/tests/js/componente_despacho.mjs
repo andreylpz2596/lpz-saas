@@ -601,6 +601,10 @@ function contexto(lineas, extra = {}) {
     // PDF: la firma se comprueba en el navegador con la misma regla del servidor (BOM/espacios si; otro prefijo no).
     const lecturas = {
         valido: '%PDF-1.4', bom: '\xEF\xBB\xBF%PDF-1.4', espacios: '  \r\n%PDF-1.7', html: '<html>%PDF-</html>', gif: 'GIF89a%PDF-1.4',
+        // Descarga con la respuesta HTTP cruda delante: se acepta (el servidor la descarta); sin linea en blanco o con otro estado, no.
+        http: 'HTTP/1.0 200 OK\r\nCache-Control: no-cache\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.4',
+        http404: 'HTTP/1.0 404 Not Found\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.4',
+        httpSinBlanco: 'HTTP/1.0 200 OK\r\nContent-Type: application/pdf\r\n%PDF-1.4',
     };
     for (const [clave, contenido] of Object.entries(lecturas)) {
         globalThis.FileReader = class { readAsBinaryString() { this.result = contenido; this.onload(); } };
@@ -610,7 +614,7 @@ function contexto(lineas, extra = {}) {
 
         p.alElegirPdf({ target: campo });
 
-        if (['valido', 'bom', 'espacios'].includes(clave)) {
+        if (['valido', 'bom', 'espacios', 'http'].includes(clave)) {
             assert.equal(p.archivo, archivo, clave + ' se acepta');
             assert.equal(p.pdfFirma, 'ok');
         } else {

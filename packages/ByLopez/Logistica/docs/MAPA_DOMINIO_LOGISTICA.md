@@ -52,6 +52,7 @@ Regla: **nunca** se infiere «entregado» de `orders.status`, de la existencia d
 | `supervisor_manual` | Quien registra tiene `logistica.entregas.anular` (admin / supervisión) |
 | `bodega_manual` | El resto (Bodega) |
 | `integracion_transportadora` | **Reservada.** Se rechaza hasta que exista la integración (99envíos es radar) |
+| `reporte_proveedor` | (2026-11-02) Hecho **reportado por 99 Envíos** en el cargue «Envíos completos» v3 y registrado por el administrador que creó la carga: entrega + validación («Entregada») o retorno («Devolución ratificada»), con evidencia (estado, fecha, cargue, fila, guía). Solo la usa la extensión del cargue; el panel nunca la elige (`FuentePanel`). Ver `Cargues/docs/16` §15 |
 
 Un retorno nunca usa `recogida_bodega`.
 

@@ -835,6 +835,7 @@ return [
         'supervisor_manual' => 'Supervisión (manual)',
         'recogida_bodega' => 'Retiro en bodega',
         'integracion_transportadora' => 'Integración con transportadora',
+        'reporte_proveedor' => 'Reporte de 99 Envíos (cargue)',
     ],
 
     'transportadoras' => [
@@ -1114,8 +1115,8 @@ return [
         'recepcion_motivo_requerido' => 'Indica el motivo de las unidades con novedad o faltantes.',
         'retorno_con_recepcion' => 'No se puede anular la devolución porque ya tiene una recepción en Bodega. Anula primero la recepción.',
         'recepcion_ya_reingresada' => 'No se puede anular esta recepción porque sus unidades aptas ya fueron reintegradas al inventario.',
-        'reingreso_fallido' => 'No se pudo reintegrar el inventario (:causa). La recepción no se guardó.',
         'recepcion_con_credito_consumido' => 'No se puede anular esta recepción: existe crédito originado por este pedido que ya fue aplicado o reembolsado ($ :usado usados de $ :generado generados). Reversa primero esa aplicación.',
+        'reingreso_fallido' => 'No se pudo reintegrar el inventario (:causa). La recepción no se guardó.',
         'validacion_ya_registrada' => 'Esta entrega ya fue validada.',
         'validacion_sin_entregas' => 'No hay unidades entregadas en este envío: no hay nada que validar ni cobrar.',
         'validacion_con_pendientes' => 'Aún hay unidades pendientes en este envío. Regístralas como entregadas o devueltas antes de validar.',

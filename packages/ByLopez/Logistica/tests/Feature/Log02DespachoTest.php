@@ -466,3 +466,39 @@ test('DSP-5b PDF validos con BOM/espacios/saltos de linea antes de la firma se a
         ->and($inspeccionar('GIF89a%PDF-1.4'))->toBe(Invalida::ARCHIVO_NO_PDF)
         ->and($inspeccionar(''))->toBe(Invalida::ARCHIVO_INVALIDO);
 });
+
+test('DSP-5c PDF con la respuesta HTTP cruda delante (descarga de transportadora): se acepta, se guarda el PDF LIMPIO y cualquier otro preambulo se rechaza', function () {
+    $e = log2_pedido(1);
+    $bodega = log2_bodega();
+    $archivos = app(GuiaArchivoService::class);
+    $cuerpo = "%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n";
+    $http = "HTTP/1.0 200 OK\r\nCache-Control:       no-cache, private\r\nContent-Disposition: inline; filename=\"guia.pdf\"\r\nContent-Type:        application/pdf\r\nDate: Tue, 03 Nov 2026 01:17:08 GMT\r\n\r\n";
+    $inspeccionar = fn (string $contenido) => log2_error(fn () => $archivos->inspeccionar(UploadedFile::fake()->createWithContent('guia.pdf', $contenido)));
+
+    expect($inspeccionar($http.$cuerpo))->toBeNull()
+        ->and($inspeccionar(str_replace("\r\n", "\n", $http).$cuerpo))->toBeNull();
+
+    // Hash, tamano y offset son los del PDF limpio (el mismo PDF con o sin cabecera es el MISMO documento).
+    $meta = $archivos->inspeccionar(UploadedFile::fake()->createWithContent('guia.pdf', $http.$cuerpo));
+
+    expect($meta['offset'])->toBe(strlen($http))
+        ->and($meta['tamano'])->toBe(strlen($cuerpo))
+        ->and($meta['sha256'])->toBe(hash('sha256', $cuerpo))
+        ->and($meta['mime'])->toBe('application/pdf');
+
+    // Inseguros: no es una respuesta 200, declara otro tipo, le falta la linea en blanco, lleva basura o el cuerpo no es PDF.
+    expect($inspeccionar(str_replace('200 OK', '404 Not Found', $http).$cuerpo))->toBe(Invalida::ARCHIVO_NO_PDF)
+        ->and($inspeccionar(str_replace('application/pdf', 'text/html', $http).$cuerpo))->toBe(Invalida::ARCHIVO_NO_PDF)
+        ->and($inspeccionar(rtrim($http, "\r\n")."\r\n".$cuerpo))->toBe(Invalida::ARCHIVO_NO_PDF)
+        ->and($inspeccionar("basura\r\n\r\n".$cuerpo))->toBe(Invalida::ARCHIVO_NO_PDF)
+        ->and($inspeccionar($http.'<html><script>alert(1)</script></html>'))->toBe(Invalida::ARCHIVO_NO_PDF)
+        ->and($inspeccionar($http.'GIF89a%PDF-1.4'))->toBe(Invalida::ARCHIVO_NO_PDF);
+
+    // Despachar con esa descarga: el archivo guardado en disco es el PDF limpio, sin la cabecera, y servirlo da un PDF valido.
+    $guia = app(DespachoService::class)->despachar($bodega, log2_s($e, ['archivo' => UploadedFile::fake()->createWithContent('guia.pdf', $http.$cuerpo)]))->guia;
+    $v = $guia->archivoVigente()->first();
+
+    expect(Storage::disk('private')->get($v->ruta))->toBe($cuerpo)
+        ->and($v->sha256)->toBe(hash('sha256', $cuerpo))
+        ->and($v->tamano_bytes)->toBe(strlen($cuerpo));
+});

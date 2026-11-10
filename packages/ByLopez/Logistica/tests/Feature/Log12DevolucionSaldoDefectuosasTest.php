@@ -15,6 +15,7 @@ use ByLopez\VentasAsesor\Models\Pago;
 use ByLopez\VentasAsesor\Services\Cartera\CarteraConsultaService;
 use ByLopez\VentasAsesor\Services\Cartera\ConfirmarPagoService;
 use ByLopez\VentasAsesor\Services\Cartera\RegistrarPagoService;
+use ByLopez\VentasAsesor\Support\Pedidos\EstadoPagoPedido;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -308,11 +309,11 @@ test('CT-01 devolucion total sin pago: estado operativo «devolucion total», sa
 
     // Registrada pero NO recibida: Cartera sigue exigiendo todo y el estado de pago es «pendiente».
     expect(c5_cartera($e)->saldo)->toBe(100000.0)
-        ->and(\ByLopez\VentasAsesor\Support\Pedidos\EstadoPagoPedido::desdeCartera(c5_cartera($e))[0])->toBe('pendiente');
+        ->and(EstadoPagoPedido::desdeCartera(c5_cartera($e))[0])->toBe('pendiente');
 
     ct_recibir_todo($e);
     $c = c5_cartera($e);
-    [$estado, $saldo] = \ByLopez\VentasAsesor\Support\Pedidos\EstadoPagoPedido::desdeCartera($c);
+    [$estado, $saldo] = EstadoPagoPedido::desdeCartera($c);
 
     expect($c->total)->toBe(100000.0)
         ->and($c->devuelto)->toBe(100000.0)
@@ -340,7 +341,7 @@ test('CT-02 devolucion total ya pagada: saldo por cobrar $0, saldo a favor $100.
     expect($c->saldo)->toBe(0.0)                         // nunca deuda negativa
         ->and($c->saldoAFavor)->toBe(100000.0)
         ->and($c->devolucionTotal())->toBeTrue()
-        ->and(\ByLopez\VentasAsesor\Support\Pedidos\EstadoPagoPedido::desdeCartera($c)[0])->toBe('pagado')
+        ->and(EstadoPagoPedido::desdeCartera($c)[0])->toBe('pagado')
         ->and($c->toArray()['devolucion_total'])->toBeTrue();
 
     ct_sin_efectos_nativos($e, $antes);

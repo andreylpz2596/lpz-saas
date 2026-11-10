@@ -35,6 +35,16 @@ class GuiaArchivoService
     /** Bytes iniciales que se leen para comprobar la firma `%PDF-`. */
     public const VENTANA_FIRMA = 1024;
 
+    /** Bytes iniciales que se leen para reconocer un preambulo HTTP guardado delante del PDF. */
+    private const VENTANA_PREAMBULO = 16384;
+
+    /**
+     * Algunas descargas de transportadoras (p. ej. 99 Envios) guardan la RESPUESTA HTTP CRUDA: una cabecera `HTTP/1.x 200 OK`, de 1 a 30 lineas
+     * `Nombre: valor` y una linea en blanco, pegadas a `%PDF-`. Solo ese preambulo, estrictamente formado, se tolera y se descarta; se valida y se
+     * guarda el PDF limpio. Cualquier otro prefijo sigue rechazandose.
+     */
+    private const PREAMBULO_HTTP = '/\A(?:\xEF\xBB\xBF)?HTTP\/\d(?:\.\d)? 200[^\r\n]*\r?\n(?:[A-Za-z0-9-]{1,60}:[^\r\n]{0,400}\r?\n){1,30}\r?\n(?=%PDF-)/';
+
     public function __construct(
         protected AutorizacionLogistica $autorizacion,
         protected AccesoGuiaPedido $acceso,
@@ -43,7 +53,7 @@ class GuiaArchivoService
     /**
      * Validacion previa (sin tocar disco ni base).
      *
-     * @return array{tamano: int, sha256: string, mime: string, nombre: ?string}
+     * @return array{tamano: int, sha256: string, mime: string, nombre: ?string, offset: int}
      */
     public function inspeccionar(UploadedFile $archivo): array
     {
@@ -71,15 +81,31 @@ class GuiaArchivoService
         // transportadoras: BOM UTF-8, espacios o saltos de linea. Cualquier otro prefijo (HTML, binarios, imagenes con un
         // `%PDF-` incrustado) se rechaza: libmagic por si solo es mas laxo y NO basta. El tipo detectado tambien es obligatorio.
         $inicio = (string) file_get_contents($ruta, false, null, 0, self::VENTANA_FIRMA);
-        $mime = (string) (new \finfo(FILEINFO_MIME_TYPE))->file($ruta);
+        $offset = 0;
 
-        if (preg_match('/\A(?:\xEF\xBB\xBF)?[\t\n\r\f ]*%PDF-/', $inicio) !== 1 || $mime !== 'application/pdf') {
+        if (preg_match('/\A(?:\xEF\xBB\xBF)?[\t\n\r\f ]*%PDF-/', $inicio) !== 1) {
+            // Respuesta HTTP cruda delante del PDF: se descarta SOLO ese preambulo y se valida lo que queda.
+            $inicio = (string) file_get_contents($ruta, false, null, 0, self::VENTANA_PREAMBULO);
+
+            if (preg_match(self::PREAMBULO_HTTP, $inicio, $m) !== 1 || ! $this->preambuloDeclaraPdf($m[0])) {
+                throw new Invalida(Invalida::ARCHIVO_NO_PDF);
+            }
+
+            $offset = strlen($m[0]);
+        }
+
+        $contenido = $offset === 0 ? null : (string) file_get_contents($ruta, false, null, $offset);
+        $detector = new \finfo(FILEINFO_MIME_TYPE);
+        $mime = (string) ($contenido === null ? $detector->file($ruta) : $detector->buffer($contenido));
+
+        if ($mime !== 'application/pdf') {
             throw new Invalida(Invalida::ARCHIVO_NO_PDF);
         }
 
         return [
-            'tamano' => $tamano,
-            'sha256' => hash_file('sha256', $ruta),
+            'offset' => $offset,
+            'tamano' => $contenido === null ? $tamano : strlen($contenido),
+            'sha256' => $contenido === null ? hash_file('sha256', $ruta) : hash('sha256', $contenido),
             'mime' => $mime,
             'nombre' => $archivo->getClientOriginalName() === '' ? null : mb_substr(basename($archivo->getClientOriginalName()), 0, 191),
         ];
@@ -131,14 +157,22 @@ class GuiaArchivoService
      * Escribe el archivo y crea la version. Debe llamarse DENTRO de una transaccion con la guia bloqueada. Si el
      * llamador revierte, es el responsable de borrar `$nuevo->ruta` del disco.
      *
-     * @param  array{tamano: int, sha256: string, mime: string, nombre: ?string}|null  $meta
+     * @param  array{tamano: int, sha256: string, mime: string, nombre: ?string, offset?: int}|null  $meta
      */
     public function almacenar(Guia $guia, UploadedFile $archivo, ?array $meta, OrigenArchivoGuia $origen, ?Admin $actor, ?string $motivo = null): GuiaArchivo
     {
         $meta ??= $this->inspeccionar($archivo);
 
         $directorio = 'logistica/guias/'.now()->format('Y/m');
-        $ruta = Storage::disk(self::DISCO)->putFileAs($directorio, $archivo, Str::uuid().'.pdf');
+        $nombreDisco = Str::uuid().'.pdf';
+
+        // Con preambulo HTTP se guarda el PDF limpio (lo ya validado), nunca los bytes originales.
+        if (($meta['offset'] ?? 0) > 0) {
+            $contenido = (string) file_get_contents((string) $archivo->getRealPath(), false, null, (int) $meta['offset']);
+            $ruta = $contenido !== '' && Storage::disk(self::DISCO)->put($directorio.'/'.$nombreDisco, $contenido) ? $directorio.'/'.$nombreDisco : false;
+        } else {
+            $ruta = Storage::disk(self::DISCO)->putFileAs($directorio, $archivo, $nombreDisco);
+        }
 
         if ($ruta === false) {
             throw new Invalida(Invalida::ARCHIVO_NO_RECIBIDO, ['motivo' => 'no_se_pudo_guardar']);
@@ -171,6 +205,16 @@ class GuiaArchivoService
 
             throw $e;
         }
+    }
+
+    /** Si el preambulo trae `Content-Type`, debe ser PDF; sin esa cabecera se confia en el tipo detectado del contenido. */
+    private function preambuloDeclaraPdf(string $preambulo): bool
+    {
+        if (preg_match('/^Content-Type:\s*([^\r\n;]+)/mi', $preambulo, $t) !== 1) {
+            return true;
+        }
+
+        return strtolower(trim($t[1])) === 'application/pdf';
     }
 
     /**

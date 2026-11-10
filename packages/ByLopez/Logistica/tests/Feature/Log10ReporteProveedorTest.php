@@ -1,5 +1,6 @@
 <?php
 
+use ByLopez\Logistica\Exceptions\OperacionLogisticaInvalidaException;
 use ByLopez\Logistica\Services\Entregas\ConsultaEntregaService;
 use ByLopez\Logistica\Services\Entregas\ContextoEntregaService;
 use ByLopez\Logistica\Services\Entregas\ReporteProveedorService;
@@ -116,7 +117,7 @@ test('el drawer (contexto) trae el reporte con la transportadora efectiva y el l
 
     // Sin la clave de Entregas no se ve nada (Cargues no se concede por ver Logística, y tampoco al reves).
     $sin = f03b_admin('custom', ['logistica']);
-    expect(fn () => app(ContextoEntregaService::class)->paraEnvio($e, $sin))->toThrow(\ByLopez\Logistica\Exceptions\OperacionLogisticaInvalidaException::class);
+    expect(fn () => app(ContextoEntregaService::class)->paraEnvio($e, $sin))->toThrow(OperacionLogisticaInvalidaException::class);
 });
 
 test('sin reporte el drawer lo dice: reporte_proveedor es null y la vista muestra «Sin reporte de 99 Envíos»', function () {
@@ -128,4 +129,3 @@ test('sin reporte el drawer lo dice: reporte_proveedor es null y la vista muestr
     test()->actingAs($admin, 'admin')->get(route('admin.logistica.entregas.index', ['estado' => 'todos', 'q' => 'LGRP0040']))
         ->assertOk()->assertSee('data-reporte-proveedor="sin-reporte"', false)->assertSee('Sin reporte de 99 Envíos');
 });
-

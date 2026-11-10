@@ -913,6 +913,9 @@
     <script type="module">
         const LIMITE_PDF = 5 * 1024 * 1024;
 
+        // Misma regla que GuiaArchivoService::PREAMBULO_HTTP (cabecera HTTP 200 + lineas `Nombre: valor` + linea en blanco, pegada a `%PDF-`).
+        const PREAMBULO_HTTP_PDF = /^(?:\xEF\xBB\xBF)?HTTP\/\d(?:\.\d)? 200[^\r\n]*\r?\n(?:[A-Za-z0-9-]{1,60}:[^\r\n]{0,400}\r?\n){1,30}\r?\n%PDF-/;
+
         const guardarPreferencia = (clave, valor) => { try { window.localStorage.setItem('logistica.' + clave, valor || ''); } catch (e) {} };
         const olvidarPreferencia = (clave) => { try { window.localStorage.removeItem('logistica.' + clave); } catch (e) {} };
         const leerPreferencia = (clave) => { try { return window.localStorage.getItem('logistica.' + clave) || ''; } catch (e) { return ''; } };
@@ -1799,7 +1802,8 @@
                             return;
                         }
 
-                        if (/^(?:\xEF\xBB\xBF)?[\t\n\r\f ]*%PDF-/.test(String(lector.result))) {
+                        // Tambien se admite el preambulo de una respuesta HTTP guardada delante del PDF (el servidor lo descarta y guarda el PDF limpio).
+                        if (/^(?:\xEF\xBB\xBF)?[\t\n\r\f ]*%PDF-/.test(String(lector.result)) || PREAMBULO_HTTP_PDF.test(String(lector.result))) {
                             this.pdfFirma = 'ok';
 
                             return;
@@ -1814,7 +1818,7 @@
                     };
 
                     lector.onerror = () => { this.pdfFirma = 'ok'; };
-                    lector.readAsBinaryString(archivo.slice(0, 1024));
+                    lector.readAsBinaryString(archivo.slice(0, 16384));
                 },
 
                 quitarPdf() {
