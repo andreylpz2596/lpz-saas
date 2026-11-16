@@ -1,0 +1,38 @@
+{
+    "tabla": "bylopez_cgi_inventario_conteo",
+    "acciones": [
+        "actualizar_cantidades"
+    ],
+    "extension": "inventario_conteo",
+    "campos": [
+        { "nombre": "id_producto", "etiqueta": "ID del producto", "tipo": "entero", "nulo": true, "vacio": "nulo",
+          "sinonimos": ["ID", "Id", "Id producto", "ID producto", "ID de la variante"] },
+        { "nombre": "sku", "etiqueta": "SKU", "tipo": "identificador", "longitud": 191, "nulo": true, "vacio": "nulo",
+          "sinonimos": ["SKU de la variante", "SKU variante"] },
+        { "nombre": "nombre", "etiqueta": "Nombre (referencia)", "tipo": "texto", "longitud": 191, "nulo": true, "vacio": "nulo",
+          "sinonimos": ["Nombre", "Producto"] },
+        { "nombre": "tipo", "etiqueta": "Tipo (referencia)", "tipo": "texto", "longitud": 30, "nulo": true, "vacio": "nulo",
+          "sinonimos": ["Tipo"] },
+        { "nombre": "cantidad", "etiqueta": "Cantidad contada", "tipo": "entero", "nulo": true, "vacio": "nulo",
+          "sinonimos": ["Cantidad", "Existencias", "Stock", "Inventario"] }
+    ],
+    "derivados": [
+        { "nombre": "fila_plan", "etiqueta": "Plan de la fila", "tipo": "texto", "longitud": 20 },
+        { "nombre": "bloqueo_codigo", "etiqueta": "Motivo de bloqueo", "tipo": "identificador", "longitud": 60 },
+        { "nombre": "bloqueo_mensaje", "etiqueta": "Detalle del bloqueo", "tipo": "texto", "longitud": 500 },
+        { "nombre": "producto_id", "etiqueta": "Producto del sistema", "tipo": "entero" },
+        { "nombre": "producto_sku", "etiqueta": "SKU del sistema", "tipo": "identificador", "longitud": 191 },
+        { "nombre": "producto_nombre", "etiqueta": "Nombre del sistema", "tipo": "texto", "longitud": 191 },
+        { "nombre": "stock_actual", "etiqueta": "Stock actual", "tipo": "entero" },
+        { "nombre": "diferencia", "etiqueta": "Diferencia", "tipo": "entero" }
+    ],
+    "llaves": {
+        "primaria": null,
+        "unicas": [],
+        "indices": [["producto_id"]]
+    },
+    "duplicados": "rechazar_todas",
+    "transaccion": "motor",
+    "reanudable": false,
+    "tablas_negocio": []
+}

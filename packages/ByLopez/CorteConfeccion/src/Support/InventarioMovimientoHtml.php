@@ -48,6 +48,7 @@ final class InventarioMovimientoHtml
             TipoInventarioMovimiento::EntradaConfeccion => 'inline-flex w-max items-center gap-1 rounded-full bg-green-600 px-2.5 py-1 text-xs font-semibold text-white',
             TipoInventarioMovimiento::AjusteManual => 'inline-flex w-max items-center gap-1 rounded-full bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white',
             TipoInventarioMovimiento::ReingresoDevolucion => 'inline-flex w-max items-center gap-1 rounded-full bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white',
+            TipoInventarioMovimiento::ConteoFisico => 'inline-flex w-max items-center gap-1 rounded-full bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white',
             default => 'inline-flex w-max items-center gap-1 rounded-full bg-gray-600 px-2.5 py-1 text-xs font-semibold text-white',
         };
 

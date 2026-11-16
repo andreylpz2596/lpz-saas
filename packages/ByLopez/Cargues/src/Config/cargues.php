@@ -1,5 +1,14 @@
 <?php
 
+use ByLopez\Cargues\Extensiones\ClientesHistoricos\ClientesHistoricosExtension;
+use ByLopez\Cargues\Extensiones\EnviosCompletos\EnviosCompletosHitosExtension;
+use ByLopez\Cargues\Extensiones\InventarioConteo\InventarioConteoExtension;
+use ByLopez\Cargues\Extensiones\ProductosCamisetas\ProductosCamisetasExtension;
+use ByLopez\Cargues\Services\Cargas\Complementos\ClientesHistoricosResultado;
+use ByLopez\Cargues\Services\Cargas\Complementos\EnviosCompletosResultado;
+use ByLopez\Cargues\Services\Cargas\Complementos\InventarioConteoResultado;
+use ByLopez\Cargues\Services\Cargas\Complementos\ProductosCamisetasResultado;
+
 /*
  * Configuracion del modulo Cargues (E1). TODOS los valores son configurables; los limites por tipo (map `limites`)
  * solo pueden BAJAR estos maximos, nunca subirlos. Valores conservadores [PROPUESTO, 09 §5].
@@ -44,13 +53,14 @@ return [
      */
     'resultado' => [
         'complementos' => [
-            'bylopez_cgi_envios_completos' => \ByLopez\Cargues\Services\Cargas\Complementos\EnviosCompletosResultado::class,
-            'bylopez_cgi_clientes_historicos' => \ByLopez\Cargues\Services\Cargas\Complementos\ClientesHistoricosResultado::class,
-            'bylopez_cgi_productos_camisetas' => \ByLopez\Cargues\Services\Cargas\Complementos\ProductosCamisetasResultado::class,
+            'bylopez_cgi_envios_completos' => EnviosCompletosResultado::class,
+            'bylopez_cgi_clientes_historicos' => ClientesHistoricosResultado::class,
+            'bylopez_cgi_productos_camisetas' => ProductosCamisetasResultado::class,
+            'bylopez_cgi_inventario_conteo' => InventarioConteoResultado::class,
         ],
         // Revision AGRUPADA opcional (Contracts/AgrupaResultado): validacion y resultado por grupo de filas (p. ej. producto → variantes).
         'agrupados' => [
-            'bylopez_cgi_productos_camisetas' => \ByLopez\Cargues\Services\Cargas\Complementos\ProductosCamisetasResultado::class,
+            'bylopez_cgi_productos_camisetas' => ProductosCamisetasResultado::class,
         ],
     ],
 
@@ -72,17 +82,20 @@ return [
     'acciones_etiquetas' => [
         'crear_inactivos' => 'Crear inactivos (revisar antes de publicar)',
         'crear_activos' => 'Crear y activar los que tengan precio',
+        'actualizar_cantidades' => 'Actualizar cantidades (conteo físico)',
     ],
 
     /*
      | Extensiones de tipo (codigo de la aplicacion; el map solo las nombra). Ver Contracts/ExtensionTipo y docs/14.
      */
     'extensiones' => [
-        'clientes_historicos' => \ByLopez\Cargues\Extensiones\ClientesHistoricos\ClientesHistoricosExtension::class,
+        'clientes_historicos' => ClientesHistoricosExtension::class,
         // «99 Envíos — Envíos completos» v3: hitos logísticos (entrega + validación, retorno) por los servicios de Logística (docs/16 §15).
-        'envios_completos_hitos' => \ByLopez\Cargues\Extensiones\EnviosCompletos\EnviosCompletosHitosExtension::class,
+        'envios_completos_hitos' => EnviosCompletosHitosExtension::class,
         // «Productos — Camisetas piel de durazno»: producto configurable + variantes por los repositorios y eventos de Bagisto (docs/17).
-        'productos_camisetas' => \ByLopez\Cargues\Extensiones\ProductosCamisetas\ProductosCamisetasExtension::class,
+        'productos_camisetas' => ProductosCamisetasExtension::class,
+        // «Inventario — Actualizar cantidades»: conteo fisico masivo de variantes EXISTENTES por el libro de inventario de CorteConfeccion (docs/18).
+        'inventario_conteo' => InventarioConteoExtension::class,
     ],
 
     /*

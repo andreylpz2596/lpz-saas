@@ -267,6 +267,83 @@ class InventarioMovimientoService
         });
     }
 
+    /**
+     * CONTEO FISICO (cargue masivo de inventario): fija el stock de una variante en una cantidad ABSOLUTA. Calcula la diferencia contra el
+     * stock vigente BAJO BLOQUEO de la fila y la aplica con el mismo mecanismo del ajuste manual (stock fisico + indice vendible + libro).
+     * Igual que `registrarEntradaExterna`, la compuerta del ajuste manual NO aplica: QUIEN LLAMA es responsable de haber autorizado.
+     *
+     * - la bodega la indica quien llama; solo variantes fisicas (no configurables); `cantidad_objetivo` >= 0;
+     * - diferencia 0: NO escribe nada ni crea movimiento (devuelve null);
+     * - idempotente por `idempotency_key` (UNIQUE): el reintento devuelve el MISMO movimiento; la misma clave con otra solicitud es un conflicto
+     *   (se compara producto, bodega, tipo y origen; la diferencia depende del stock del momento y no se compara).
+     *
+     * Debe llamarse dentro de la transaccion de quien la invoca (anida con DB::transaction).
+     *
+     * @param  array{product_id: int, inventory_source_id: int, cantidad_objetivo: int, motivo: string, idempotency_key: string, origen_tipo: string, origen_id: int, admin_id: ?int, admin_nombre: ?string}  $data
+     */
+    public function registrarConteoFisico(array $data): ?InventarioMovimiento
+    {
+        $objetivo = (int) $data['cantidad_objetivo'];
+        $sourceId = (int) $data['inventory_source_id'];
+        $productId = (int) $data['product_id'];
+        $clave = (string) $data['idempotency_key'];
+
+        if ($objetivo < 0) {
+            throw ValidationException::withMessages(['cantidad' => trans('corteconfeccion::app.errors.stock-negativo-no-permitido')]);
+        }
+
+        if (! DB::table('inventory_sources')->where('id', $sourceId)->exists()) {
+            throw ValidationException::withMessages(['inventory_source_id' => trans('corteconfeccion::app.errors.entrada-fuente-invalida')]);
+        }
+
+        return DB::transaction(function () use ($data, $objetivo, $sourceId, $productId, $clave) {
+            $existente = InventarioMovimiento::query()->where('idempotency_key', $clave)->lockForUpdate()->first();
+
+            if ($existente) {
+                if (
+                    $existente->tipo_movimiento !== TipoInventarioMovimiento::ConteoFisico->value
+                    || (int) $existente->product_id !== $productId
+                    || (int) $existente->inventory_source_id !== $sourceId
+                    || (string) $existente->origen_tipo !== (string) $data['origen_tipo']
+                    || (int) $existente->origen_id !== (int) $data['origen_id']
+                ) {
+                    throw ValidationException::withMessages(['idempotency_key' => trans('corteconfeccion::app.errors.idempotency-key-en-uso')]);
+                }
+
+                return $existente;
+            }
+
+            $this->validarProductoSimple($productId);
+
+            $inventario = $this->bloquearInventarioProducto($productId, $sourceId);
+            $cantidadAnterior = (int) $inventario->qty;
+            $delta = $objetivo - $cantidadAnterior;
+
+            if ($delta === 0) {
+                return null;
+            }
+
+            DB::table('product_inventories')->where('id', $inventario->id)->update(['qty' => $objetivo]);
+
+            $this->incrementarIndicesVendibles($productId, $sourceId, $delta);
+
+            return InventarioMovimiento::query()->create([
+                'product_id' => $productId,
+                'inventory_source_id' => $sourceId,
+                'tipo_movimiento' => TipoInventarioMovimiento::ConteoFisico->value,
+                'cantidad_anterior' => $cantidadAnterior,
+                'cantidad_movimiento' => $delta,
+                'cantidad_nueva' => $objetivo,
+                'admin_id' => $data['admin_id'] ?? null,
+                'nombre_usuario_snapshot' => $data['admin_nombre'] ?? null,
+                'observacion' => trim((string) $data['motivo']),
+                'idempotency_key' => $clave,
+                'origen_tipo' => (string) $data['origen_tipo'],
+                'origen_id' => (int) $data['origen_id'],
+            ]);
+        });
+    }
+
     protected function bloquearInventarioProducto(int $productId, int $sourceId): object
     {
         $inventario = DB::table('product_inventories')
