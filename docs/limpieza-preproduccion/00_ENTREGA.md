@@ -163,7 +163,7 @@ Ronda 2 (`…_20261116b`, numeración personalizada ya retirada): mismos casos R
 ## 8. Commits (rama `upgrade/bagisto-2.4.9`, locales)
 - **`c5527ebe94`**: cargue de inventario (tipo 5, con su procedimiento, extensión y el movimiento `conteo_fisico` de CorteConfeccion), herramientas y documentación. También añadía la numeración personalizada, ya retirada.
 - **`54b455d548`**: solo anota el hash anterior.
-- **`PENDIENTE_HASH`**: retira la numeración personalizada (clases, migración y su uso en las herramientas). También adapta el verificador y las pruebas a la numeración nativa y actualiza esta documentación y la matriz. Es el commit final integrado: la exportación `…_r3.sql` corresponde a ese código (cargue de inventario + sufijo `-2026` + numeración nativa).
+- **`1026529bba`**: retira la numeración personalizada (clases, migración y su uso en las herramientas). También adapta el verificador y las pruebas a la numeración nativa y actualiza esta documentación y la matriz. Es el commit final integrado: la exportación `…_r3.sql` corresponde a ese código (cargue de inventario + sufijo `-2026` + numeración nativa).
 
 No se reescribió historial: la retirada es un commit nuevo. Ningún commit incluye SQL, credenciales ni datos personales.
 
