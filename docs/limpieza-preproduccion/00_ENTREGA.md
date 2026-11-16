@@ -159,7 +159,7 @@ Después de las pruebas se borraron los 8 archivos de carga subidos (comprobados
    - Inventario con «Inventario — Actualizar cantidades (conteo físico)», con un conteo del mismo día y solo variantes `simple`.
 
 ## 8. Commit integrado
-El cargue de inventario (tipo 5, con su procedimiento, extensión y el movimiento `conteo_fisico` de CorteConfeccion), los generadores de numeración con su migración, las herramientas y esta documentación quedan en un solo commit de la rama `upgrade/bagisto-2.4.9`: **PENDIENTE_HASH**. No incluye SQL, credenciales ni datos personales. La exportación final se tomó con exactamente ese código y su migración aplicada.
+El cargue de inventario (tipo 5, con su procedimiento, extensión y el movimiento `conteo_fisico` de CorteConfeccion), los generadores de numeración con su migración, las herramientas y esta documentación quedan en un solo commit de la rama `upgrade/bagisto-2.4.9`: **`c5527ebe94`** (este documento se actualizó en el commit siguiente solo para anotar el hash). No incluye SQL, credenciales ni datos personales. La exportación final se tomó con exactamente ese código y su migración aplicada.
 
 ## 9. Incidencias del entorno (informadas, no corregidas)
 - **`mysql.db` (Aria) corrupta en el XAMPP**: `CREATE USER` y los `GRANT … ON base.*` fallan; por tabla y por procedimiento funcionan. No se reparó (afecta a todas las sesiones).
