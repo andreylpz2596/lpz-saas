@@ -189,8 +189,12 @@ test('el menu muestra el modulo solo a quien tiene la clave raiz', function () {
         return (new Menu)->getItems('admin')->contains(fn ($item) => $item->key === 'ventas_asesor');
     };
 
+    // Ya no se prueba «solo la hoja `ventas_asesor.operar_como_asesor`, sin la raíz»: desde que esa hoja es también la
+    // entrada «Inicio» del menú (Config/menu.php), Bagisto no admite un hijo de menú sin su padre (nodo sin nombre), y
+    // el árbol de Roles en modo jerárquico marca los ancestros al marcar una hoja, así que ese rol no se puede crear
+    // desde el panel. Ningún rol de la base limpia tiene una hoja de menú sin su padre (revisión del 2026-11-16).
     expect($ve(va01_admin(['ventas_asesor'])))->toBeTrue()
-        ->and($ve(va01_admin(['ventas_asesor.operar_como_asesor'])))->toBeFalse()
+        ->and($ve(va01_admin(['ventas_asesor', 'ventas_asesor.operar_como_asesor'])))->toBeTrue()
         ->and($ve(va01_admin(['dashboard'])))->toBeFalse()
         ->and($ve(va01_admin(null, 'all')))->toBeTrue();
 });

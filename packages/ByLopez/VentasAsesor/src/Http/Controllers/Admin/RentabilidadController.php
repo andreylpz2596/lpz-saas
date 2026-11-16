@@ -19,7 +19,7 @@ use Webkul\User\Contracts\Admin;
 /**
  * Ventas Asesor › Rentabilidad (Doc. 23, R1/R4). Pestañas (`?vista=`): diagnostico (precios por grupo frente al minimo y
  * configuracion faltante) | configuracion (politicas, costos directos, estado del costo) | panel (mensual). Solo
- * administracion: el rol ASESOR VENTAS no recibe estas claves (nunca ve costos ni margenes).
+ * administracion: el rol de asesor no recibe estas claves (nunca ve costos ni margenes).
  */
 class RentabilidadController extends Controller
 {

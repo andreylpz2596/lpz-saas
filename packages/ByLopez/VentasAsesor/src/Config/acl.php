@@ -375,7 +375,7 @@ return [
         /*
          * D-COST-04/05: «Control de costos». La agrupadora abre la pantalla (string, regla 3) y es la que autoriza
          * VER la comparacion; la hoja `actualizar` autoriza la vista previa y la confirmacion de la actualizacion
-         * masiva del costo comisionable. Solo administracion: el rol ASESOR VENTAS no la recibe.
+         * masiva del costo comisionable. Solo administracion: el rol de asesor no la recibe.
          */
         'key' => 'ventas_asesor.costos',
         'name' => 'ventasasesor::app.acl.costos',
@@ -394,7 +394,7 @@ return [
         /*
          * Doc. 23 (R1/R4): «Rentabilidad». Agrupadora = pantalla (string, regla 3); el controlador exige `view` (diagnostico
          * de listas y configuracion faltante), `configurar` (politicas, costos directos, estado del costo) o `kpis.view_all`
-         * (panel mensual). Solo administracion: el rol ASESOR VENTAS no la recibe.
+         * (panel mensual). Solo administracion: el rol de asesor no la recibe.
          */
         'key' => 'ventas_asesor.rentabilidad',
         'name' => 'ventasasesor::app.acl.rentabilidad',

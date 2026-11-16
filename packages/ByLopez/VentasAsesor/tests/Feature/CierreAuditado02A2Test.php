@@ -266,7 +266,7 @@ test('8 y 9. guardar de nuevo un historial persistido se rechaza, con y sin camb
         ->and(LogAsignacionAsesor::query()->where('order_attribution_id', $atribucion->id)->count())->toBe(1);
 });
 
-test('12. el esquema conserva RESTRICT y sigue sin claves foraneas hacia admins', function () {
+test('12. el esquema conserva RESTRICT y solo la ficha de asesor apunta a admins', function () {
     $reglas = collect(DB::select(
         'SELECT CONSTRAINT_NAME n, REFERENCED_TABLE_NAME r, DELETE_RULE d
          FROM information_schema.REFERENTIAL_CONSTRAINTS
@@ -290,8 +290,11 @@ test('12. el esquema conserva RESTRICT y sigue sin claves foraneas hacia admins'
         // con la variante (RESTRICT impediria borrar productos desde el catalogo).
         ->and($reglas->get('bvabs_borrador_fk'))->toBe('CASCADE -> bylopez_va_borradores_venta')
         ->and($reglas->get('bvabs_variante_fk'))->toBe('CASCADE -> products')
-        ->and($reglas->filter(fn ($regla) => str_contains($regla, '-> admins'))->all())->toBe([])
-        ->and($reglas)->toHaveCount(9);
+        // La regla de 02A (doc. 07A: sin claves foráneas hacia `admins`) rige para estas tablas. La única excepción
+        // posterior es DELIBERADA y documentada: ASESOR-01 (doc. 05 y doc. 15) ata la ficha del asesor a su usuario con
+        // RESTRICT porque el perfil es inmutable y nunca se borra (se inactiva). Los módulos posteriores añadieron sus
+        // propias FK `bylopez_va_*`, por eso ya no se exige un total fijo.
+        ->and($reglas->filter(fn ($regla) => str_contains($regla, '-> admins'))->all())->toBe(['bvaas_admin_fk' => 'RESTRICT -> admins']);
 });
 
 test('el historial inicial de un fallo tecnico es el unico portador del codigo', function () {
