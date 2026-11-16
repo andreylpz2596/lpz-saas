@@ -41,6 +41,18 @@ abstract class TestCase extends BaseTestCase
         return parent::setUpTraits();
     }
 
+    /**
+     * Algunos controladores y servicios llaman a set_time_limit() (lectura de comprobantes, confirmación de venta).
+     * En la web el límite muere con la petición; en Pest seguiría vivo para el resto del proceso y cortaría la suite
+     * (FatalException «Maximum execution time») en una prueba ajena. Se vuelve al valor de la CLI (sin límite).
+     */
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+
+        @set_time_limit(0);
+    }
+
     public static function verificarConexionDePruebas(string $base, string $host): void
     {
         if ($base !== self::BASE_DE_PRUEBAS) {
