@@ -24,6 +24,7 @@ use Webkul\Product\Helpers\Indexers\Inventory;
 use Webkul\Product\Models\ProductOrderedInventory;
 
 require_once __DIR__.'/../helpersFase03b.php';
+require_once __DIR__.'/../helpersDomicilioLocal.php';
 
 uses(TestCase::class);
 
@@ -65,15 +66,21 @@ function f03d_direccion(array $extra = []): DireccionComercial
     return new DireccionComercial(...$d);
 }
 
-/** Activa los carriers de ByLopez en la prueba (por defecto nacen inactivos). */
+/**
+ * Activa los carriers de ByLopez en la prueba (por defecto nacen inactivos). La tarifa del domicilio local es la del
+ * domiciliario en la zona local del destino (helpersDomicilioLocal.php); `default_rate` ya no se usa (2026-10-12).
+ */
 function f03d_activarCarriers(?string $tarifaDomicilio = '8000'): void
 {
     config([
         'carriers.pickup.active' => true,
         'carriers.domicilio_local.active' => true,
-        'carriers.domicilio_local.default_rate' => $tarifaDomicilio,
         'carriers.envio_nacional.active' => true,
     ]);
+
+    $valor = $tarifaDomicilio === null ? null : (float) $tarifaDomicilio;
+
+    app()->bound('pruebas.domicilio_local') ? dl_tarifaDomicilio($valor) : dl_domicilioLocal($valor);
 }
 
 function f03d_codigos($vista): array
@@ -245,11 +252,13 @@ test('DOMICILIO LOCAL con tarifa configurada: Bagisto la cobra y entra en los to
         ->and($elegido->entregaCompleta)->toBeTrue();
 });
 
-test('tarifa de domicilio: la configurada en el PANEL (core_config) manda sobre el valor por defecto', function () {
+test('tarifa de domicilio: manda la configurada en el PANEL de Logistica (domiciliario + zona); el default_rate de core_config ya no cuenta', function () {
+    // Regla vigente (2026-10-12): el valor generico del carrier en core_config nunca se usa como tarifa.
     DB::table('core_config')->insert([
-        'code' => 'sales.carriers.domicilio_local.default_rate', 'value' => '12000',
+        'code' => 'sales.carriers.domicilio_local.default_rate', 'value' => '99000',
         'channel_code' => core()->getDefaultChannel()->code, 'locale_code' => null,
     ]);
+    dl_tarifaDomicilio(12000.0);
 
     $vista = f03d_conDomicilio($this);
 

@@ -64,7 +64,9 @@ test('M-2 pago: el servidor guarda EXACTAMENTE el valor crudo que envia la masca
         ->assertCreated()->assertJsonPath('saldo.saldo', 328999.5);
 
     // La columna guarda 4 decimales: 120000.0000 y 51000.5000 son EXACTAMENTE los valores enviados.
-    $montos = Pago::query()->orderBy('id')->pluck('monto')->map(fn ($m) => (string) $m)->all();
+    // Solo los pagos del cliente de esta prueba: lpz_saas_testing conserva pagos de corridas clonadas (2026-11-16).
+    $delCliente = fn () => Pago::query()->where('customer_id', $pedido->customer_id);
+    $montos = $delCliente()->orderBy('id')->pluck('monto')->map(fn ($m) => (string) $m)->all();
 
     expect($montos)->toBe(['120000.0000', '51000.5000'])
         ->and(array_map('floatval', $montos))->toBe([120000.0, 51000.5]);
@@ -75,7 +77,7 @@ test('M-2 pago: el servidor guarda EXACTAMENTE el valor crudo que envia la masca
             ->assertStatus(422);
     }
 
-    expect(Pago::query()->count())->toBe(2);
+    expect($delCliente()->count())->toBe(2);
 });
 
 test('M-3 control de costos: «Nuevo costo» es un campo mejorable y el costo se guarda con el valor crudo ("120000"), con ida y vuelta', function () {

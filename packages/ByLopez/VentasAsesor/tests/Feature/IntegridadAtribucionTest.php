@@ -386,7 +386,9 @@ test('22. ninguna migracion del modulo altera tablas del core', function () {
     // Tres de la Fase 02A/02A1, la cola de incidencias de la Fase 02B1A, el indice de
     // telefonos de RT-04B1a, los borradores de venta de la Fase 03B, las solicitudes
     // comerciales de la Fase 03C (D-39) y el intento de confirmacion de la Fase 03F (D-55).
-    expect($migraciones)->toHaveCount(8);
+    // Fases posteriores (geo DIVIPOLA, pagos, credito, comisiones, cotizaciones, GRP-01...) llevaron el total a 37;
+    // revisadas una por una el 2026-11-16. Una migracion nueva obliga a revisarla y a subir este numero.
+    expect($migraciones)->toHaveCount(37);
 
     foreach ($migraciones as $archivo) {
         $contenido = file_get_contents($archivo);
@@ -394,7 +396,9 @@ test('22. ninguna migracion del modulo altera tablas del core', function () {
         preg_match_all("/Schema::(create|table|drop|dropIfExists)\(\s*'([a-z0-9_]+)'/", $contenido, $coincidencias);
 
         foreach ($coincidencias[2] as $tabla) {
-            expect($tabla)->toStartWith('bylopez_va_', basename($archivo).' toca '.$tabla);
+            // Tablas propias: las del modulo y el catalogo geografico DIVIPOLA que el modulo crea (bylopez_geo_*).
+            expect(str_starts_with($tabla, 'bylopez_va_') || str_starts_with($tabla, 'bylopez_geo_'))
+                ->toBeTrue(basename($archivo).' toca '.$tabla);
         }
 
         // Puede REFERENCIAR tablas del core en claves foraneas, pero nunca modificarlas.

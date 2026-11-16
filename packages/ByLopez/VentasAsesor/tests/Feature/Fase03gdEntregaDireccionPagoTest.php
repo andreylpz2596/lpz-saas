@@ -14,6 +14,7 @@ use Webkul\Customer\Models\Customer;
 use Webkul\User\Models\Admin;
 
 require_once __DIR__.'/../helpersFase03f.php';
+require_once __DIR__.'/../helpersDomicilioLocal.php';
 require_once __DIR__.'/../helpersGeo.php';
 
 uses(TestCase::class);
@@ -28,6 +29,7 @@ beforeEach(function () {
     Mail::fake();
     f03f_configurarBase();
     geo_cargar();   // D-58: catalogo DIVIPOLA minimo, con el importador real, dentro de la transaccion
+    dl_domicilioLocal();   // domicilio local con la regla vigente (zona local + domiciliario + tarifa 8.000)
 
     $this->grupo = f03b_grupo('G');
     $this->configurable = f03b_configurable(10000.0);

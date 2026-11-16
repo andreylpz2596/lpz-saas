@@ -18,6 +18,7 @@ use ByLopez\VentasAsesor\Listeners\AtribuirPedidoCreado;
 use ByLopez\VentasAsesor\Listeners\CercoCreacionPedido;
 use ByLopez\VentasAsesor\Listeners\ClasificarOperacionPedido;
 use ByLopez\VentasAsesor\Listeners\EnlazarPedidoConBorrador;
+use ByLopez\VentasAsesor\Listeners\RegistrarSnapshotGrupoPedido;
 use ByLopez\VentasAsesor\Models\AtribucionPedido;
 use ByLopez\VentasAsesor\Models\BorradorVenta;
 use ByLopez\VentasAsesor\Models\IncidenciaAtribucion;
@@ -47,6 +48,7 @@ use Webkul\Sales\Repositories\OrderRepository;
 use Webkul\Sales\Transformers\OrderResource;
 
 require_once __DIR__.'/../helpersFase03f.php';
+require_once __DIR__.'/../helpersDomicilioLocal.php';
 
 uses(TestCase::class);
 
@@ -76,6 +78,7 @@ class F03fRegistrarAtribucionQueFalla extends RegistrarAtribucionService
 beforeEach(function () {
     Mail::fake();
     f03f_configurarBase();
+    dl_domicilioLocal();   // domicilio local con la regla vigente (zona local + domiciliario + tarifa 8.000)
 
     $this->confirmacion = app(ConfirmarVentaService::class);
     $this->asesor = f03b_admin();
@@ -449,7 +452,7 @@ test('03F-11 tarifa de envio cambiada → totales_cambiaron; metodo que deja de 
     $this->cartId = $this->borrador->cart_id;
     $visto = f03f_total($this->borrador);
 
-    f03f_activarCarriers('12000');
+    dl_tarifaDomicilio(12000.0);   // la tarifa del domiciliario en la zona cambia en Logistica › Tarifas
     $tarifa = f03f_rechazo($this, $visto);
 
     config(['carriers.domicilio_local.active' => false]);
@@ -729,10 +732,12 @@ test('03F-45 orden de listeners: cerco UNICO en save.before; enlace PRIMERO en s
         ->and($despues[0])->toBe(EnlazarPedidoConBorrador::class.'@handle')
         // G-11: la clasificacion comercial va justo despues del enlace (misma transaccion, lanza si falla).
         ->and($despues[1])->toBe(ClasificarOperacionPedido::class.'@handle')
-        ->and($despues[2])->toBe(AtribuirPedidoCreado::class.'@handle')
-        ->and(array_search('Webkul\Admin\Listeners\Order@afterCreated', $despues, true))->toBeGreaterThan(2)
-        ->and(array_search('Webkul\Payment\Listeners\GenerateInvoice@handle', $despues, true))->toBeGreaterThan(2)
-        ->and(array_search('Webkul\Shop\Listeners\Order@afterCreated', $despues, true))->toBeGreaterThan(2);
+        // GRP-01: el snapshot del grupo va antes de la atribucion (EventServiceProvider), en la misma transaccion.
+        ->and($despues[2])->toBe(RegistrarSnapshotGrupoPedido::class.'@handle')
+        ->and($despues[3])->toBe(AtribuirPedidoCreado::class.'@handle')
+        ->and(array_search('Webkul\Admin\Listeners\Order@afterCreated', $despues, true))->toBeGreaterThan(3)
+        ->and(array_search('Webkul\Payment\Listeners\GenerateInvoice@handle', $despues, true))->toBeGreaterThan(3)
+        ->and(array_search('Webkul\Shop\Listeners\Order@afterCreated', $despues, true))->toBeGreaterThan(3);
 });
 
 // ------------------------------------------------------------------ cerco para pedidos nativos: 03F-42 y regresion

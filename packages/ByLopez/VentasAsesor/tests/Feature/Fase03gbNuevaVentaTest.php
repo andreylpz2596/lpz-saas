@@ -32,6 +32,7 @@ use Webkul\Checkout\Models\CartItem;
 use Webkul\Customer\Models\CustomerAddress;
 
 require_once __DIR__.'/../helpersFase03f.php';
+require_once __DIR__.'/../helpersDomicilioLocal.php';
 
 uses(TestCase::class);
 
@@ -69,6 +70,7 @@ if (! class_exists('F03gbNuevaVentaContada')) {
 beforeEach(function () {
     Mail::fake();
     f03f_configurarBase();
+    dl_domicilioLocal();   // domicilio local con la regla vigente (zona local + domiciliario + tarifa 8.000)
 
     $this->asesor = f03b_admin();
     $this->grupo = f03b_grupo('G');
@@ -433,7 +435,7 @@ test('editar lineas: si la tarifa cambio se acepta la nueva y el total la reflej
     $antes = $this->nv->entregaRapida($b, $this->asesor, OrigenDireccion::puntual(f03f_direccion(['lineas' => ['Carrera 9 # 8-7']])), 'domicilio_local', OrigenDireccion::puntual(f03f_direccion()));
     expect($antes->entrega->metodoSeleccionado->precio)->toBe(8000.0);
 
-    config(['carriers.domicilio_local.default_rate' => '12000']);
+    dl_tarifaDomicilio(12000.0);   // la tarifa del domiciliario en la zona cambia en Logistica › Tarifas
     $estado = $this->nv->aplicarTallas($b, $this->configurable->id, [$this->m->id => 3], $this->asesor);
 
     expect($estado->requiereRevisionEntrega)->toBeFalse()
