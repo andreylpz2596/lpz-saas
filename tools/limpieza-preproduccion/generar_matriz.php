@@ -106,7 +106,6 @@ foreach (TABLAS_VACIAR as $t) {
     $motivo = match (true) {
         in_array($t, $clientes, true) => 'Clientes y sus dependientes: se vuelven a cargar con Cargues (decisión ronda 2)',
         in_array($t, ['bylopez_va_asesores', 'bylopez_va_comision_acuerdos'], true) => 'Ficha/acuerdo atados a la cuenta (admin_id NOT NULL, FK RESTRICT); todas las cuentas de asesor se eliminan',
-        $t === 'bylopez_va_consecutivos_visibles' => 'Contador del número visible: sin pedidos ni facturas arranca de nuevo (primero = 1)',
         str_starts_with($t, 'bylopez_cg') => 'Ejecuciones y staging de Cargues (las definiciones y procedimientos se conservan)',
         in_array($t, ['personal_access_tokens', 'sessions', 'admin_password_resets', 'password_resets'], true) => 'Sesiones y tokens: se invalidan',
         default => 'Operación anterior o dato derivado de operaciones',
@@ -131,7 +130,7 @@ foreach (ANULACIONES as $a) {
 }
 foreach (ACTUALIZACIONES as $a) {
     $filas[$a['tabla']][1] = ($filas[$a['tabla']][1] === '—' ? '' : $filas[$a['tabla']][1].' + ')."UPDATE SET {$a['set']}";
-    $filas[$a['tabla']][2] = $a['tabla'] === 'core_config' ? 'Sufijo de facturas -2026 y clases generadoras del número visible; el resto intacto'
+    $filas[$a['tabla']][2] = $a['tabla'] === 'core_config' ? 'Sufijo de facturas -2026; numeración nativa de Bagisto; el resto intacto'
         : 'Inventario inicial en cero; filas producto × bodega conservadas (salvo productos de prueba)';
 }
 foreach (TABLAS_RECONSTRUIR as $t) {

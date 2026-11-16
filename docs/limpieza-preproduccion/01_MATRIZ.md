@@ -2,7 +2,7 @@
 
 Generada con `tools/limpieza-preproduccion/generar_matriz.php` a partir de la **misma** clasificación que ejecuta el limpiador (`limpiar_base_listas.php`), con las decisiones de las dos rondas (2026-11-15). «Antes» = restauración verificada del respaldo de `lpz_saas`; «Después» = `lpz_saas_preproduccion_limpia` final. «Depende de» = claves foráneas declaradas; «La usan» = número de tablas con FK hacia ella. «—» en «Antes» = tabla creada después del respaldo (migración nueva).
 
-Clasificación: **CONSERVAR** (maestro/configuración; contenido idéntico fila a fila salvo los ajustes indicados en «Acción»), **VACIAR** (DELETE completo), **VACIAR (parcial)** (solo las filas del filtro: productos de prueba, cuentas distintas de la conservada, roles QA). Ajustes sobre filas conservadas: inventario a cero, sufijo y generadores en `core_config`, vínculos de talleres/cortadores anulados, índice de inventario reconstruido.
+Clasificación: **CONSERVAR** (maestro/configuración; contenido idéntico fila a fila salvo los ajustes indicados en «Acción»), **VACIAR** (DELETE completo), **VACIAR (parcial)** (solo las filas del filtro: productos de prueba, cuentas distintas de la conservada, roles QA). Ajustes sobre filas conservadas: inventario a cero, sufijo de facturas en `core_config` (numeración nativa de Bagisto, sin clase generadora), vínculos de talleres/cortadores anulados, índice de inventario reconstruido.
 
 ## Relaciones sin clave foránea revisadas (verificador: 16, sin huérfanos)
 | Columna | Apunta a | Resultado |
@@ -156,7 +156,6 @@ Clasificación: **CONSERVAR** (maestro/configuración; contenido idéntico fila 
 | `bylopez_va_comision_reevaluaciones` | Comisiones | 33 | 0 | — | — | VACIAR | DELETE completo | Operación anterior o dato derivado de operaciones |
 | `bylopez_va_comision_reglas` | Comisiones | 1 | 1 | — | — | CONSERVAR | — | Maestro, catálogo o configuración |
 | `bylopez_va_comision_soportes` | Comisiones | 0 | 0 | — | — | VACIAR | DELETE completo | Operación anterior o dato derivado de operaciones |
-| `bylopez_va_consecutivos_visibles` | VentasAsesor | — | 0 | — | — | VACIAR | DELETE completo | Contador del número visible: sin pedidos ni facturas arranca de nuevo (primero = 1) |
 | `bylopez_va_costo_comisionable_cambios` | VentasAsesor | 144 | 140 | — | — | VACIAR (parcial) | DELETE WHERE product_id IN (productos de prueba) | Productos de prueba confirmados y sus dependencias exclusivas |
 | `bylopez_va_costo_estados` | VentasAsesor | 0 | 0 | — | — | CONSERVAR | — | Maestro, catálogo o configuración |
 | `bylopez_va_costos_directos` | VentasAsesor | 0 | 0 | — | — | CONSERVAR | — | Maestro, catálogo o configuración |
@@ -202,7 +201,7 @@ Clasificación: **CONSERVAR** (maestro/configuración; contenido idéntico fila 
 | `cms_page_translations` | Páginas CMS | 10 | 10 | cms_pages | — | CONSERVAR | — | Maestro, catálogo o configuración |
 | `cms_pages` | Páginas CMS | 10 | 10 | — | 2 tabla(s) | CONSERVAR | — | Maestro, catálogo o configuración |
 | `compare_items` | Bagisto / sistema | 0 | 0 | customers, products | — | VACIAR | DELETE completo | Clientes y sus dependientes: se vuelven a cargar con Cargues (decisión ronda 2) |
-| `core_config` | Configuración del sistema (incluye numeración de pedidos y facturas) | 123 | 123 | — | — | CONSERVAR | UPDATE SET value = '-2026' + UPDATE SET value = 'ByLopez\\VentasAsesor\\Generators\\ConsecutivoPedido' + UPDATE SET value = 'ByLopez\\VentasAsesor\\Generators\\ConsecutivoFactura' | Sufijo de facturas -2026 y clases generadoras del número visible; el resto intacto |
+| `core_config` | Configuración del sistema (incluye numeración de pedidos y facturas) | 123 | 123 | — | — | CONSERVAR | UPDATE SET value = '-2026' | Sufijo de facturas -2026; numeración nativa de Bagisto; el resto intacto |
 | `countries` | Bagisto / sistema | 1 | 1 | — | 2 tabla(s) | CONSERVAR | — | Maestro, catálogo o configuración |
 | `country_state_translations` | Países y departamentos | 0 | 0 | country_states | — | CONSERVAR | — | Maestro, catálogo o configuración |
 | `country_states` | Países y departamentos | 33 | 33 | countries | 2 tabla(s) | CONSERVAR | — | Maestro, catálogo o configuración |
@@ -230,7 +229,7 @@ Clasificación: **CONSERVAR** (maestro/configuración; contenido idéntico fila 
 | `marketing_campaigns` | Marketing | 0 | 0 | channels, customer_groups, marketing_events, marketing_templates | — | CONSERVAR | — | Maestro, catálogo o configuración |
 | `marketing_events` | Marketing | 1 | 1 | — | 1 tabla(s) | CONSERVAR | — | Maestro, catálogo o configuración |
 | `marketing_templates` | Marketing | 0 | 0 | — | 1 tabla(s) | CONSERVAR | — | Maestro, catálogo o configuración |
-| `migrations` | Registro de migraciones aplicadas | 295 | 296 | — | — | CONSERVAR | — | Maestro, catálogo o configuración |
+| `migrations` | Registro de migraciones aplicadas | 295 | 295 | — | — | CONSERVAR | — | Maestro, catálogo o configuración |
 | `notifications` | Bagisto / sistema | 78 | 0 | orders | — | VACIAR | DELETE completo | Operación anterior o dato derivado de operaciones |
 | `order_comments` | Pedidos | 3 | 0 | orders | — | VACIAR | DELETE completo | Operación anterior o dato derivado de operaciones |
 | `order_items` | Pedidos | 661 | 0 | orders, tax_categories | 12 tabla(s) | VACIAR | DELETE completo | Operación anterior o dato derivado de operaciones |

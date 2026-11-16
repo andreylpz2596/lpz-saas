@@ -15,8 +15,9 @@
 |   R2 carga de clientes desde cero por Cargues («Clientes históricos — 99 Envíos»), y repetirla no duplica
 |   R3 carga inicial de inventario por Cargues y reintento sin duplicar
 |   R4 creación de usuarios con roles operativos, ficha de asesor y acceso de cada uno; gestión de roles
-|   R5 numeración: tres pedidos y tres facturas seguidos (BYL-00000001-CO…, FAC-BYL-00000001-2026…)
-|   R6 concurrencia: dos pedidos y dos facturas simultáneos, sin duplicados ni errores
+|   R5 numeración nativa de Bagisto: tres pedidos y tres facturas seguidos, formato correcto, facturas con sufijo -2026,
+|      sin duplicados (no se exige que empiecen en 1: los AUTO_INCREMENT se conservan)
+|   R6 concurrencia: tres rondas de dos pedidos y dos facturas simultáneos, sin duplicados ni errores
 */
 
 use GuzzleHttp\Client;
@@ -284,9 +285,13 @@ for ($i = 0; $i < 3; $i++) {
     $pedidos[] = (int) ($jc['orderId'] ?? $jc['order_id'] ?? $jc['resultado']['orderId'] ?? 0);
     $pasosPedidos[] = $b['pasos'] + ['confirmar' => $cc.($cc >= 400 ? ' '.json_encode($jc, JSON_UNESCAPED_UNICODE) : '')];
 }
-$numPedidos = DB::table('orders')->whereIn('id', $pedidos)->orderBy('id')->pluck('increment_id')->all();
-caso('R5a', 'Tres pedidos seguidos: BYL-00000001-CO, BYL-00000002-CO, BYL-00000003-CO', $numPedidos === ['BYL-00000001-CO', 'BYL-00000002-CO', 'BYL-00000003-CO'],
-    ['pedidos' => $pedidos, 'numeros' => $numPedidos, 'pasos' => $pasosPedidos]);
+// Numeración nativa de Bagisto: prefijo + (id de la última fila + 1) + sufijo. No se exige que empiece en 1 ni que sea
+// continua (los AUTO_INCREMENT se conservan); sí formato, unicidad y ausencia de errores.
+$unicos = fn (string $t) => DB::table($t)->count() === DB::table($t)->distinct()->count('increment_id');
+$numPedidos = DB::table('orders')->whereIn('id', $pedidos)->orderBy('id')->pluck('increment_id', 'id')->all();
+caso('R5a', 'Tres pedidos seguidos con numeración nativa: formato BYL-########-CO, sin duplicados ni errores',
+    count($numPedidos) === 3 && ! array_filter($numPedidos, fn ($n) => ! preg_match('/^BYL-\d{8}-CO$/', $n)) && $unicos('orders'),
+    ['numeros (id => número)' => $numPedidos, 'pasos' => $pasosPedidos]);
 
 function facturar(Sesion $s, int $pedido): array
 {
@@ -299,31 +304,38 @@ foreach ($pedidos as $p) {
     [$ruta, $datos] = facturar($s, $p);
     $facturas[$p] = $s->json('POST', $ruta, $datos, [], true)[0];
 }
-$numFacturas = DB::table('invoices')->whereIn('order_id', $pedidos)->orderBy('id')->pluck('increment_id')->all();
-caso('R5b', 'Tres facturas seguidas: FAC-BYL-00000001-2026 … 00000003-2026', $numFacturas === ['FAC-BYL-00000001-2026', 'FAC-BYL-00000002-2026', 'FAC-BYL-00000003-2026'],
-    ['http' => $facturas, 'numeros' => $numFacturas]);
+$numFacturas = DB::table('invoices')->whereIn('order_id', $pedidos)->orderBy('id')->pluck('increment_id', 'id')->all();
+caso('R5b', 'Tres facturas seguidas con numeración nativa: formato FAC-BYL-########-2026 (sufijo -2026), sin duplicados',
+    count($numFacturas) === 3 && ! array_filter($numFacturas, fn ($n) => ! preg_match('/^FAC-BYL-\d{8}-2026$/', $n)) && $unicos('invoices'),
+    ['http' => $facturas, 'numeros (id => número)' => $numFacturas]);
 
-// R6: dos confirmaciones al mismo tiempo, una a cada servidor.
+// R6: tres rondas de dos confirmaciones al mismo tiempo (una a cada servidor) y luego dos facturas al mismo tiempo.
 $sB = new Sesion($urlB, $emailAdmin, $claveTemporal, $s->jar);
-$b4 = borrador($s, $ids[0], $B);
-$b5 = borrador($s, $ids[1], $B);
-$antesPedidos = (int) DB::table('orders')->max('id');
-$t0 = microtime(true);
-$resp = Utils::settle([
-    $s->http->requestAsync('POST', "/admin/ventas-asesor/nueva-venta/{$b4['id']}/confirmar", $s->opciones('POST', ['total_esperado' => $b4['total']])),
-    $sB->http->requestAsync('POST', "/admin/ventas-asesor/nueva-venta/{$b5['id']}/confirmar", $sB->opciones('POST', ['total_esperado' => $b5['total']])),
-])->wait();
-$durPedidos = round(microtime(true) - $t0, 2);
-$httpPed = array_map(fn ($r) => $r['state'] === 'fulfilled' ? $r['value']->getStatusCode() : 'error', $resp);
-$cuerpos = array_map(fn ($r) => $r['state'] === 'fulfilled' ? mb_substr((string) $r['value']->getBody(), 0, 300) : $r['reason']->getMessage(), $resp);
-$nuevos = DB::table('orders')->where('id', '>', $antesPedidos)->orderBy('id')->pluck('increment_id', 'id')->all();
-$todos = DB::table('orders')->pluck('increment_id')->all();
-caso('R6a', 'Dos pedidos confirmados al mismo tiempo (dos servidores): ambos se crean con números distintos y consecutivos, sin errores',
-    $httpPed === [200, 200] && array_values($nuevos) === ['BYL-00000004-CO', 'BYL-00000005-CO'] && count($todos) === count(array_unique($todos)),
-    ['http' => $httpPed, 'segundos' => $durPedidos, 'nuevos' => $nuevos, 'cuerpos' => $httpPed === [200, 200] ? null : $cuerpos]);
+$errorHttp = fn (array $resp) => array_map(fn ($r) => $r['state'] === 'fulfilled' ? $r['value']->getStatusCode() : 'error', $resp);
+$cuerpos = fn (array $resp) => array_map(fn ($r) => $r['state'] === 'fulfilled' ? mb_substr(strip_tags((string) $r['value']->getBody()), 0, 300) : $r['reason']->getMessage(), $resp);
+$rondasPed = $rondasFac = [];
+$okPed = $okFac = true;
+for ($ronda = 1; $ronda <= 3; $ronda++) {
+    $b4 = borrador($s, $ids[0], $B);
+    $b5 = borrador($s, $ids[1], $B);
+    $antesPedidos = (int) DB::table('orders')->max('id');
+    $t0 = microtime(true);
+    $resp = Utils::settle([
+        $s->http->requestAsync('POST', "/admin/ventas-asesor/nueva-venta/{$b4['id']}/confirmar", $s->opciones('POST', ['total_esperado' => $b4['total']])),
+        $sB->http->requestAsync('POST', "/admin/ventas-asesor/nueva-venta/{$b5['id']}/confirmar", $sB->opciones('POST', ['total_esperado' => $b5['total']])),
+    ])->wait();
+    $http = $errorHttp($resp);
+    $nuevos = DB::table('orders')->where('id', '>', $antesPedidos)->orderBy('id')->pluck('increment_id', 'id')->all();
+    $okPed = $okPed && $http === [200, 200] && count($nuevos) === 2 && count(array_unique($nuevos)) === 2;
+    $rondasPed[$ronda] = ['http' => $http, 'segundos' => round(microtime(true) - $t0, 2), 'nuevos' => $nuevos, 'cuerpos' => $http === [200, 200] ? null : $cuerpos($resp)];
 
-$nuevosIds = array_keys($nuevos);
-if (count($nuevosIds) === 2) {
+    $nuevosIds = array_keys($nuevos);
+    if (count($nuevosIds) !== 2) {
+        $okFac = false;
+        $rondasFac[$ronda] = 'sin dos pedidos que facturar';
+
+        continue;
+    }
     [$r1, $d1] = facturar($s, $nuevosIds[0]);
     [$r2, $d2] = facturar($sB, $nuevosIds[1]);
     $t0 = microtime(true);
@@ -331,13 +343,16 @@ if (count($nuevosIds) === 2) {
         $s->http->requestAsync('POST', $r1, $s->opciones('POST', $d1, [], true)),
         $sB->http->requestAsync('POST', $r2, $sB->opciones('POST', $d2, [], true)),
     ])->wait();
-    $httpFac = array_map(fn ($r) => $r['state'] === 'fulfilled' ? $r['value']->getStatusCode() : 'error', $resp);
-    $numF = DB::table('invoices')->whereIn('order_id', $nuevosIds)->orderBy('id')->pluck('increment_id')->all();
-    $todasF = DB::table('invoices')->pluck('increment_id')->all();
-    caso('R6b', 'Dos facturas creadas al mismo tiempo (dos servidores): números distintos, sin errores',
-        count($numF) === 2 && count($todasF) === count(array_unique($todasF)) && ! array_filter($httpFac, fn ($c) => $c === 'error' || $c >= 500),
-        ['http' => $httpFac, 'segundos' => round(microtime(true) - $t0, 2), 'numeros' => $numF, 'todas' => $todasF]);
+    $http = $errorHttp($resp);
+    $numF = DB::table('invoices')->whereIn('order_id', $nuevosIds)->orderBy('id')->pluck('increment_id', 'id')->all();
+    $okFac = $okFac && count($numF) === 2 && count(array_unique($numF)) === 2 && ! array_filter($http, fn ($c) => $c === 'error' || $c >= 500)
+        && ! array_filter($numF, fn ($n) => ! str_ends_with($n, '-2026'));
+    $rondasFac[$ronda] = ['http' => $http, 'segundos' => round(microtime(true) - $t0, 2), 'numeros' => $numF];
 }
+caso('R6a', 'Tres rondas de dos pedidos confirmados al mismo tiempo (dos servidores): todos se crean, sin números duplicados ni errores',
+    $okPed && $unicos('orders'), ['rondas' => $rondasPed, 'todos' => DB::table('orders')->orderBy('id')->pluck('increment_id', 'id')->all()]);
+caso('R6b', 'Tres rondas de dos facturas creadas al mismo tiempo (dos servidores): todas terminan en -2026, sin duplicados ni errores',
+    $okFac && $unicos('invoices'), ['rondas' => $rondasFac, 'todas' => DB::table('invoices')->orderBy('id')->pluck('increment_id', 'id')->all()]);
 
 // La contraseña temporal solo existe en la copia desechable; el hash original se repone tras las pruebas de navegador
 // (se guarda aquí para reponerlo; la copia se descarta de todos modos).

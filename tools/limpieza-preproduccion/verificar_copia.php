@@ -12,7 +12,8 @@
 |  3. Existencias: qty = 0; índice de inventario en 0; sin reservas ni rollos.
 |  4. Tablas vaciadas: 0 filas.
 |  5. Huérfanos: ninguna clave foránea declarada apunta a una fila inexistente, ni las referencias lógicas sin FK.
-|  6. Estado final: solo la cuenta administrativa conservada, sufijo -2026, sin productos de prueba ni roles QA.
+|  6. Estado final: solo la cuenta administrativa conservada, sufijo -2026, numeración nativa (sin clase generadora),
+|     sin productos de prueba ni roles QA.
 */
 
 require __DIR__.'/limpiar_base_listas.php';
@@ -101,9 +102,9 @@ foreach (TABLAS_RECONSTRUIR as $t) {
 echo "1. Tablas conservadas completas (contenido idéntico)\n";
 $iguales = 0;
 $enteras = array_diff(TABLAS_CONSERVAR, array_keys($ajustes));
-$nuevas = implode(',', array_map(fn ($m) => $pdo->quote($m), MIGRACIONES_NUEVAS));
+$nuevas = implode(',', array_map(fn ($m) => $pdo->quote($m), MIGRACIONES_NUEVAS)) ?: "''";
 foreach ($enteras as $t) {
-    $filtro = $t === 'migrations' ? "migration NOT IN ($nuevas)" : null;
+    $filtro = $t === 'migrations' && MIGRACIONES_NUEVAS ? "migration NOT IN ($nuevas)" : null;
     [$na, $ha] = huella($pdo, $A, $t, $filtro);
     [$nd, $hd] = huella($pdo, $D, $t, $filtro);
     if ($ha === $hd) {
@@ -113,9 +114,16 @@ foreach ($enteras as $t) {
     }
 }
 $ok("$iguales de ".count($enteras).' tablas idénticas fila a fila');
-$aplicadas = $pdo->query("SELECT migration FROM `$D`.migrations WHERE migration IN ($nuevas)")->fetchAll(PDO::FETCH_COLUMN);
-count($aplicadas) === count(MIGRACIONES_NUEVAS) ? $ok('migraciones nuevas aplicadas: '.implode(', ', $aplicadas))
-    : $mal('faltan migraciones nuevas: '.implode(', ', array_diff(MIGRACIONES_NUEVAS, $aplicadas)));
+if (MIGRACIONES_NUEVAS) {
+    $aplicadas = $pdo->query("SELECT migration FROM `$D`.migrations WHERE migration IN ($nuevas)")->fetchAll(PDO::FETCH_COLUMN);
+    count($aplicadas) === count(MIGRACIONES_NUEVAS) ? $ok('migraciones nuevas aplicadas: '.implode(', ', $aplicadas))
+        : $mal('faltan migraciones nuevas: '.implode(', ', array_diff(MIGRACIONES_NUEVAS, $aplicadas)));
+}
+// Mismo conjunto de tablas que el respaldo: ni tablas añadidas (p. ej. contadores retirados) ni tablas perdidas.
+$tablas = fn (string $b) => $pdo->query('SELECT table_name FROM information_schema.tables WHERE table_schema = '.$pdo->quote($b).' ORDER BY 1')->fetchAll(PDO::FETCH_COLUMN);
+[$ta, $td] = [$tablas($A), $tablas($D)];
+$ta === $td ? $ok(count($td).' tablas, las mismas del respaldo')
+    : $mal('tablas distintas del respaldo: sobran '.implode(',', array_diff($td, $ta)).'; faltan '.implode(',', array_diff($ta, $td)));
 
 echo "2. Tablas parciales o ajustadas (filas conservadas idénticas salvo las columnas ajustadas; 0 filas del alcance de borrado)\n";
 foreach (array_unique(array_merge(array_keys(TABLAS_PARCIALES), array_keys($ajustes))) as $t) {
@@ -194,9 +202,9 @@ $rol = $v("SELECT r.permission_type FROM `$D`.admins a JOIN `$D`.roles r ON r.id
 $rol === 'all' ? $ok('la cuenta conservada tiene un rol de acceso total') : $mal("rol de la cuenta conservada: $rol");
 $sufijo = $v("SELECT GROUP_CONCAT(DISTINCT value) FROM `$D`.core_config WHERE code = '".SUFIJO_FACTURA['code']."'");
 $sufijo === SUFIJO_FACTURA['valor'] ? $ok("sufijo de facturas: $sufijo") : $mal("sufijo de facturas: $sufijo");
-foreach (GENERADORES as $code => $clase) {
-    $valor = $v("SELECT GROUP_CONCAT(DISTINCT value) FROM `$D`.core_config WHERE code = '$code'");
-    $valor === $clase ? $ok("$code: $valor") : $mal("$code: $valor");
+foreach (GENERADORES_NATIVOS as $code) {
+    $valor = (string) $v("SELECT GROUP_CONCAT(DISTINCT IFNULL(value, '')) FROM `$D`.core_config WHERE code = '$code'");
+    $valor === '' ? $ok("$code: vacío (numeración nativa de Bagisto)") : $mal("$code: $valor");
 }
 $n = (int) $v("SELECT COUNT(*) FROM `$D`.products WHERE id IN (".IDS_PRODUCTOS_PRUEBA.')');
 $n === 0 ? $ok('productos de prueba: 0') : $mal("productos de prueba: $n");

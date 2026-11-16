@@ -23,14 +23,12 @@ const IDS_ROLES_QA = '12059,12060,12061,12065';
 
 const SUFIJO_FACTURA = ['code' => 'sales.invoice_settings.invoice_number.invoice_number_suffix', 'valor' => '-2026'];
 
-// Numeración visible desde 1 conservando los AUTO_INCREMENT: clases generadoras de ByLopez (contador propio con bloqueo).
-const GENERADORES = [
-    'sales.order_settings.order_number.order_number_generator' => 'ByLopez\VentasAsesor\Generators\ConsecutivoPedido',
-    'sales.invoice_settings.invoice_number.invoice_number_generator_class' => 'ByLopez\VentasAsesor\Generators\ConsecutivoFactura',
+// Numeración nativa de Bagisto (decisión de Camilo, 2026-11-16): sin clase generadora propia. El verificador exige
+// que estos dos valores sigan vacíos, como en la base original.
+const GENERADORES_NATIVOS = [
+    'sales.order_settings.order_number.order_number_generator',
+    'sales.invoice_settings.invoice_number.invoice_number_generator_class',
 ];
-// Los mismos valores como literal SQL (MariaDB trata «\» como escape dentro de comillas: cada «\» va doble).
-const GEN_PEDIDO_SQL = "'ByLopez\\\\VentasAsesor\\\\Generators\\\\ConsecutivoPedido'";
-const GEN_FACTURA_SQL = "'ByLopez\\\\VentasAsesor\\\\Generators\\\\ConsecutivoFactura'";
 
 const TABLAS_VACIAR = [
     // Bagisto: ventas, carritos, colas y temporales
@@ -57,8 +55,6 @@ const TABLAS_VACIAR = [
     'bylopez_va_order_attributions', 'bylopez_va_pagos', 'bylopez_va_pagos_eventos',
     'bylopez_va_pedido_grupo_snapshots', 'bylopez_va_rentabilidad_evaluaciones',
     'bylopez_va_rentabilidad_evaluacion_lineas', 'bylopez_va_umbral_movimientos',
-    // Último número visible usado de pedidos y facturas: sin documentos, el contador arranca otra vez (primero = 1).
-    'bylopez_va_consecutivos_visibles',
     // VentasAsesor: fichas de asesor y su acuerdo. admin_id es NOT NULL con FK RESTRICT: la ficha no puede existir
     // sin su cuenta, y todas las cuentas de asesor se eliminan.
     'bylopez_va_asesores', 'bylopez_va_comision_acuerdos',
@@ -128,13 +124,6 @@ const ACTUALIZACIONES = [
     ['tabla' => 'core_config', 'set' => "value = '".SUFIJO_FACTURA['valor']."'",
         'pendientes' => "code = '".SUFIJO_FACTURA['code']."' AND value <> '".SUFIJO_FACTURA['valor']."'",
         'alcance' => "code = '".SUFIJO_FACTURA['code']."'", 'columnas' => ['value']],
-    // Clases generadoras del número visible (Configuración › Ventas › Número de pedido / Número de factura).
-    ['tabla' => 'core_config', 'set' => 'value = '.GEN_PEDIDO_SQL,
-        'pendientes' => "code = 'sales.order_settings.order_number.order_number_generator' AND value <> ".GEN_PEDIDO_SQL,
-        'alcance' => "code = 'sales.order_settings.order_number.order_number_generator'", 'columnas' => ['value']],
-    ['tabla' => 'core_config', 'set' => 'value = '.GEN_FACTURA_SQL,
-        'pendientes' => "code = 'sales.invoice_settings.invoice_number.invoice_number_generator_class' AND value <> ".GEN_FACTURA_SQL,
-        'alcance' => "code = 'sales.invoice_settings.invoice_number.invoice_number_generator_class'", 'columnas' => ['value']],
 ];
 
 // Se reconstruye después con `php artisan indexer:index --type=inventory --mode=full`.
@@ -172,8 +161,9 @@ const TABLAS_CONSERVAR = [
     'users',
 ];
 
-// Migraciones aplicadas a la copia después del respaldo (código nuevo de la ronda 2); el resto de `migrations` debe ser idéntico.
-const MIGRACIONES_NUEVAS = ['2026_11_16_000001_create_bylopez_va_consecutivos_visibles_table'];
+// Migraciones aplicadas a la copia después del respaldo; el resto de `migrations` debe ser idéntico. Ninguna: la única
+// que hubo (contador de numeración visible) se retiró junto con su tabla.
+const MIGRACIONES_NUEVAS = [];
 
 // Referencias lógicas (sin FK declarada) desde filas conservadas; el verificador comprueba que no queden huérfanas.
 const REFERENCIAS_LOGICAS = [
