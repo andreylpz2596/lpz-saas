@@ -1,4 +1,4 @@
-{{-- Edicion de asesor (solo nombre y telefono; el usuario asociado es inmutable para proteger el historial). --}}
+{{-- Edicion de asesor (nombre, telefono y fecha de ingreso; el usuario asociado es inmutable para proteger el historial). --}}
 <x-admin::modal>
     <x-slot:toggle>
         <button type="button" class="va-btn">@lang('ventasasesor::app.asesores.editar')</button>
@@ -26,6 +26,12 @@
             <div>
                 <label class="text-gray-600 dark:text-gray-300" for="e-telefono">@lang('ventasasesor::app.asesores.telefono')</label>
                 <input id="e-telefono" name="telefono" maxlength="30" inputmode="tel" value="{{ old('telefono', $asesor->telefono) }}" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-gray-800 dark:bg-gray-900">
+            </div>
+
+            <div>
+                <label class="text-gray-600 dark:text-gray-300" for="e-fecha-ingreso">@lang('ventasasesor::app.asesores.fecha-ingreso')</label>
+                <input id="e-fecha-ingreso" type="date" name="fecha_ingreso" max="{{ now()->toDateString() }}" value="{{ old('fecha_ingreso', $asesor->fecha_ingreso) }}" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-gray-800 dark:bg-gray-900">
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">@lang('ventasasesor::app.asesores.fecha-ingreso-ayuda')</p>
             </div>
         </form>
     </x-slot>

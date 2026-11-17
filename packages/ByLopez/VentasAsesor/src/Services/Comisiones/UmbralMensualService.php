@@ -132,7 +132,7 @@ class UmbralMensualService
     public function umbralDelMes(int $asesorId, string $mes): array
     {
         $fijado = ComisionMes::query()->where('asesor_admin_id', $asesorId)->where('mes', $mes)->first();
-        [$inicio, $fin] = MesComercial::rango($mes);
+        [$inicio, $fin] = MesComercial::periodo($asesorId, $mes)->rango();
         $acuerdos = $this->acuerdos->vigentesEntre($asesorId, $inicio, $fin);
 
         if ($acuerdos->isEmpty()) {

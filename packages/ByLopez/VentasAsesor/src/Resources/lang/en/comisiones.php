@@ -14,7 +14,9 @@ return [
     'aviso-sin-fecha-inicio' => 'Commissions are not active yet. The values shown are estimates and no commission is enabled.',
     'tabs' => ['resumen' => 'Monthly summary', 'liquidaciones' => 'Settlements and payouts', 'acuerdos' => 'Rate and threshold per advisor'],
 
-    'mes-comercial' => 'Sales month',
+    'mes-comercial' => 'Period (start month)',
+    'periodo-en-curso-cada-una' => 'current period of each advisor',
+    'sugerencia-liquidacion' => 'Suggested: the advisor\'s last finished period (:periodo). You may choose other dates.',
     'asesor' => 'Advisor',
     'todos' => 'All',
     'estado' => 'Status',

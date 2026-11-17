@@ -8,6 +8,7 @@ use ByLopez\VentasAsesor\Services\Cartera\CarteraConsultaService;
 use ByLopez\VentasAsesor\Services\Pedidos\ConsultaPedidosAsesorService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Cartera\FechaCorteCartera;
+use ByLopez\VentasAsesor\Support\Comisiones\MesComercial;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -126,6 +127,24 @@ class ConsultaAsesoresService
             'pedidos' => $pedidos,
             'clientes' => $this->clientesAtendidos($adminId),
             'pagos' => $this->pagosRecientes($adminId),
+            'periodoComision' => $this->periodoComision($adminId),
+        ];
+    }
+
+    /**
+     * Período de comisión en curso de la asesora (día de ingreso) y, si lo hay, el cambio de día ya guardado que aún no rige.
+     *
+     * @return array{actual: array<string, mixed>, dia: int, cambio: ?array{dia: int, desde: string}}
+     */
+    private function periodoComision(int $adminId): array
+    {
+        $calendario = MesComercial::calendario($adminId);
+        $cambio = $calendario->cambioProgramado(now());
+
+        return [
+            'actual' => $calendario->periodoEn(now())->aArreglo(),
+            'dia' => $calendario->diaEn(now()),
+            'cambio' => $cambio === null ? null : ['dia' => $cambio['dia'], 'desde' => $cambio['desde']->toDateString()],
         ];
     }
 

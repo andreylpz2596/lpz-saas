@@ -202,7 +202,9 @@ class ConsultaComisionesService
 
         return [
             'pedido' => $pedido,
-            'mes' => MesComercial::de((string) $pedido->created_at),
+            // Clave y período de la ASESORA de la venta (su día de ingreso); sin líneas, el mes calendario de la confirmación.
+            'mes' => ($primera = $lineas->first()) ? $primera->mes_comercial : MesComercial::de((string) $pedido->created_at),
+            'periodo' => $primera ? MesComercial::periodo((int) $primera->asesor_admin_id, $primera->mes_comercial)->etiqueta() : null,
             'lineas' => $lineas->map(fn (ComisionLinea $l) => $this->linea($l, $dist[$l->id] ?? null, $costos) + [
                 'eventos' => $l->eventos->map(fn ($e) => ['tipo' => $e->tipo, 'detalle' => $costos ? $e->detalle : null, 'actor' => $e->actor_name_snapshot, 'en' => $e->created_at])->all(),
             ])->all(),

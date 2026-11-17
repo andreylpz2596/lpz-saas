@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * R4 — PANEL MENSUAL de rentabilidad. Cada cifra declara su fecha y su fuente, y NUNCA se suman categorias distintas:
  *
- *  - Ventas netas, costo vendido, comisiones y costos directos: por MES COMERCIAL (fecha de confirmacion de la venta).
+ *  - Ventas netas, costo vendido, comisiones y costos directos: por MES CALENDARIO de la confirmacion de la venta (empresa).
+ *    El periodo de comision de cada asesora (dia de ingreso) solo decide su umbral, no el mes de este panel.
  *    Una comision pagada en otro mes NO se vuelve a reconocer: el gasto pertenece al mes de la venta.
  *  - Comision: UNA vez por linea (habilitada = monto congelado; resto = estimada con el umbral). El abono al asesor no es
  *    un gasto nuevo.
@@ -71,15 +72,18 @@ class PanelMensualService
 
         $pedidos = $items->pluck('order_id')->unique()->values()->all();
 
-        // Comision del mes comercial, UNA sola vez por linea: si esta habilitada cuenta su monto CONGELADO; si no, su
-        // estimacion con el umbral. Nunca estimada + habilitada del mismo pedido. Los abonos al asesor no son gasto aqui
-        // (pagar en otro mes no vuelve a reconocer la comision).
+        // Comision de las ventas CONFIRMADAS en este mes calendario, UNA sola vez por linea: si esta habilitada cuenta su monto
+        // CONGELADO; si no, su estimacion con el umbral. Nunca estimada + habilitada del mismo pedido. Los abonos al asesor no son
+        // gasto aqui (pagar en otro mes no vuelve a reconocer la comision). Cada asesora tiene su PERIODO (dia de ingreso): la
+        // estimacion se toma del reparto de SU periodo (asesora + mes_comercial), aunque ese periodo cruce dos meses calendario.
         $habilitada = BigDecimal::zero();
         $estimadaResto = BigDecimal::zero();
-        foreach (ComisionLinea::query()->where('mes_comercial', $mes)->where('estado', '!=', ComisionLinea::ANULADA)->distinct()->pluck('asesor_admin_id') as $a) {
-            $dist = $this->umbral->distribucion((int) $a, $mes)['lineas'];
+        $lineasMes = ComisionLinea::query()->where('confirmado_en', '>=', $desde)->where('confirmado_en', '<', $hasta)
+            ->where('estado', '!=', ComisionLinea::ANULADA)->get(['id', 'asesor_admin_id', 'mes_comercial', 'estado', 'monto']);
+        foreach ($lineasMes->groupBy(fn (ComisionLinea $l) => $l->asesor_admin_id.'|'.$l->mes_comercial) as $grupo) {
+            $dist = $this->umbral->distribucion((int) $grupo->first()->asesor_admin_id, (string) $grupo->first()->mes_comercial)['lineas'];
 
-            foreach (ComisionLinea::query()->where('asesor_admin_id', $a)->where('mes_comercial', $mes)->where('estado', '!=', ComisionLinea::ANULADA)->get(['id', 'estado', 'monto']) as $l) {
+            foreach ($grupo as $l) {
                 $l->estado === ComisionLinea::HABILITADA
                     ? $habilitada = $habilitada->plus(Dinero::de($l->monto))
                     : $estimadaResto = $estimadaResto->plus(Dinero::de($dist[$l->id]['monto_estimado'] ?? 0));

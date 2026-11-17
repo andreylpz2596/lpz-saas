@@ -4,10 +4,14 @@ namespace ByLopez\VentasAsesor\Support\Comisiones;
 
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\DB;
 
 /**
- * Mes comercial de una venta: mes calendario en America/Bogota del INSTANTE REAL de confirmacion (`orders.created_at`).
+ * Mes comercial de una venta: se decide en America/Bogota con el INSTANTE REAL de confirmacion (`orders.created_at`).
  * Es independiente de la fecha de cobro, habilitacion o pago: un cobro en otro mes no mueve la venta de mes.
+ *
+ * Desde 2026-11-16 cada asesora tiene su PERÍODO de comisión (día de ingreso, ver CalendarioComision): para las comisiones de
+ * una asesora la clave `Y-m` es el mes en que EMPIEZA su período (`calendario()`). `de()` y `rango()` son el mes calendario.
  */
 final class MesComercial
 {
@@ -37,6 +41,31 @@ final class MesComercial
         $inicio = CarbonImmutable::createFromFormat('Y-m-d H:i:s', $mes.'-01 00:00:00', self::zona());
 
         return [$inicio, $inicio->addMonth()];
+    }
+
+    /**
+     * Calendario de períodos de comisión de la asesora (`asesor_admin_id` = admins.id). Sin día de ingreso guardado es el mes
+     * calendario: `calendario($id)->clave(...)` coincide con `de(...)`. Toda clave de comisión de UNA asesora (líneas, umbral,
+     * avance, simulador) sale de aquí; `de()`/`rango()` quedan para lo que es de la empresa (panel por mes calendario).
+     */
+    public static function calendario(int $asesorAdminId): CalendarioComision
+    {
+        return new CalendarioComision(DB::table('bylopez_va_comision_ciclos')->where('asesor_admin_id', $asesorAdminId)
+            ->orderByRaw('vigente_desde IS NULL DESC')->orderBy('vigente_desde')->orderBy('id')
+            ->get(['dia_inicio', 'vigente_desde'])
+            ->map(fn ($f) => ['dia' => (int) $f->dia_inicio, 'desde' => $f->vigente_desde])->all());
+    }
+
+    /** Período (con su etiqueta) de la clave `$mes` para la asesora; si en ese mes no empieza ninguno, el mes calendario. */
+    public static function periodo(int $asesorAdminId, string $mes): PeriodoComision
+    {
+        if ($p = self::calendario($asesorAdminId)->rango($mes)) {
+            return $p;
+        }
+
+        [$inicio, $fin] = self::rango($mes);
+
+        return new PeriodoComision($mes, $inicio, $fin);
     }
 
     public static function valido(?string $mes): bool

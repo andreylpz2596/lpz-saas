@@ -69,7 +69,7 @@ class LineasComisionService
                 'asesor_name_snapshot' => $atribucion->advisor_name_snapshot,
                 'acuerdo_id' => $acuerdo?->id,
                 'porcentaje' => $acuerdo?->porcentaje,
-                'mes_comercial' => MesComercial::de($confirmado),
+                'mes_comercial' => MesComercial::calendario($asesorId)->clave($confirmado),
                 'confirmado_en' => $confirmado,
                 'familia_id' => $l->familia_id,
                 'referencia' => $l->referencia,

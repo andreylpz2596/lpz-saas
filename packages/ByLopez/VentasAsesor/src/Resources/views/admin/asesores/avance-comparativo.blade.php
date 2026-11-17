@@ -5,7 +5,9 @@
 @php
     $nuA = fn ($v) => number_format((int) $v, 0, ',', '.');
     $dineroA = fn ($v) => \ByLopez\Logistica\Support\Moneda::formatear((float) $v);
-    $mesA = \Illuminate\Support\Carbon::createFromFormat('Y-m', $comparativo[0]['mes'] ?? now()->format('Y-m'))->locale(app()->getLocale())->isoFormat('MMMM YYYY');
+    // Cada asesora va en SU período (día de ingreso): el encabezado solo nombra un período si todas comparten el mismo.
+    $periodosA = collect($comparativo)->pluck('periodo.etiqueta')->unique();
+    $mesA = $periodosA->count() === 1 ? (string) $periodosA->first() : null;
 @endphp
 
 @once
@@ -17,7 +19,7 @@
 @if ($comparativo !== [])
     <section class="mt-4" data-seccion="avance-asesoras" aria-label="@lang('ventasasesor::comisiones.panel.resumen-asesora')">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 class="text-base font-semibold text-gray-900 dark:text-white">@lang('ventasasesor::comisiones.panel.resumen-asesora') · {{ ucfirst($mesA) }}</h2>
+            <h2 class="text-base font-semibold text-gray-900 dark:text-white">@lang('ventasasesor::comisiones.panel.resumen-asesora') · {{ $mesA === null ? trans('ventasasesor::comisiones.periodo-en-curso-cada-una') : ucfirst($mesA) }}</h2>
         </div>
 
         <div class="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -25,6 +27,7 @@
                 <article class="va-panel va-asesora" data-avance-asesora="{{ $c['asesor_id'] }}" data-situacion="{{ $c['situacion'] }}">
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <a class="text-base font-semibold text-blue-600 hover:underline" href="{{ route('admin.ventas_asesor.asesores.index', ['asesor' => $c['asesor_id']]) }}">{{ $c['asesora'] }}</a>
+                        <span class="va-sub" data-periodo="{{ $c['periodo']['clave'] }}">{{ ucfirst($c['periodo']['etiqueta']) }}</span>
                         <span class="va-sub">
                             @if ($c['umbral'] !== null){{ $nuA($c['computables']) }} / {{ $nuA($c['umbral']) }}@else @lang('ventasasesor::comisiones.umbral-estados.'.$c['estado_umbral']) @endif
                         </span>

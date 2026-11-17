@@ -8,7 +8,6 @@ use ByLopez\VentasAsesor\Services\Asesores\ConsultaAsesoresService;
 use ByLopez\VentasAsesor\Services\Asesores\GuardarAsesorService;
 use ByLopez\VentasAsesor\Services\Comisiones\AvanceAsesorService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
-use ByLopez\VentasAsesor\Support\Comisiones\MesComercial;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -88,7 +87,8 @@ class AsesoresController extends Controller
             return null;
         }
 
-        return $this->avance->comparativo($adminIds, MesComercial::de(now()));
+        // Cada asesora en SU período en curso (día de ingreso): el comparativo no fuerza un mes común.
+        return $this->avance->comparativo($adminIds);
     }
 
     public function store(Request $request): RedirectResponse
@@ -104,10 +104,18 @@ class AsesoresController extends Controller
     public function update(int $asesor, Request $request): RedirectResponse
     {
         return $this->ejecutar(function () use ($asesor, $request) {
-            $this->guardar->actualizar(auth()->guard('admin')->user(), $asesor, $request->only(['nombre', 'telefono']));
+            $campos = $request->has('fecha_ingreso') ? ['nombre', 'telefono', 'fecha_ingreso'] : ['nombre', 'telefono'];
+            $this->guardar->actualizar(auth()->guard('admin')->user(), $asesor, $request->only($campos));
+            $ciclo = $this->guardar->resultadoCiclo;
+            $mensaje = trans('ventasasesor::app.asesores.actualizado');
 
-            return redirect()->route('admin.ventas_asesor.asesores.index', ['asesor' => $asesor])
-                ->with('success', trans('ventasasesor::app.asesores.actualizado'));
+            if ($ciclo !== null && $ciclo['modo'] === \ByLopez\VentasAsesor\Services\Comisiones\CicloComisionService::TRANSICION && $ciclo['desde'] !== null) {
+                $mensaje .= ' '.trans('ventasasesor::app.asesores.periodo-transicion', ['desde' => $ciclo['desde'], 'periodo' => $ciclo['periodo_actual']['etiqueta']]);
+            } elseif ($ciclo !== null && $ciclo['modo'] !== \ByLopez\VentasAsesor\Services\Comisiones\CicloComisionService::SIN_CAMBIO) {
+                $mensaje .= ' '.trans('ventasasesor::app.asesores.periodo-aplicado', ['periodo' => $ciclo['periodo_actual']['etiqueta']]);
+            }
+
+            return redirect()->route('admin.ventas_asesor.asesores.index', ['asesor' => $asesor])->with('success', $mensaje);
         });
     }
 

@@ -15,11 +15,12 @@ class Asesor extends Model
 {
     protected $table = 'bylopez_va_asesores';
 
-    protected $fillable = ['admin_id', 'nombre', 'telefono', 'activo', 'creado_por_admin_id'];
+    protected $fillable = ['admin_id', 'nombre', 'telefono', 'fecha_ingreso', 'activo', 'creado_por_admin_id'];
 
     protected $casts = [
         'admin_id' => 'integer',
         'activo' => 'boolean',
+        'fecha_ingreso' => 'date',
         'creado_por_admin_id' => 'integer',
     ];
 

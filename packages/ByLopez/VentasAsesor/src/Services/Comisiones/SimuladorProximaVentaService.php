@@ -50,7 +50,7 @@ class SimuladorProximaVentaService
         }
 
         $asesorId = (int) $actor->id;
-        $mes = MesComercial::de(now());
+        $mes = MesComercial::calendario($asesorId)->clave(now());
         $d = $this->umbral->distribucion($asesorId, $mes);
         $acuerdo = $this->acuerdos->vigenteEn($asesorId, now());
         $porcentaje = $acuerdo?->porcentaje;
@@ -91,6 +91,7 @@ class SimuladorProximaVentaService
         return [
             'simulacion' => true,
             'mes' => $mes,
+            'periodo' => MesComercial::periodo($asesorId, $mes)->aArreglo(),
             'umbral' => $d['umbral'],
             'computables_actuales' => $d['acumulado'],
             'unidades' => $unidades,

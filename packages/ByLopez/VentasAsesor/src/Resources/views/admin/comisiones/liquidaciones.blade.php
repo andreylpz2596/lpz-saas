@@ -28,6 +28,7 @@
                 <div style="min-width:9.5rem">
                     <label class="{{ $label }}" for="f-mes-cuenta">@lang('ventasasesor::comisiones.mes-comercial')</label>
                     <input id="f-mes-cuenta" type="month" name="mes" value="{{ $mes }}" class="{{ $input }}" onchange="this.form.submit()">
+                    @if ($periodoAsesora)<p class="va-sub" data-periodo="{{ $periodoAsesora->clave }}">{{ ucfirst($periodoAsesora->etiqueta()) }}</p>@endif
                 </div>
                 <div class="min-w-[16rem]">
                     <label class="{{ $label }}" for="f-asesor">@lang('ventasasesor::comisiones.asesor')</label>
@@ -49,7 +50,7 @@
             {{-- ACTIVIDAD del mes (separada del saldo acumulado): solo las ventas de ese mes comercial. --}}
             @php($act = $cuentaAsesor['actividad'])
             <section class="mt-6" data-seccion="actividad-mes" aria-labelledby="va-act-titulo">
-                <h2 id="va-act-titulo" class="text-base font-semibold text-gray-900 dark:text-white">@lang('ventasasesor::comisiones.cuenta.actividad-titulo', ['mes' => \Illuminate\Support\Carbon::createFromFormat('Y-m', $mes)->locale(app()->getLocale())->isoFormat('MMMM YYYY')])</h2>
+                <h2 id="va-act-titulo" class="text-base font-semibold text-gray-900 dark:text-white">@lang('ventasasesor::comisiones.cuenta.actividad-titulo', ['mes' => $periodoAsesora->etiqueta()])</h2>
                 <p class="va-sub">@lang('ventasasesor::comisiones.cuenta.actividad-ayuda')</p>
                 @include('ventasasesor::admin.comisiones.partials.avisos', ['panel' => $act])
                 <div class="va-etapas mt-3" data-etapas="comision">
@@ -79,9 +80,12 @@
                     <input type="hidden" name="asesor_id" value="{{ $cuenta['asesor_id'] }}">
                     <p class="text-base font-semibold text-gray-900 dark:text-white">@lang('ventasasesor::comisiones.crear-liquidacion')</p>
                     <p class="va-sub">@lang('ventasasesor::comisiones.crear-liquidacion-ayuda')</p>
+                    @if ($sugerenciaLiquidacion)
+                        <p class="va-sub" data-sugerencia-liquidacion="{{ $sugerenciaLiquidacion['desde'] }}">@lang('ventasasesor::comisiones.sugerencia-liquidacion', ['periodo' => $sugerenciaLiquidacion['etiqueta']])</p>
+                    @endif
                     <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-12">
-                        <div class="md:col-span-3"><label class="{{ $label }}">@lang('ventasasesor::comisiones.periodo-desde')</label><input type="date" name="periodo_desde" required class="{{ $input }}"></div>
-                        <div class="md:col-span-3"><label class="{{ $label }}">@lang('ventasasesor::comisiones.periodo-hasta')</label><input type="date" name="periodo_hasta" value="{{ $hoy }}" required class="{{ $input }}"></div>
+                        <div class="md:col-span-3"><label class="{{ $label }}">@lang('ventasasesor::comisiones.periodo-desde')</label><input type="date" name="periodo_desde" value="{{ $sugerenciaLiquidacion['desde'] ?? '' }}" required class="{{ $input }}"></div>
+                        <div class="md:col-span-3"><label class="{{ $label }}">@lang('ventasasesor::comisiones.periodo-hasta')</label><input type="date" name="periodo_hasta" value="{{ $sugerenciaLiquidacion['hasta'] ?? $hoy }}" required class="{{ $input }}"></div>
                         <div class="md:col-span-4"><label class="{{ $label }}">@lang('ventasasesor::comisiones.observacion')</label><input type="text" name="observacion" maxlength="500" class="{{ $input }}"></div>
                         <div class="flex items-end md:col-span-2"><button type="submit" class="primary-button w-full justify-center">@lang('ventasasesor::comisiones.crear-borrador')</button></div>
                     </div>

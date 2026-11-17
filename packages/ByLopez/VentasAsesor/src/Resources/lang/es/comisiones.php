@@ -15,7 +15,9 @@ return [
     'aviso-sin-fecha-inicio' => 'Las comisiones todavía no están activas. Los valores mostrados son estimaciones y ninguna comisión se habilita.',
     'tabs' => ['resumen' => 'Resumen del mes', 'liquidaciones' => 'Liquidaciones y pagos', 'acuerdos' => '% y umbral por asesor'],
 
-    'mes-comercial' => 'Mes comercial',
+    'mes-comercial' => 'Período (mes en que inicia)',
+    'periodo-en-curso-cada-una' => 'período en curso de cada asesora',
+    'sugerencia-liquidacion' => 'Sugerido: último período terminado de la asesora (:periodo). Puedes elegir otras fechas.',
     'asesor' => 'Asesor',
     'todos' => 'Todos',
     'estado' => 'Estado',

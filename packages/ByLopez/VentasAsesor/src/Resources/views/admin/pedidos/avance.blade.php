@@ -13,7 +13,7 @@
         default => trans('ventasasesor::comisiones.avance.'.($avance['estado_umbral'] === 'sin_acuerdo' ? 'sin_acuerdo' : 'sin_umbral')),
     };
     $detalle = $sit === 'antes' ? trans('ventasasesor::comisiones.avance.antes-detalle', ['faltante' => $n($avance['faltante'])]) : null;
-    $mesLegible = \Illuminate\Support\Carbon::createFromFormat('Y-m', $avance['mes'])->locale(app()->getLocale())->isoFormat('MMMM YYYY');
+    $mesLegible = $avance['periodo']['etiqueta'];
 @endphp
 
 @once

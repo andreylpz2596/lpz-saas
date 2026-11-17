@@ -388,7 +388,8 @@ test('22. ninguna migracion del modulo altera tablas del core', function () {
     // comerciales de la Fase 03C (D-39) y el intento de confirmacion de la Fase 03F (D-55).
     // Fases posteriores (geo DIVIPOLA, pagos, credito, comisiones, cotizaciones, GRP-01...) llevaron el total a 37;
     // revisadas una por una el 2026-11-16. Una migracion nueva obliga a revisarla y a subir este numero.
-    expect($migraciones)->toHaveCount(37);
+    // 38: periodo de comision por asesora (bylopez_va_comision_ciclos + bylopez_va_asesores.fecha_ingreso), revisada el 2026-11-16.
+    expect($migraciones)->toHaveCount(38);
 
     foreach ($migraciones as $archivo) {
         $contenido = file_get_contents($archivo);

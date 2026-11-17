@@ -96,7 +96,7 @@ class AcuerdosComisionService
         // El % nuevo nunca cambia ventas ya confirmadas (A-02), pero el UMBRAL del mes en que empieza si puede (D4: el mes
         // queda marcado). Se reevaluan los pedidos de ese mes del asesor. Resolucion tardia para no crear un ciclo de
         // dependencias (la reevaluacion usa este servicio).
-        app(ReevaluacionComisionesService::class)->solicitarAsesorMes($asesorId, MesComercial::de($acuerdo->vigente_desde), 'acuerdo');
+        app(ReevaluacionComisionesService::class)->solicitarAsesorMes($asesorId, MesComercial::calendario($asesorId)->clave($acuerdo->vigente_desde), 'acuerdo');
 
         return $acuerdo;
     }

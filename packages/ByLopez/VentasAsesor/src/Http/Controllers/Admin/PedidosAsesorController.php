@@ -98,7 +98,7 @@ class PedidosAsesorController extends Controller
         $verComisiones = $this->autorizacion->tienePermiso($admin, AutorizacionVentasAsesor::PERMISO_COMISIONES_VER_PROPIAS);
 
         return [
-            'avance' => $this->avance->deAsesor((int) $admin->id, MesComercial::de(now())),
+            'avance' => $this->avance->deAsesor((int) $admin->id, MesComercial::calendario((int) $admin->id)->clave(now())),
             'verEstimacion' => $verComisiones,
             'urlMisComisiones' => $verComisiones ? route('admin.ventas_asesor.comisiones.mias') : null,
         ];

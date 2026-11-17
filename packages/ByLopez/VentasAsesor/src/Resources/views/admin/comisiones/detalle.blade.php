@@ -21,7 +21,7 @@
                 <p class="text-xl font-semibold text-gray-900 dark:text-white">@lang('ventasasesor::comisiones.detalle-titulo', ['pedido' => $d['pedido']->increment_id])</p>
                 <a href="{{ route('admin.ventas_asesor.comisiones.index', ['mes' => $d['mes']]) }}" class="transparent-button">@lang('ventasasesor::comisiones.volver')</a>
             </div>
-            <p class="va-sub mt-1">@lang('ventasasesor::comisiones.mes-comercial'): {{ $d['mes'] }} · @lang('ventasasesor::comisiones.estado-pedido'): {{ $d['pedido']->status }}</p>
+            <p class="va-sub mt-1">@lang('ventasasesor::comisiones.mes-comercial'): {{ $d['mes'] }}@if ($d['periodo'] ?? null) ({{ $d['periodo'] }})@endif · @lang('ventasasesor::comisiones.estado-pedido'): {{ $d['pedido']->status }}</p>
 
             {{-- Condiciones A-04: todas a la vez. Sin pendientes = habilitable. --}}
             <div class="mt-3" data-seccion="condiciones">

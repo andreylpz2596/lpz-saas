@@ -62,10 +62,14 @@ class ComisionesController extends Controller
             return redirect()->route('admin.ventas_asesor.comisiones.mias');
         }
 
-        $mes = MesComercial::valido($request->query('mes')) ? (string) $request->query('mes') : MesComercial::de(now());
         $vista = in_array($request->query('vista'), ['resumen', 'acuerdos', 'liquidaciones', 'ajustes'], true) ? $request->query('vista') : 'resumen';
         $asesor = ctype_digit((string) $request->query('asesor')) ? (int) $request->query('asesor') : null;
         $propio = $this->consulta->alcance($actor);
+        // Clave = mes en que EMPIEZA el período. Con una asesora elegida, por defecto SU período en curso (día de ingreso);
+        // en la vista general, el mes calendario (para las asesoras sin día de ingreso es lo mismo).
+        $deQuien = $propio ?? $asesor;
+        $mes = MesComercial::valido($request->query('mes')) ? (string) $request->query('mes')
+            : ($deQuien === null ? MesComercial::de(now()) : MesComercial::calendario($deQuien)->clave(now()));
 
         $datos = ['vista' => $vista, 'mes' => $mes, 'asesor' => $propio ?? $asesor, 'permisos' => $permisos, 'asesores' => $propio === null ? $this->consulta->asesores() : []];
 
@@ -90,6 +94,9 @@ class ComisionesController extends Controller
             return view('ventasasesor::admin.comisiones.liquidaciones', $datos + [
                 'cuenta' => $cuentaDe === null ? null : $this->consulta->cuenta($actor, $cuentaDe),
                 'cuentaAsesor' => $cuentaAsesor,
+                // Sugerencia del período a liquidar: el último período YA TERMINADO de la asesora (día de ingreso). Sigue siendo libre.
+                'sugerenciaLiquidacion' => $cuentaDe === null ? null : MesComercial::calendario($cuentaDe)->sugerenciaLiquidacion(now()),
+                'periodoAsesora' => $cuentaDe === null ? null : MesComercial::periodo($cuentaDe, $mes),
                 'clave' => (string) Str::uuid(),
             ]);
         }
@@ -107,7 +114,7 @@ class ComisionesController extends Controller
     public function mias(Request $request): View
     {
         $actor = $this->actor();
-        $mes = MesComercial::valido($request->query('mes')) ? (string) $request->query('mes') : MesComercial::de(now());
+        $mes = MesComercial::valido($request->query('mes')) ? (string) $request->query('mes') : MesComercial::calendario((int) $actor?->id)->clave(now());
 
         try {
             $datos = $this->mias->resumen($actor, $mes);
@@ -116,7 +123,7 @@ class ComisionesController extends Controller
             throw $e;
         }
 
-        return view('ventasasesor::admin.comisiones.mias', ['datos' => $datos, 'mes' => $mes, 'permisos' => $this->permisos($actor)]);
+        return view('ventasasesor::admin.comisiones.mias', ['datos' => $datos, 'mes' => $mes, 'periodo' => MesComercial::periodo((int) $actor?->id, $mes), 'permisos' => $this->permisos($actor)]);
     }
 
     /** «Simular próxima venta»: calcula en el servidor, no escribe nada y siempre se identifica como simulación. */

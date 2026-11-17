@@ -97,6 +97,10 @@
                 <div><dt class="va-caption">@lang('ventasasesor::app.asesores.usuario')</dt><dd class="text-gray-800 dark:text-gray-200">{{ $asesor->usuario }}</dd></div>
                 <div><dt class="va-caption">@lang('ventasasesor::app.asesores.correo')</dt><dd class="text-gray-800 dark:text-gray-200">{{ $asesor->email }}</dd></div>
                 <div><dt class="va-caption">@lang('ventasasesor::app.asesores.telefono')</dt><dd class="text-gray-800 dark:text-gray-200">{{ $asesor->telefono ?: '—' }}</dd></div>
+                <div><dt class="va-caption">@lang('ventasasesor::app.asesores.fecha-ingreso')</dt><dd class="text-gray-800 dark:text-gray-200" data-fecha-ingreso>{{ $fecha($asesor->fecha_ingreso) }}</dd></div>
+                <div><dt class="va-caption">@lang('ventasasesor::app.asesores.periodo-comision')</dt><dd class="text-gray-800 dark:text-gray-200" data-periodo-comision="{{ $periodoComision['actual']['clave'] }}">{{ ucfirst($periodoComision['actual']['etiqueta']) }}
+                    @if ($periodoComision['cambio'])<br><small class="va-sub">@lang('ventasasesor::app.asesores.periodo-cambio-programado', ['dia' => $periodoComision['cambio']['dia'], 'desde' => $fecha($periodoComision['cambio']['desde'])])</small>@endif
+                </dd></div>
                 <div><dt class="va-caption">@lang('ventasasesor::app.asesores.alta')</dt><dd class="text-gray-800 dark:text-gray-200">{{ $fecha($asesor->created_at) }}</dd></div>
                 <div><dt class="va-caption">@lang('ventasasesor::app.asesores.ultima-venta')</dt><dd class="text-gray-800 dark:text-gray-200">{{ $fecha($m['ultima_venta'], 'd/m/Y h:i A') }}</dd></div>
                 <div><dt class="va-caption">@lang('ventasasesor::app.asesores.clientes-atendidos')</dt><dd class="text-gray-800 dark:text-gray-200">{{ $m['clientes'] }}</dd></div>

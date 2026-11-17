@@ -35,6 +35,7 @@
                 <div class="va-fcompacto__campo">
                     <label for="f-mes">@lang('ventasasesor::comisiones.mes-comercial')</label>
                     <input id="f-mes" type="month" name="mes" value="{{ $mes }}">
+                    <small class="va-sub" data-periodo="{{ $periodo->clave }}">{{ ucfirst($periodo->etiqueta()) }}</small>
                 </div>
                 <div class="va-fcompacto__campo" style="flex:0 0 auto">
                     <button type="submit" class="secondary-button justify-center">@lang('ventasasesor::comisiones.filtrar')</button>

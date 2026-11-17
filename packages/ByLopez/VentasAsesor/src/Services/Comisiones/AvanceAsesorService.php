@@ -6,6 +6,7 @@ use Brick\Math\BigDecimal;
 use ByLopez\VentasAsesor\Models\ComisionLinea;
 use ByLopez\VentasAsesor\Models\ComisionLiquidacion;
 use ByLopez\VentasAsesor\Support\Comisiones\Dinero;
+use ByLopez\VentasAsesor\Support\Comisiones\MesComercial;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -57,6 +58,7 @@ class AvanceAsesorService
         return [
             'asesor_id' => $asesorId,
             'mes' => $mes,
+            'periodo' => MesComercial::periodo($asesorId, $mes)->aArreglo(),
             'estado_umbral' => $d['estado_umbral'],
             'umbral' => $d['umbral'],
             'computables' => $d['acumulado'],
@@ -79,13 +81,15 @@ class AvanceAsesorService
      * @param  list<int>  $adminIds
      * @return list<array<string, mixed>>
      */
-    public function comparativo(array $adminIds, string $mes): array
+    public function comparativo(array $adminIds, ?string $mes = null): array
     {
         $nombres = DB::table('bylopez_va_asesores')->whereIn('admin_id', $adminIds ?: [0])->pluck('nombre', 'admin_id');
         $filas = [];
 
         foreach ($adminIds as $id) {
-            $filas[] = $this->deAsesor($id, $mes) + ['asesora' => (string) ($nombres[$id] ?? ('#'.$id)), 'saldo_aprobado' => $this->saldoAprobado($id)];
+            // Sin mes: el período EN CURSO de cada asesora (su día de ingreso). Con mes: esa clave para todas.
+            $clave = $mes ?? MesComercial::calendario($id)->clave(now());
+            $filas[] = $this->deAsesor($id, $clave) + ['asesora' => (string) ($nombres[$id] ?? ('#'.$id)), 'saldo_aprobado' => $this->saldoAprobado($id)];
         }
 
         return $filas;

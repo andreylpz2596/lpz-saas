@@ -174,7 +174,7 @@ class EvaluarComisionesService
 
         if ($atribucion?->commercial_owner_type === TipoPropiedadComercial::ASESOR->value && $atribucion->advisor_id !== null
             && $tipo === TipoOperacionPedido::VENTA_NORMAL->value) {
-            $claves[] = (int) $atribucion->advisor_id.'|'.MesComercial::de($creadoEn);
+            $claves[] = (int) $atribucion->advisor_id.'|'.MesComercial::calendario((int) $atribucion->advisor_id)->clave($creadoEn);
         }
 
         $claves = array_values(array_unique($claves));
