@@ -16,10 +16,9 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         // bagisto-eu/pickup declara la clase `Instore` (Payment/Instore.php) pero su configuración la nombra `InStore`.
-        // Windows no distingue mayúsculas y funciona; en Linux el autoload no la encuentra y Nueva venta da 500.
-        if (! class_exists('Bagisto\Pickup\Payment\InStore', false) && class_exists('Bagisto\Pickup\Payment\Instore')) {
-            class_alias('Bagisto\Pickup\Payment\Instore', 'Bagisto\Pickup\Payment\InStore');
-        }
+        // Windows no distingue mayúsculas y funciona; en Linux el autoload no encuentra el ARCHIVO de `InStore` y Nueva
+        // venta da 500. PHP no distingue mayúsculas en nombres de clase: basta con cargar `Instore` por adelantado.
+        class_exists('Bagisto\Pickup\Payment\Instore');
 
         $allowedIPs = array_map('trim', explode(',', config('app.debug_allowed_ips', '')));
 
