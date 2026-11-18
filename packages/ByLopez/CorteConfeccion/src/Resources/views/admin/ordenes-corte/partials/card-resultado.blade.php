@@ -155,6 +155,9 @@
                     </div>
 
                     <x-admin::form.control-group.error control-name="resultados" />
+
+                    <div
+                        class="mb-2 rounded border dark:border-gray-800"
                         v-for="(grupo, gIndex) in gruposFilas"
                         :key="'grupo-' + gIndex"
                     >

@@ -20,7 +20,7 @@
             type="text/x-template"
             id="v-taller-view-template"
         >
-            <div class="bylopez-scope grid">
+            <div class="bylopez-scope grid grid-cols-1">
                 <div class="flex items-center justify-between gap-4 max-sm:flex-wrap">
                     <div class="flex items-center gap-2.5">
                         <h1
@@ -266,7 +266,7 @@
                         </div>
                     </div>
 
-                    <div class="flex w-[360px] max-w-full shrink-0 flex-col gap-2 max-xl:w-full max-sm:w-full">
+                    <div class="flex w-[360px] max-w-full shrink-0 flex-col gap-2 max-xl:order-first max-xl:w-full max-sm:w-full">
                         <x-admin::accordion>
                             <x-slot:header>
                                 <div class="flex w-full">
