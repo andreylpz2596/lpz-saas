@@ -84,6 +84,8 @@
             /* Senal «en otras ventas…»: se lee como accion (abre el detalle), no como texto suelto. */
             .nv-senal { margin-left: 4px; text-align: left; font-size: .75rem; color: #b45309; text-decoration: underline dotted; cursor: pointer; background: none; border: 0; padding: 0; }
             :is(.dark) .nv-senal { color: #fbbf24; }
+            .nv-deshabilitada { margin-top: 2px; max-width: 16rem; font-size: .75rem; line-height: 1rem; font-weight: 500; color: #b45309; }
+            :is(.dark) .nv-deshabilitada { color: #fbbf24; }
             :is(.dark) .nv-res-dest, :is(.dark) .nv-res-total { background: rgba(30, 58, 138, .28); border-color: rgba(59, 130, 246, .35); }
             :is(.dark) .nv-res-dest dt, :is(.dark) .nv-res-total dt { color: #bfdbfe; }
             :is(.dark) .nv-res-dest dd, :is(.dark) .nv-res-total dd { color: #fff; }
@@ -870,6 +872,19 @@
                                                             class="mt-0.5 text-xs font-medium text-red-600 dark:text-red-300"
                                                         >
                                                             ⚠ Stock insuficiente (disponible @{{ celda.variante.stockVendible }})
+                                                        </p>
+
+                                                        <p
+                                                            v-if="! celda.variante.activa"
+                                                            class="nv-deshabilitada"
+                                                            data-venta="variante-deshabilitada"
+                                                        >
+                                                            <template v-if="celda.variante.stockVendible > 0">
+                                                                ⚠ Talla deshabilitada en el catálogo. Tiene @{{ celda.variante.stockVendible }} en inventario: pide al administrador que la habilite.
+                                                            </template>
+                                                            <template v-else>
+                                                                ⚠ Talla deshabilitada en el catálogo.
+                                                            </template>
                                                         </p>
                                                     </td>
 
