@@ -392,6 +392,27 @@ return [
         'sort' => 1,
     ], [
         /*
+         * Doc. 32: «Precios por grupo», SEPARADO de costos. La agrupadora abre la consulta (string, regla 3) y su
+         * comparacion entre grupos; la hoja `editar` autoriza vista previa, confirmacion y reintento de reindexacion.
+         * Ninguna de las dos da acceso a costos ni margenes (eso sigue siendo `ventas_asesor.costos`). El menu muestra una
+         * sola entrada «Costos y precios» con cualquiera de las dos agrupadoras (VentasAsesorServiceProvider).
+         */
+        'key' => 'ventas_asesor.precios_grupo',
+        'name' => 'ventasasesor::app.acl.precios-grupo',
+        'route' => 'admin.ventas_asesor.precios_grupo.index',
+        'sort' => 10,
+    ], [
+        'key' => 'ventas_asesor.precios_grupo.editar',
+        'name' => 'ventasasesor::app.acl.precios-grupo-editar',
+        'route' => [
+            $inicio,
+            'admin.ventas_asesor.precios_grupo.previsualizar',
+            'admin.ventas_asesor.precios_grupo.confirmar',
+            'admin.ventas_asesor.precios_grupo.reindexar',
+        ],
+        'sort' => 1,
+    ], [
+        /*
          * Doc. 23 (R1/R4): «Rentabilidad». Agrupadora = pantalla (string, regla 3); el controlador exige `view` (diagnostico
          * de listas y configuracion faltante), `configurar` (politicas, costos directos, estado del costo) o `kpis.view_all`
          * (panel mensual). Solo administracion: el rol de asesor no la recibe.

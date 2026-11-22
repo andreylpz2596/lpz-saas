@@ -160,6 +160,27 @@ class VentasAsesorServiceProvider extends ServiceProvider
 
         $this->comandos();
 
+        // Doc. 32: UNA sola entrada «Costos y precios» que aparece con costos O con precios por grupo. Bagisto filtra el menu
+        // por la clave de cada entrada, asi que, por peticion y ANTES de que el layout arme el menu (mismo enfoque que
+        // Cargues), la entrada pasa a la clave/ruta de precios cuando el usuario no tiene costos pero si precios.
+        \Illuminate\Support\Facades\View::composer('admin::components.layouts.index', function () {
+            $autorizacion = app(\ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor::class);
+            $actor = auth()->guard('admin')->user();
+
+            if (! $actor
+                || $autorizacion->tienePermiso($actor, \ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor::PERMISO_COSTOS)
+                || ! $autorizacion->tienePermiso($actor, \ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor::PERMISO_PRECIOS_GRUPO)) {
+                return;
+            }
+
+            config()->set('menu.admin', array_map(
+                fn ($item) => ($item['key'] ?? null) === 'ventas_asesor.costos'
+                    ? array_merge($item, ['key' => 'ventas_asesor.precios_grupo', 'route' => 'admin.ventas_asesor.precios_grupo.index'])
+                    : $item,
+                (array) config()->get('menu.admin', []),
+            ));
+        });
+
         // Doc. 23 §10.2: reintentos de la bandeja de comisiones. Solo corre si el servidor ejecuta `schedule:run` (cron).
         if ((bool) config('ventasasesor.comisiones.reevaluacion.programar', true)) {
             $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {

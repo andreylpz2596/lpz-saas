@@ -2,6 +2,8 @@
 
 Estado consolidado de las fases del módulo `ByLopez\VentasAsesor`.
 
+**2026-11-22 — «Costos y precios» › Precios por grupo (develop → pruebas.alpz para revisión de Camilo; producción pendiente de aprobación):** `32_COSTOS_Y_PRECIOS_POR_GRUPO.md`. Caracterización del motor real (12 pruebas): `discount` = % sobre el precio BASE (sigue al base); `fixed` = precio unitario que solo aplica si es menor que el vigente; escalón por SKU; gana el menor entre el precio de grupo y el especial o la regla de catálogo; con 1 u. se lee el índice. Nueva pestaña con consulta por grupo (filtros del catálogo, agrupación por referencia+color, origen del precio, índice desactualizado, costo solo con permiso), edición individual y masiva (fijo, %, ajuste único de fijos, completar faltantes, quitar escalón). La vista previa usa el indexador de Bagisto sobre reglas en memoria. Confirmación con bloqueo previo, token, idempotencia, lote atómico, bitácora y reindexación con el job de Bagisto. Sin claves ACL nuevas (rutas en `costos.actualizar` + `catalog.products.edit`). Migración `2026_11_21_000001` aplicada en `lpz_saas_testing` y `lpz_saas` (aditiva). Pruebas: PG01 12/12, PG02 18/18, concurrencia 2/2 con procesos reales. Sin Safari/iPhone físico. Pendientes P1–P4 en el Doc. 32 §10.
+
 **2026-11-17 — Mensajes de WhatsApp al cliente (dev, sin commit, sin producción):** `31_MENSAJES_WHATSAPP.md`. Previsualizar → copiar → pegar (no envía nada).
 Un solo servicio (`MensajePedidoService`, lectura) y un solo componente para Pedidos, Despachos y Entregas; un mensaje por despacho con SU guía;
 dinero conservador (total + abonos/saldo solo si Cartera es inequívoca; BODEGA sin dinero). Decisiones abiertas en el Doc. 31 §8.
@@ -274,6 +276,7 @@ supera, llevan una nota «Superado por…» en el punto afectado.
 | `17_DISENO_FUNCIONAL_COMISIONES.md` | COM-00: alternativas de utilidad, causación, pagos parciales, reversos, reasignación, asesor inactivo, entidades futuras, estados, liquidación, UX, reportes y ACL (diseño, sin aprobar) |
 | `18_ROADMAP_COMISIONES.md` | Fases COM-00…COM-10 (objetivo, dependencias, entregable, prueba, riesgo) y resumen de COM-D |
 | `19_CONTROL_COSTOS_Y_RENTABILIDAD.md` | D-COST: costo comisionable oficial, snapshot, actualización masiva y bitácora; Control de costos; matriz de costos de CorteConfeccion (solo tela hoy); radar productivo; radar de rentabilidad real y dashboard futuro |
+| `32_COSTOS_Y_PRECIOS_POR_GRUPO.md` | «Costos y precios»: cómo calcula Bagisto el precio por grupo (verificado), consulta y edición individual/masiva con vista previa, conflictos, bitácora, permisos y pruebas |
 | `../../Logistica/docs/MAPA_DOMINIO_LOGISTICA.md` | LOG-01: entrega canónica y retorno de transportadora, catálogo de transportadoras, ACL `logistica.*`, invariantes, contrato con VentasAsesor (paquete Logística) |
 | `13_RT04B_DISENO_CLIENTE_COMERCIAL.md` | **§36: RT-04B1a implementado** (matriz real del teléfono, D-RT04-PHONE-01, tabla, normalizador, indexador, grupo, guard de notificaciones, desviaciones y deuda). §1–35: RT-04B0 (diseñado): identidad, email NULL, teléfono normalizado y UNIQUE, búsqueda, duplicados, grupo, direcciones, notificaciones (extension point), eventos, servicios, clases, migraciones, contratos Fase 03/POS/API/WhatsApp/IA, riesgos, decisiones P-01…P-15, plan B1 y pruebas |
 

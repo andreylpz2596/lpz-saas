@@ -41,16 +41,8 @@
     @include('corteconfeccion::admin.partials.moneda')
 
     <div class="va-orders-page bylopez-scope">
-        <div class="flex items-start gap-4">
-            <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-2xl text-blue-600 dark:bg-blue-950 dark:text-blue-300">
-                <span class="icon-report"></span>
-            </span>
-
-            <div>
-                <h1 class="text-3xl font-bold leading-8 text-gray-900 dark:text-white">@lang('ventasasesor::app.costos.titulo')</h1>
-                <p class="mt-1 text-sm text-slate-500 dark:text-gray-400">@lang('ventasasesor::app.costos.subtitulo')</p>
-            </div>
-        </div>
+        {{-- Doc. 32: encabezado y pestañas «Costos» / «Precios por grupo». --}}
+        @include('ventasasesor::admin.costos.pestanas', ['activa' => 'costos'])
 
         @foreach (['success' => 'verde', 'error' => 'rojo'] as $tipo => $color)
             @if (session($tipo))

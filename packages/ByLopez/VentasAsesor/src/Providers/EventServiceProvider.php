@@ -75,6 +75,9 @@ class EventServiceProvider extends ServiceProvider
         // reevaluacion de comisiones. Solo marca dentro de la transaccion del hecho; el calculo corre tras el commit.
         SolicitarReevaluacionComision::registrar();
 
+        // Doc. 32: la ficha nativa del producto no guarda un precio fijo de grupo mayor que el precio base.
+        Event::listen(\ByLopez\VentasAsesor\Listeners\ValidarPrecioGrupoNoMayorQueBase::EVENTO, \ByLopez\VentasAsesor\Listeners\ValidarPrecioGrupoNoMayorQueBase::class.'@handle');
+
         // D10: un pedido con credito aplicado ACTIVO no se cancela (ni por la via nativa de Bagisto): primero se reversa el credito.
         Event::listen(\ByLopez\VentasAsesor\Listeners\BloquearCancelacionConCredito::EVENTO, \ByLopez\VentasAsesor\Listeners\BloquearCancelacionConCredito::class.'@handle');
 
