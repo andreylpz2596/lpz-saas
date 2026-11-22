@@ -5,7 +5,7 @@
     OJO: Bagisto monta Vue sobre #app en el evento `load` y RE-CREA el DOM de la pagina. Por eso todo va por delegacion en
     `document` (que no se reemplaza), los nodos se buscan en cada evento y la inicializacion corre despues del montaje.
 
-    Seleccion entre paginas: se recuerda por grupo en sessionStorage (comodidad del navegador). La autoridad es el
+    Seleccion entre paginas: se recuerda por grupo y filtros en sessionStorage (comodidad del navegador). La autoridad es el
     servidor: la vista previa muestra la lista exacta que se editara.
 --}}
 @pushOnce('scripts')
@@ -27,7 +27,9 @@
             let grupoInicial = null;
 
             // ---- Seleccion por grupo que sobrevive al cambio de pagina ----
-            const clave = () => 'va-precios-grupo-sel:' + (formulario()?.dataset.grupo ?? '');
+            // La seleccion pertenece al grupo Y a los filtros: al cambiar Publico, color, etc. empieza vacia (no arrastra
+            // variantes marcadas con otro filtro). Entre paginas del MISMO filtro se conserva.
+            const clave = () => 'va-precios-grupo-sel:' + (formulario()?.dataset.grupo ?? '') + ':' + (formulario()?.dataset.firmaFiltros ?? '');
             const leer = () => { try { return new Set(JSON.parse(sessionStorage.getItem(clave()) || '[]').map(String)); } catch (e) { return new Set(); } };
             const guardar = (s) => { try { sessionStorage.setItem(clave(), JSON.stringify([...s])); } catch (e) {} };
             let seleccion = new Set();

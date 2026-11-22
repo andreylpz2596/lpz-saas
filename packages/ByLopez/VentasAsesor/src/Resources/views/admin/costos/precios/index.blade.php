@@ -155,7 +155,7 @@
 
             @if ($puedeEditar && $totalVariantes > 0)
                 {{-- Edicion MASIVA: siempre pasa por la vista previa. Las casillas de las variantes se asocian con form="pg-masivo". --}}
-                <form id="pg-masivo" method="POST" action="{{ route('admin.ventas_asesor.precios_grupo.previsualizar') }}" class="va-panel mt-4 p-4" data-form="edicion-masiva" data-grupo="{{ $grupo->id }}">
+                <form id="pg-masivo" method="POST" action="{{ route('admin.ventas_asesor.precios_grupo.previsualizar') }}" class="va-panel mt-4 p-4" data-form="edicion-masiva" data-grupo="{{ $grupo->id }}" data-firma-filtros="{{ md5(json_encode(collect($filtros)->except(['qty'])->filter(fn ($v) => $v !== null && $v !== '')->sortKeys()->all())) }}">
                     @csrf
                     @foreach ($ocultos($filtros) as $k => $v)
                         <input type="hidden" name="filtros[{{ $k }}]" value="{{ $v }}">
