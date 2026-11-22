@@ -67,7 +67,10 @@ class ProductosCamisetasExtension implements ExtensionTipo
             ];
         }
 
-        return (new AnalizadorCamisetas(new CatalogoCamisetas))->analizar($filas);
+        $catalogo = new CatalogoCamisetas;
+
+        // Doc. 33: el código del producto y de la variante lo pone el patrón (115D-DZ / 115D-DZ-M), no el archivo. Vista previa: sin escribir.
+        return (new AnalizadorCamisetas($catalogo))->analizar((new SkuCamisetas($catalogo))->reescribir($filas, false));
     }
 
     // ---------------------------------------------------------------------------------------------------------------------
@@ -133,11 +136,14 @@ class ProductosCamisetasExtension implements ExtensionTipo
     /** Dentro de la transaccion del grupo: vuelve a analizar con el catalogo actual, escribe y marca todas las filas. */
     protected function aplicarGrupo(Carga $carga, string $tabla, array $filas): void
     {
-        $base = trim((string) $filas[0]->codigo_base);
-        $existente = DB::table('products')->where('sku', $base)->lockForUpdate()->first(['id']);   // serializa a quien agregue al mismo padre
         $catalogo = new CatalogoCamisetas;
         $campos = array_column((array) ($carga->config_congelada['map']['campos'] ?? []), 'nombre');
         $entrada = array_map(fn ($f) => ['id' => (int) $f->cg_id, 'fila' => (int) $f->cg_fila_origen, 'v' => array_intersect_key((array) $f, array_flip($campos)), 'rechazo' => null], $filas);
+        // Doc. 33: códigos del patrón (un color nuevo recibe aquí su número definitivo).
+        $entrada = (new SkuCamisetas($catalogo))->reescribir($entrada, true);
+        $skuVariante = array_column(array_map(fn ($e) => ['id' => $e['id'], 'sku' => trim((string) ($e['v']['sku_variante'] ?? ''))], $entrada), 'sku', 'id');
+        $base = trim((string) $entrada[0]['v']['codigo_base']);
+        $existente = DB::table('products')->where('sku', $base)->lockForUpdate()->first(['id']);   // serializa a quien agregue al mismo padre
         $plan = (new AnalizadorCamisetas($catalogo))->analizar($entrada);
         $primero = $plan[(int) $filas[0]->cg_id];
 
@@ -203,7 +209,7 @@ class ProductosCamisetasExtension implements ExtensionTipo
             $activa = $f->precio !== null && ($activo !== null || $activar);
             $activo === null && ! $activa && $extra[(int) $f->cg_id][] = 'VARIANTE_INACTIVA';
             $creador->crearVariante($padreId, (int) $r['familia_id'], [
-                'sku' => trim((string) $f->sku_variante), 'nombre' => $this->nombreVariante((string) $f->nombre, (string) $f->color, (string) $f->talla),
+                'sku' => $skuVariante[(int) $f->cg_id] ?? trim((string) $f->sku_variante), 'nombre' => $this->nombreVariante((string) $f->nombre, (string) $f->color, (string) $f->talla),
                 'precio' => $f->precio === null ? null : (float) $f->precio, 'costo' => $f->costo === null ? null : (float) $f->costo,
                 'peso' => $f->peso === null ? null : rtrim(rtrim((string) $f->peso, '0'), '.'), 'activo' => $activa,
                 'color' => (int) $r['color_id'], 'talla' => (int) $r['talla_id'], 'eje_talla' => $ejeTalla, 'atributos' => $atributosPadre, 'categorias' => $hoja,
