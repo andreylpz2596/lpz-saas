@@ -25,9 +25,14 @@ class ControlCostosController extends Controller
         protected ActualizarCostoComisionableService $actualizar,
     ) {}
 
-    public function index(Request $request): View
+    public function index(Request $request): View|RedirectResponse
     {
         $admin = auth()->guard('admin')->user();
+
+        // Doc. 32: enlaces antiguos `costos?pestana=precios` → la pestaña de precios tiene ruta y permiso propios.
+        if ($request->query('pestana') === 'precios') {
+            return redirect()->route('admin.ventas_asesor.precios_grupo.index', $request->except('pestana'));
+        }
 
         abort_unless($this->autorizacion->tienePermiso($admin, AutorizacionVentasAsesor::PERMISO_COSTOS), 401);
 

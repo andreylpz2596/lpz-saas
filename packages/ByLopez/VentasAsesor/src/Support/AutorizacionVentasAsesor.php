@@ -72,6 +72,11 @@ class AutorizacionVentasAsesor
 
     public const PERMISO_COSTOS_ACTUALIZAR = 'ventas_asesor.costos.actualizar';
 
+    /* Doc. 32: «Precios por grupo», separado de costos. Ver = consulta; editar = vista previa, confirmacion y reindexacion. */
+    public const PERMISO_PRECIOS_GRUPO = 'ventas_asesor.precios_grupo';
+
+    public const PERMISO_PRECIOS_GRUPO_EDITAR = 'ventas_asesor.precios_grupo.editar';
+
     /*
      * Doc. 23 (R1–R4): comisiones y rentabilidad. Capacidades SEPARADAS: configurar acuerdos (`manage`), calcular,
      * aprobar liquidaciones y ajustes, registrar pagos, ajustar y revertir. El servicio valida siempre (no los botones).

@@ -13,6 +13,7 @@ use ByLopez\VentasAsesor\Http\Controllers\Admin\InicioController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\NuevaVentaController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\PagosController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\PedidosAsesorController;
+use ByLopez\VentasAsesor\Http\Controllers\Admin\PreciosGrupoController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\RentabilidadController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\UbicacionesController;
 use Illuminate\Support\Facades\Route;
@@ -86,6 +87,13 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
         Route::get('costos', [ControlCostosController::class, 'index'])->name('admin.ventas_asesor.costos.index');
         Route::post('costos/vista-previa', [ControlCostosController::class, 'previsualizar'])->name('admin.ventas_asesor.costos.previsualizar');
         Route::post('costos/actualizar', [ControlCostosController::class, 'actualizar'])->name('admin.ventas_asesor.costos.actualizar');
+        // Doc. 32: «Costos y precios › Precios por grupo», con permisos PROPIOS (separados de costos): la consulta con la
+        // agrupadora ventas_asesor.precios_grupo; vista previa, confirmacion y reintento de reindexacion con la hoja `editar`.
+        Route::get('precios-grupo', [PreciosGrupoController::class, 'index'])->name('admin.ventas_asesor.precios_grupo.index');
+        Route::post('precios-grupo/vista-previa', [PreciosGrupoController::class, 'previsualizar'])->name('admin.ventas_asesor.precios_grupo.previsualizar');
+        Route::post('precios-grupo/confirmar', [PreciosGrupoController::class, 'confirmar'])->name('admin.ventas_asesor.precios_grupo.confirmar');
+        Route::post('precios-grupo/lotes/{lote}/reindexar', [PreciosGrupoController::class, 'reindexar'])
+            ->whereUuid('lote')->name('admin.ventas_asesor.precios_grupo.reindexar');
 
         // Doc. 23 (R3/R4): Comisiones. Una pantalla con pestañas (?vista=, ?pedido=); cada accion con su clave ACL hoja.
         Route::prefix('comisiones')->name('admin.ventas_asesor.comisiones.')->group(function () {
