@@ -26,6 +26,7 @@ class NormalizarSkuCommand extends Command
     /** Textos de opciones de color mal escritos → texto correcto (admin_name y etiqueta del idioma). */
     public const ETIQUETAS_COLOR = [
         'Amarillo Paste' => 'Amarillo Pastel',
+        'Verde Paste' => 'Verde Pastel',
         'Verde Petroleo' => 'Verde Petróleo',
         'Verde Neon' => 'Verde Neón',
         'Cafe' => 'Café',
@@ -83,14 +84,12 @@ class NormalizarSkuCommand extends Command
 
         // 0. Textos de color (antes de armar nombres).
         if (! $this->option('sin-etiquetas')) {
-            foreach (self::ETIQUETAS_COLOR as $mal => $bien) {
-                $ids = DB::table('attribute_options')->where('attribute_id', $color)->where('admin_name', $mal)->pluck('id');
+            $todas = DB::table('attribute_options')->where('attribute_id', $color)->pluck('id');
 
-                if ($ids->isNotEmpty()) {
-                    $this->line("Color «{$mal}» → «{$bien}»");
-                    DB::table('attribute_options')->whereIn('id', $ids)->update(['admin_name' => $bien]);
-                    DB::table('attribute_option_translations')->whereIn('attribute_option_id', $ids)->where('label', $mal)->update(['label' => $bien]);
-                }
+            foreach (self::ETIQUETAS_COLOR as $mal => $bien) {
+                $a = DB::table('attribute_options')->whereIn('id', $todas)->where('admin_name', $mal)->update(['admin_name' => $bien]);
+                $t = DB::table('attribute_option_translations')->whereIn('attribute_option_id', $todas)->where('label', $mal)->update(['label' => $bien]);
+                ($a + $t) > 0 && $this->line("Color «{$mal}» → «{$bien}»");
             }
         }
 
