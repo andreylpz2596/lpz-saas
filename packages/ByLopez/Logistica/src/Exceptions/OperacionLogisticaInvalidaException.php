@@ -248,6 +248,25 @@ class OperacionLogisticaInvalidaException extends RuntimeException
 
     public const TARIFA_DUPLICADA = 'tarifa_duplicada';
 
+    // ---- Zonas locales y tarifas (pantalla unificada) ----
+
+    public const ORIGEN_INVALIDO = 'origen_invalido';
+
+    public const MUNICIPIO_INVALIDO = 'municipio_invalido';
+
+    public const CIUDAD_YA_HABILITADA = 'ciudad_ya_habilitada';
+
+    public const CIUDAD_NO_HABILITADA = 'ciudad_no_habilitada';
+
+    /** El municipio ya pertenece a una zona con varios municipios: habilitarlo habilitaria tambien a los demas. */
+    public const ZONA_MULTIMUNICIPIO = 'zona_multimunicipio';
+
+    public const OPERADOR_NO_LOCAL = 'operador_no_local';
+
+    public const TARIFA_VALOR_INVALIDO = 'tarifa_valor_invalido';
+
+    public const TARIFA_FECHA_INVALIDA = 'tarifa_fecha_invalida';
+
     // ---- Cuentas corrientes de transportadoras y liquidaciones ----
 
     /** La transportadora no existe o no tiene (ni tuvo) cuenta corriente. */

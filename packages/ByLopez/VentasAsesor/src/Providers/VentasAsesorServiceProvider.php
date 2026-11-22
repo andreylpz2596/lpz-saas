@@ -104,6 +104,7 @@ class VentasAsesorServiceProvider extends ServiceProvider
         // Domicilios locales F1: municipio del pedido con el catalogo DIVIPOLA (coincidencia exacta) y pagos sin confirmar
         // desde Cartera (bloquean el despacho «pagado» hasta que Cartera los confirme o rechace). Solo lectura.
         $this->app->bind(ResuelveMunicipio::class, MunicipioDesdeCatalogo::class);
+        $this->app->bind(\ByLopez\Logistica\Contracts\BuscaMunicipios::class, \ByLopez\VentasAsesor\Support\Logistica\MunicipiosDesdeCatalogo::class);
         $this->app->bind(PagosPendientesDeConfirmar::class, PagosPendientesDesdeCartera::class);
         // D10: anular una recepcion C5 no puede dejar credito consumido sin respaldo.
         $this->app->bind(\ByLopez\Logistica\Contracts\GuardaAnulacionRecepcion::class, \ByLopez\VentasAsesor\Support\Logistica\GuardaAnulacionRecepcionConCredito::class);

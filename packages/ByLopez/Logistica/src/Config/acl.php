@@ -142,12 +142,12 @@ return [
     ], [
         'key' => 'logistica.transportadoras.manage',
         'name' => 'logistica::app.acl.gestionar',
-        'route' => [$catalogo, 'admin.logistica.transportadoras.store', 'admin.logistica.transportadoras.estado', 'admin.logistica.transportadoras.capacidades', 'admin.logistica.tarifas.store', 'admin.logistica.zonas_locales.guardar'],
+        'route' => [$catalogo, 'admin.logistica.transportadoras.store', 'admin.logistica.transportadoras.estado', 'admin.logistica.transportadoras.capacidades', 'admin.logistica.tarifas.store', 'admin.logistica.zonas_locales.guardar', 'admin.logistica.zonas_locales.ciudades.agregar', 'admin.logistica.zonas_locales.ciudades.quitar', 'admin.logistica.zonas_locales.tarifas.store'],
         'sort' => 1,
     ], [
         'key' => 'logistica.zonas_locales',
         'name' => 'logistica::app.acl.zonas_locales',
-        'route' => 'admin.logistica.zonas_locales.index',
+        'route' => ['admin.logistica.zonas_locales.index', 'admin.logistica.zonas_locales.estado', 'admin.logistica.zonas_locales.municipios'],
         'sort' => 5,
     ], [
         'key' => 'logistica.transportadoras',

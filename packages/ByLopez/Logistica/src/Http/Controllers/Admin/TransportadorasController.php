@@ -32,8 +32,6 @@ class TransportadorasController extends Controller
             'transportadoras' => $this->transportadoras->todas(),
             'historicos' => $this->transportadoras->titulosHistoricosSinCodigo(),
             'tipos' => TipoTransportadora::cases(),
-            'zonas' => $this->tarifas->zonasActivas(),
-            'tarifas' => $this->tarifas->historial(),
             'puedeGestionar' => $this->autorizacion->tienePermiso($admin, AutorizacionLogistica::PERMISO_TRANSPORTADORAS_GESTIONAR),
         ]);
     }

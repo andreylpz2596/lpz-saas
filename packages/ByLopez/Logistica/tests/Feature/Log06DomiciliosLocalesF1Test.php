@@ -348,8 +348,8 @@ test('F1-11 pantalla Transportadoras: capacidades y tarifas visibles; solo quien
 
     $this->actingAs($admin, 'admin')->get(route('admin.logistica.transportadoras.index'))
         ->assertOk()
-        ->assertSee('data-tarifas', false)
-        ->assertSee('data-nueva-tarifa', false)
+        ->assertSee('data-tarifas-movidas', false)
+        ->assertDontSee('data-nueva-tarifa', false)
         ->assertSee($c['jeison']->codigo)
         ->assertSee(trans('logistica::app.transportadoras.cap-cuenta'));
 

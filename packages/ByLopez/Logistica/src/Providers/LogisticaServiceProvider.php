@@ -61,6 +61,8 @@ class LogisticaServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(dirname(__DIR__).'/Config/condiciones_envio.php', 'logistica.condiciones_envio');
         $this->mergeConfigFrom(dirname(__DIR__).'/Config/cuentas.php', 'logistica.cuentas');
         $this->app->bind(ResuelveMunicipio::class, SinResolucionMunicipio::class);
+        // Zonas locales y tarifas: catalogo de municipios para habilitar destinos (VentasAsesor, dueno del catalogo, lo reemplaza).
+        $this->app->bind(\ByLopez\Logistica\Contracts\BuscaMunicipios::class, \ByLopez\Logistica\Support\SinCatalogoMunicipios::class);
         $this->app->bind(PagosPendientesDeConfirmar::class, SinPagosPendientes::class);
         // D10: anular una recepcion C5 no puede dejar credito consumido sin respaldo (VentasAsesor la reemplaza).
         $this->app->bind(\ByLopez\Logistica\Contracts\GuardaAnulacionRecepcion::class, \ByLopez\Logistica\Support\SinGuardaAnulacionRecepcion::class);

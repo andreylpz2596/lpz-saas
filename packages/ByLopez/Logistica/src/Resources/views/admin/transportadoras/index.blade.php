@@ -102,57 +102,15 @@
             </form>
         @endif
 
+        {{-- Las tarifas de domicilio local ya no se administran aqui: una sola pantalla (Zonas locales y tarifas) para no tener dos fuentes. --}}
         <h2 class="mt-6 text-base font-bold text-gray-900 dark:text-white">@lang('logistica::app.transportadoras.tarifas-titulo')</h2>
-        <p class="lg-sub">@lang('logistica::app.transportadoras.tarifas-ayuda')</p>
         <p class="lg-sub">@lang('logistica::app.transportadoras.capacidades-ayuda')</p>
-        <div class="lg-panel mt-2 overflow-x-auto">
-            <table class="lg-table" data-tarifas>
-                <thead>
-                    <tr>
-                        <th>@lang('logistica::app.transportadoras.col-nombre')</th>
-                        <th>@lang('logistica::app.transportadoras.col-zona')</th>
-                        <th class="lg-num">@lang('logistica::app.transportadoras.col-valor')</th>
-                        <th>@lang('logistica::app.transportadoras.col-vigente-desde')</th>
-                        <th>@lang('logistica::app.transportadoras.col-estado')</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($tarifas as $tf)
-                        <tr data-tarifa="{{ $tf->id }}">
-                            <td>{{ $tf->transportadora }}</td>
-                            <td>{{ $tf->zona }}</td>
-                            <td class="lg-num">{{ \ByLopez\Logistica\Support\Moneda::formatear($tf->valor) }}</td>
-                            <td>{{ \Illuminate\Support\Carbon::parse($tf->vigente_desde)->format('d/m/Y') }}</td>
-                            <td><span class="lg-pill {{ $tf->vigente ? 'lg-pill--verde' : 'lg-pill--gris' }}">@lang('logistica::app.transportadoras.'.($tf->vigente ? 'vigente' : 'historica'))</span></td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="5" class="lg-sub">@lang('logistica::app.transportadoras.sin-tarifas')</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
+        <div class="lg-panel mt-2 flex flex-wrap items-center justify-between gap-3 p-4" data-tarifas-movidas>
+            <p class="m-0 text-sm text-slate-700 dark:text-gray-300">@lang('logistica::app.zonas_locales.tarifas-en-transportadoras')</p>
+            @if (bouncer()->hasPermission('logistica.zonas_locales'))
+                <a href="{{ route('admin.logistica.zonas_locales.index') }}" class="lg-btn lg-btn--ok" data-ir-zonas-tarifas>@lang('logistica::app.zonas_locales.ir-a-tarifas')</a>
+            @endif
         </div>
-
-        @if ($puedeGestionar && $zonas->isNotEmpty())
-            <form method="POST" action="{{ route('admin.logistica.tarifas.store') }}" class="lg-panel mt-3 p-4" data-nueva-tarifa>
-                @csrf
-                <p class="font-bold text-gray-900 dark:text-white">@lang('logistica::app.transportadoras.nueva-tarifa')</p>
-                <div class="lg-filters--4 mt-3">
-                    <select name="transportadora_id" class="lg-input" aria-label="@lang('logistica::app.transportadoras.col-nombre')">
-                        @foreach ($transportadoras->where('activo', true) as $t)
-                            <option value="{{ $t->id }}">{{ $t->nombre }}</option>
-                        @endforeach
-                    </select>
-                    <select name="zona_id" class="lg-input" aria-label="@lang('logistica::app.transportadoras.col-zona')">
-                        @foreach ($zonas as $z)
-                            <option value="{{ $z->id }}">{{ $z->nombre }}</option>
-                        @endforeach
-                    </select>
-                    <input type="number" name="valor" min="0" step="1" required class="lg-input" placeholder="@lang('logistica::app.transportadoras.col-valor')">
-                    <input type="date" name="vigente_desde" value="{{ now()->toDateString() }}" class="lg-input" aria-label="@lang('logistica::app.transportadoras.col-vigente-desde')">
-                </div>
-                <button type="submit" class="lg-btn lg-btn--ok mt-3">@lang('logistica::app.transportadoras.crear-tarifa')</button>
-            </form>
-        @endif
 
         <h2 class="mt-6 text-base font-bold text-gray-900 dark:text-white">@lang('logistica::app.transportadoras.historicos-titulo')</h2>
         <p class="lg-sub">@lang('logistica::app.transportadoras.historicos-ayuda')</p>

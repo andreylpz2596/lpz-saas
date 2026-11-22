@@ -378,7 +378,7 @@ test('F1V-10 Admin: pantalla «Zonas locales por origen» lista bodegas y zonas,
     $origen = $locales->origenPredeterminadoId();
 
     $this->actingAs(f03b_admin('all'), 'admin')->get(route('admin.logistica.zonas_locales.index'))
-        ->assertOk()->assertSee('data-bodega="'.$origen.'"', false)->assertSee('Bogotá')->assertSee('Soacha');
+        ->assertOk()->assertSee('data-zonas-locales', false)->assertSee('Soacha');
 
     $this->actingAs(f03b_admin('all'), 'admin')
         ->post(route('admin.logistica.zonas_locales.guardar', $origen), ['zonas' => [$this->c['bogota']->id]])

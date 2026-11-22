@@ -116,4 +116,10 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
 
     Route::get('zonas-locales', [ZonasLocalesController::class, 'index'])->name('admin.logistica.zonas_locales.index');
     Route::post('zonas-locales/{origen}', [ZonasLocalesController::class, 'guardar'])->whereNumber('origen')->name('admin.logistica.zonas_locales.guardar');
+    // Pantalla unificada «Zonas locales y tarifas» (JSON): estado, buscador de municipios, ciudades por bodega y tarifas.
+    Route::get('zonas-locales/estado', [ZonasLocalesController::class, 'estado'])->name('admin.logistica.zonas_locales.estado');
+    Route::get('zonas-locales/municipios', [ZonasLocalesController::class, 'municipios'])->name('admin.logistica.zonas_locales.municipios');
+    Route::post('zonas-locales/{origen}/ciudades', [ZonasLocalesController::class, 'agregarCiudad'])->whereNumber('origen')->name('admin.logistica.zonas_locales.ciudades.agregar');
+    Route::post('zonas-locales/{origen}/ciudades/{zona}/quitar', [ZonasLocalesController::class, 'quitarCiudad'])->whereNumber(['origen', 'zona'])->name('admin.logistica.zonas_locales.ciudades.quitar');
+    Route::post('zonas-locales/{origen}/tarifas', [ZonasLocalesController::class, 'crearTarifa'])->whereNumber('origen')->name('admin.logistica.zonas_locales.tarifas.store');
 });
