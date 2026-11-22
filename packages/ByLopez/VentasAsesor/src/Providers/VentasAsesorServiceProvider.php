@@ -12,6 +12,7 @@ use ByLopez\VentasAsesor\Console\Commands\DiagnosticoCostosVentaCommand;
 use ByLopez\VentasAsesor\Console\Commands\EvaluarComisionesCommand;
 use ByLopez\VentasAsesor\Console\Commands\GeoImportarDivipolaCommand;
 use ByLopez\VentasAsesor\Console\Commands\IndexarTelefonosClientesCommand;
+use ByLopez\VentasAsesor\Console\Commands\NormalizarSkuCommand;
 use ByLopez\VentasAsesor\Console\Commands\ProgramarReglaComisionCommand;
 use ByLopez\VentasAsesor\Console\Commands\ReconciliarAtribucionesCommand;
 use ByLopez\VentasAsesor\Contracts\CalendarioLaboral;
@@ -142,6 +143,7 @@ class VentasAsesorServiceProvider extends ServiceProvider
                 DiagnosticoCostosVentaCommand::class,
                 ProgramarReglaComisionCommand::class,
                 IndexarTelefonosClientesCommand::class,
+                NormalizarSkuCommand::class,
                 GeoImportarDivipolaCommand::class,
                 EvaluarComisionesCommand::class,
             ]);

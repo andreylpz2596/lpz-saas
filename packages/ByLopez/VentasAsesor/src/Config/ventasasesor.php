@@ -193,4 +193,32 @@ return [
             'programar' => (bool) env('VENTASASESOR_COMISIONES_REEVALUACION_PROGRAMADA', true),
         ],
     ],
+
+    /*
+     * Doc. 33 — Código único (SKU) por patrón: NÚMERO DE COLOR + PÚBLICO, LÍNEA y TALLA.
+     *   Producto (padre): 115D-DZ      Variante: 115D-DZ-M      Niño: 115N-DZ-6      Crop top: 106D-TP-U
+     * - El número del color vive en `bylopez_va_sku_colores` (uno por color, igual en todos los públicos).
+     * - `familias`: solo los productos de estas familias de atributos siguen el patrón; cualquier otro conserva su SKU.
+     *   `linea` fija la línea (gana sobre la tela); `linea_defecto` se usa si el producto no tiene tela reconocida en `telas`.
+     *   `nombre`: plantilla del nombre del producto ({color} = texto de la opción).
+     * - `automatico`: al guardar un producto de esas familias (ficha de Bagisto o Cargues) su SKU se ajusta al patrón.
+     */
+    'sku' => [
+        'automatico' => (bool) env('VENTASASESOR_SKU_AUTOMATICO', true),
+        'primer_codigo_color' => 101,
+        'familias' => [
+            'Camiseta_Hombre_DURZ' => ['genero' => 'H', 'linea_defecto' => 'DZ', 'nombre' => 'Camiseta Piel Durazno {color} Hombre'],
+            'Camiseta_Mujer_DURZ' => ['genero' => 'D', 'linea_defecto' => 'DZ', 'nombre' => 'Camiseta Piel Durazno {color} Mujer'],
+            'Camisetas_nino_DURZ' => ['genero' => 'N', 'linea_defecto' => 'DZ', 'nombre' => 'Camiseta Piel Durazno {color} Niño'],
+            'Crop_Top' => ['genero' => 'D', 'linea' => 'TP', 'nombre' => 'Crop Top Piel Durazno {color} Mujer'],
+        ],
+        // Texto de la opción de `tipo_tela` (sin importar tildes ni mayúsculas) → código de línea.
+        'telas' => ['Piel Durazno' => 'DZ'],
+        // Atributos de talla, en orden: adulto `size`, niño `grupo_de_edad_ninos`.
+        'atributos_talla' => ['size', 'grupo_de_edad_ninos'],
+        // Texto de la opción de talla → código en el SKU (el resto: el texto en mayúsculas sin símbolos: S, M, L, XL, XXL).
+        'tallas' => ['T-Unica' => 'U', '2-4' => '2', '6-8' => '6', '10-12' => '10', '14-16' => '14'],
+        // Texto de la talla en el NOMBRE de la variante.
+        'tallas_nombre' => ['T-Unica' => 'Única'],
+    ],
 ];

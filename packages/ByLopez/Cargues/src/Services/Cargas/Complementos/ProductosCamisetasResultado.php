@@ -5,6 +5,8 @@ namespace ByLopez\Cargues\Services\Cargas\Complementos;
 use ByLopez\Cargues\Contracts\AgrupaResultado;
 use ByLopez\Cargues\Contracts\ComplementaResultado;
 use ByLopez\Cargues\Extensiones\ProductosCamisetas\AnalizadorCamisetas;
+use ByLopez\Cargues\Extensiones\ProductosCamisetas\CatalogoCamisetas;
+use ByLopez\Cargues\Extensiones\ProductosCamisetas\SkuCamisetas;
 use ByLopez\Cargues\Models\Carga;
 use ByLopez\Cargues\Support\Estados;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +31,13 @@ class ProductosCamisetasResultado implements AgrupaResultado, ComplementaResulta
         }
 
         $inter = DB::table(self::TABLA)->where('cg_carga_id', $carga->id)->whereIn('cg_fila_origen', array_keys($filas))->get()->keyBy('cg_fila_origen');
+        $mapa = $this->codigosDelPatron($carga, 'fila_origen');
+
+        foreach ($filas as $n => &$fila) {
+            isset($mapa[$n]) && $fila['valores'] = array_replace((array) ($fila['valores'] ?? []), $mapa[$n]);
+        }
+        unset($fila);
+
         $skus = [];
 
         foreach ($filas as $f) {
@@ -74,9 +83,10 @@ class ProductosCamisetasResultado implements AgrupaResultado, ComplementaResulta
             ->get(['dato_id', 'severidad', 'codigo', 'motivo'])->groupBy('dato_id');
 
         $grupos = [];
+        $mapa = $this->codigosDelPatron($carga, 'id');
 
         foreach ($datos as $d) {
-            $v = (array) (json_decode((string) $d->datos_normalizados, true)['valores'] ?? []);
+            $v = array_replace((array) (json_decode((string) $d->datos_normalizados, true)['valores'] ?? []), $mapa[(int) $d->id] ?? []);
             $base = trim((string) ($v['codigo_base'] ?? ''));
             $grupos[$base === '' ? '' : mb_strtolower($base)][] = ['d' => $d, 'v' => $v, 'i' => $inter->get($d->id), 'inc' => $incidencias->get($d->id) ?? collect()];
         }
@@ -262,6 +272,24 @@ class ProductosCamisetasResultado implements AgrupaResultado, ComplementaResulta
             'bloqueado', 'no_cargado' => 'rojo',
             default => 'gris',
         };
+    }
+
+    /**
+     * Doc. 33: códigos del patrón (115D-DZ / 115D-DZ-M) de las filas del archivo, como los usa la extensión. Solo lee.
+     *
+     * @return array<int, array{codigo_base:string, sku_variante:string}> fila_origen|id => códigos
+     */
+    protected function codigosDelPatron(Carga $carga, string $clave): array
+    {
+        if (! SkuCamisetas::activo()) {
+            return [];
+        }
+
+        $filas = DB::table('bylopez_cg_carga_datos')->where('carga_id', $carga->id)->where('estado_final', '!=', Estados::FILA_VACIA)
+            ->get(['id', 'fila_origen', 'datos_normalizados'])
+            ->map(fn ($d) => ['id' => (int) $d->{$clave}, 'v' => (array) (json_decode((string) $d->datos_normalizados, true)['valores'] ?? [])])->all();
+
+        return (new SkuCamisetas(new CatalogoCamisetas))->mapa($filas, false);
     }
 
     /** @return array<string, object> */

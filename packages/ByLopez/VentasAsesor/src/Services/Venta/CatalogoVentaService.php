@@ -13,6 +13,7 @@ use ByLopez\VentasAsesor\Exceptions\DatosClienteComercialInvalidosException;
 use ByLopez\VentasAsesor\Exceptions\NuevaVentaInvalidaException;
 use ByLopez\VentasAsesor\Exceptions\VarianteInvalidaException as Invalida;
 use ByLopez\VentasAsesor\Models\BorradorVenta;
+use ByLopez\VentasAsesor\Support\Catalogo\BusquedaSku;
 use ByLopez\VentasAsesor\Support\Clientes\ValidadorGrupoComercial;
 use ByLopez\VentasAsesor\Support\ContextoPrecioComercial;
 use ByLopez\VentasAsesor\Support\Venta\LoteCatalogo;
@@ -62,8 +63,10 @@ class CatalogoVentaService
     public function buscarProductos(string $texto, int $limite = 20): array
     {
         $palabras = array_values(array_filter(preg_split('/\s+/u', trim($texto)), fn ($p) => mb_strlen($p) >= 2));
+        // Doc. 33: código rápido («115d», «115 d m», «115D-DZ») → productos 115D-…, sin importar guiones ni espacios.
+        $codigo = BusquedaSku::interpretar($texto);
 
-        if ($palabras === []) {
+        if ($palabras === [] && $codigo === null) {
             return [];
         }
 
@@ -75,9 +78,18 @@ class CatalogoVentaService
             ->whereIn('type', ['configurable', 'simple'])
             ->where('status', 1);
 
-        foreach ($palabras as $palabra) {
-            $patron = '%'.addcslashes($palabra, '%_\\').'%';
-            $consulta->where(fn ($q) => $q->where('name', 'like', $patron)->orWhere('sku', 'like', $patron));
+        if ($codigo !== null) {
+            // Un código manda: «115 d» trae solo Dama (las palabras sueltas «115» y «d» traerían todos los públicos).
+            $consulta->where('sku', 'like', $codigo['producto']);
+        } else {
+            foreach ($palabras as $palabra) {
+                $consulta->where(function ($o) use ($palabra) {
+                    foreach (BusquedaSku::sinonimos($palabra) as $variante) {
+                        $patron = '%'.addcslashes($variante, '%_\\').'%';
+                        $o->orWhere('name', 'like', $patron)->orWhere('sku', 'like', $patron);
+                    }
+                });
+            }
         }
 
         return $consulta->orderBy('name')

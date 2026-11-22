@@ -78,6 +78,11 @@ class EventServiceProvider extends ServiceProvider
         // Doc. 32: la ficha nativa del producto no guarda un precio fijo de grupo mayor que el precio base.
         Event::listen(\ByLopez\VentasAsesor\Listeners\ValidarPrecioGrupoNoMayorQueBase::EVENTO, \ByLopez\VentasAsesor\Listeners\ValidarPrecioGrupoNoMayorQueBase::class.'@handle');
 
+        // Doc. 33: al guardar un producto de las familias del patrón, su SKU queda «115D-DZ-M» (ficha, copia o Cargues).
+        foreach (\ByLopez\VentasAsesor\Listeners\SincronizarSkuProducto::EVENTOS as $evento) {
+            Event::listen($evento, \ByLopez\VentasAsesor\Listeners\SincronizarSkuProducto::class.'@handle');
+        }
+
         // D10: un pedido con credito aplicado ACTIVO no se cancela (ni por la via nativa de Bagisto): primero se reversa el credito.
         Event::listen(\ByLopez\VentasAsesor\Listeners\BloquearCancelacionConCredito::EVENTO, \ByLopez\VentasAsesor\Listeners\BloquearCancelacionConCredito::class.'@handle');
 
