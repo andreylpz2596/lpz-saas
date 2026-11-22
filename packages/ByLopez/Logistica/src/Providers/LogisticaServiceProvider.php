@@ -53,6 +53,8 @@ class LogisticaServiceProvider extends ServiceProvider
         // el recaudo sugerido desde Cartera y el acceso del asesor a las guias de SUS pedidos. Logistica no depende de el.
         $this->app->bind(SugiereRecaudo::class, RecaudoSugeridoBagisto::class);
         $this->app->bind(AccesoGuiaPedido::class, AccesoGuiaPorPermiso::class);
+        // Mensajes al cliente (WhatsApp): sin VentasAsesor no hay mensajes; VentasAsesor enlaza el servicio real.
+        $this->app->bind(\ByLopez\Logistica\Contracts\MensajesPedidoCliente::class, \ByLopez\Logistica\Support\SinMensajesPedido::class);
 
         // Domicilios locales F1: condicion de envio por codigo de metodo; municipio del pedido y pagos sin confirmar por
         // contrato (sin VentasAsesor: no se resuelve municipio y no hay pagos sin revisar).

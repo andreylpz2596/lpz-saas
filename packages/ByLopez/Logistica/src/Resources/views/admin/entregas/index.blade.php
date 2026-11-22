@@ -155,4 +155,10 @@
 
     {{-- Drawer unico: Ver / Registrar entrega / Devolucion / Recibir devolucion sin salir de la bandeja. --}}
     @include('logistica::admin.entregas.componente')
+
+    {{-- Mensaje de WhatsApp del pedido (mismo contrato y componente en Pedidos y Despachos). --}}
+    @include('logistica::admin.mensajes.whatsapp', [
+        'urlOpciones' => route('admin.logistica.entregas.mensajes.opciones', ['pedido' => '__ID__']),
+        'urlMensaje' => route('admin.logistica.entregas.mensajes.mensaje', ['pedido' => '__ID__', 'clave' => '__CLAVE__']),
+    ])
 </x-admin::layouts>

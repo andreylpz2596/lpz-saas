@@ -56,7 +56,7 @@ return [
     ], [
         'key' => 'logistica.entregas',
         'name' => 'logistica::app.acl.entregas',
-        'route' => [$bandeja, 'admin.logistica.entregas.drawer.contexto'],
+        'route' => [$bandeja, 'admin.logistica.entregas.drawer.contexto', 'admin.logistica.entregas.mensajes.opciones', 'admin.logistica.entregas.mensajes.mensaje'],
         'sort' => 2,
     ], [
         // Registrar guia y despachar / completar un despacho / entregar en bodega (POST). Valida de nuevo el servicio.
@@ -119,7 +119,7 @@ return [
         // Va DESPUES de las que usan la bandeja como relleno: es la que autoriza `despachos` y su contexto.
         'key' => 'logistica.despachos',
         'name' => 'logistica::app.acl.despachos',
-        'route' => [$despachos, 'admin.logistica.despachos.contexto'],
+        'route' => [$despachos, 'admin.logistica.despachos.contexto', 'admin.logistica.despachos.mensajes.opciones', 'admin.logistica.despachos.mensajes.mensaje'],
         'sort' => 1,
     ], [
         // ADMIN: cerrar una liquidacion de cuenta corriente (queda a nombre de quien la confirma).

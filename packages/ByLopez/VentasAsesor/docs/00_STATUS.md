@@ -2,6 +2,10 @@
 
 Estado consolidado de las fases del módulo `ByLopez\VentasAsesor`.
 
+**2026-11-17 — Mensajes de WhatsApp al cliente (dev, sin commit, sin producción):** `31_MENSAJES_WHATSAPP.md`. Previsualizar → copiar → pegar (no envía nada).
+Un solo servicio (`MensajePedidoService`, lectura) y un solo componente para Pedidos, Despachos y Entregas; un mensaje por despacho con SU guía;
+dinero conservador (total + abonos/saldo solo si Cartera es inequívoca; BODEGA sin dinero). Decisiones abiertas en el Doc. 31 §8.
+
 **2026-11-04 — Cotizaciones de una venta en curso (dev, sin commit, sin producción):** `30_COTIZACIONES.md`. PDF A4 con el estilo de la factura de
 Bagisto; foto congelada y versionada (no crea pedido ni reserva stock); el domicilio no entra en el total; datos de pago editables en
 Configuración › Ventas Asesor › Cotizaciones. Migración `2026_11_04_000001` aplicada solo en `lpz_saas_testing`. Pendiente: número de cuenta

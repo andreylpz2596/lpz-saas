@@ -990,5 +990,11 @@
         @if ($puedeDespachar || $puedeVerEnvio)
             @include('logistica::admin.despachos.componente')
         @endif
+
+        {{-- Mensaje de WhatsApp del pedido (mismo contrato y componente que Despachos y Entregas). --}}
+        @include('logistica::admin.mensajes.whatsapp', [
+            'urlOpciones' => route('admin.ventas_asesor.pedidos.mensajes.opciones', ['pedido' => '__ID__']),
+            'urlMensaje' => route('admin.ventas_asesor.pedidos.mensajes.mensaje', ['pedido' => '__ID__', 'clave' => '__CLAVE__']),
+        ])
     </div>
 </x-admin::layouts>

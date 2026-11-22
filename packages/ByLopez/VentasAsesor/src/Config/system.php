@@ -33,7 +33,7 @@ return [
         'info' => 'ventasasesor::app.cotizacion.config.encabezado-info',
         'sort' => 1,
         'fields' => [
-            $texto('empresa_nombre', 'ventasasesor::app.cotizacion.config.empresa-nombre', 'ByLopez', null, 'required|max:60'),
+            $texto('empresa_nombre', 'ventasasesor::app.cotizacion.config.empresa-nombre', 'LÓPEZ LÓPEZ', null, 'required|max:60'),
             $texto('empresa_detalle', 'ventasasesor::app.cotizacion.config.empresa-detalle', null, 'ventasasesor::app.cotizacion.config.empresa-detalle-info'),
             $texto('empresa_contacto', 'ventasasesor::app.cotizacion.config.empresa-contacto', null, 'ventasasesor::app.cotizacion.config.empresa-contacto-info'),
         ],
@@ -85,6 +85,30 @@ return [
                 'channel_based' => false,
                 'locale_based' => false,
             ],
+        ],
+    ], [
+        // Mensajes de WhatsApp al cliente (texto para copiar y pegar). Plantillas controladas por codigo: solo emojis y frase final.
+        'key' => 'ventas_asesor.mensajes',
+        'name' => 'ventasasesor::app.mensajes.config.titulo',
+        'info' => 'ventasasesor::app.mensajes.config.info',
+        'icon' => 'settings/store.svg',
+        'sort' => 2,
+    ], [
+        'key' => 'ventas_asesor.mensajes.general',
+        'name' => 'ventasasesor::app.mensajes.config.general',
+        'info' => 'ventasasesor::app.mensajes.config.general-info',
+        'sort' => 1,
+        'fields' => [
+            [
+                'name' => 'usar_emojis',
+                'title' => 'ventasasesor::app.mensajes.config.usar-emojis',
+                'info' => 'ventasasesor::app.mensajes.config.usar-emojis-info',
+                'type' => 'boolean',
+                'default' => true,
+                'channel_based' => false,
+                'locale_based' => false,
+            ],
+            $texto('frase_final', 'ventasasesor::app.mensajes.config.frase-final', null, 'ventasasesor::app.mensajes.config.frase-final-info', 'max:200'),
         ],
     ],
 ];

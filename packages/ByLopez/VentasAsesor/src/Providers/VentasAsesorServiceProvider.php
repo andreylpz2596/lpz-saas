@@ -98,6 +98,8 @@ class VentasAsesorServiceProvider extends ServiceProvider
         // conocen Cartera (recaudo sugerido) y la propiedad comercial (el asesor ve la guia de SUS pedidos).
         $this->app->bind(SugiereRecaudo::class, SugiereRecaudoDesdeCartera::class);
         $this->app->bind(AccesoGuiaPedido::class, AccesoGuiaDelAsesor::class);
+        // Mensajes al cliente (WhatsApp): el servicio real reemplaza al por defecto de Logistica (que no tiene mensajes).
+        $this->app->bind(\ByLopez\Logistica\Contracts\MensajesPedidoCliente::class, \ByLopez\VentasAsesor\Services\Mensajes\MensajePedidoService::class);
 
         // Domicilios locales F1: municipio del pedido con el catalogo DIVIPOLA (coincidencia exacta) y pagos sin confirmar
         // desde Cartera (bloquean el despacho «pagado» hasta que Cartera los confirme o rechace). Solo lectura.

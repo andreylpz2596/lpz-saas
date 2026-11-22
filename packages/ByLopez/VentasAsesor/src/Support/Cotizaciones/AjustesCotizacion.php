@@ -21,7 +21,7 @@ class AjustesCotizacion
     public function encabezado(): array
     {
         return [
-            'nombre' => $this->valor('encabezado.empresa_nombre') ?: 'ByLopez',
+            'nombre' => $this->valor('encabezado.empresa_nombre') ?: 'LÓPEZ LÓPEZ',
             'detalle' => $this->valor('encabezado.empresa_detalle'),
             'contacto' => $this->valor('encabezado.empresa_contacto'),
         ];

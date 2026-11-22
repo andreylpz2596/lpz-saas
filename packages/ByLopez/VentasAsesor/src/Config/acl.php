@@ -109,7 +109,7 @@ return [
         'name' => 'ventasasesor::app.acl.ver-propios',
         // Despacho V1: ademas del inicio, autoriza la ruta con la que el ASESOR ve / descarga la guia de sus pedidos
         // (la propiedad del pedido la valida Logistica en el servicio). $inicio sigue en la posicion 0 (regla 3).
-        'route' => [$inicio, 'admin.ventas_asesor.pedidos.guia'],
+        'route' => [$inicio, 'admin.ventas_asesor.pedidos.guia', 'admin.ventas_asesor.pedidos.mensajes.opciones', 'admin.ventas_asesor.pedidos.mensajes.mensaje'],
         'sort' => 2,
     ], [
         'key' => 'ventas_asesor.pedidos.view_all',

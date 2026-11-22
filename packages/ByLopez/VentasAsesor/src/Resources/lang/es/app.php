@@ -646,6 +646,28 @@ return [
             'solo-lectura' => 'Vista de solo lectura. Facturar, enviar o cancelar se gestiona desde Ventas > Pedidos por un usuario autorizado.',
         ],
     ],
+    'mensajes' => [
+        'config' => [
+            'titulo' => 'Mensajes de WhatsApp',
+            'info' => 'Textos para copiar y pegar al cliente (el nombre comercial es el de Cotizaciones › Encabezado del PDF)',
+            'general' => 'Estilo del mensaje',
+            'general-info' => 'Las plantillas las controla el sistema; aquí solo se ajusta el estilo',
+            'usar-emojis' => 'Usar emojis',
+            'usar-emojis-info' => 'Si se apaga, los mensajes salen sin emojis.',
+            'frase-final' => 'Frase final',
+            'frase-final-info' => 'Reemplaza la despedida de cada mensaje. Puedes usar {marca}. Vacío = la despedida por defecto.',
+        ],
+        'etiquetas' => [
+            'resumen' => 'Resumen del pedido',
+            'listo_domicilio' => 'Listo para domicilio',
+            'listo_recoger' => 'Listo para recoger',
+            'despacho_completo' => 'Pedido despachado',
+            'despacho_parcial' => 'Despacho parcial',
+            'despacho_final' => 'Último despacho',
+            'entregado' => 'Pedido entregado',
+            'despacho_n' => 'Despacho :n de :total',
+        ],
+    ],
     'cotizacion' => [
         'config' => [
             'titulo' => 'Ventas Asesor',

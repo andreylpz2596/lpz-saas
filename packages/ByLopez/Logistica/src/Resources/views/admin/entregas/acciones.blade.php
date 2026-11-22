@@ -1,6 +1,7 @@
 {{-- Acciones de un envio en la bandeja. Cada una es un enlace a la pagina clasica (respaldo sin JavaScript) que el drawer intercepta. --}}
 @php($movil = $movil ?? false)
 <div class="lg-acciones" style="{{ $movil ? 'justify-content: stretch' : '' }}" data-acciones>
+    @include('logistica::admin.mensajes.boton', ['pedidoId' => $e->order_id, 'numero' => $e->increment_id, 'conTexto' => $movil])
     <a href="{{ route('admin.logistica.entregas.index', ['envio' => $e->shipment_id]) }}" class="lg-btn" style="{{ $movil ? 'flex: 1' : '' }}" data-logistica-entregas data-envio="{{ $e->shipment_id }}" data-modo="ver">@lang('logistica::app.entregas.ver')</a>
     @if ($permisos['registrar'] && $e->pendientes > 0)
         <a href="{{ route('admin.logistica.entregas.crear', $e->shipment_id) }}" class="lg-btn lg-btn--ok" style="{{ $movil ? 'flex: 1' : '' }}" data-logistica-entregas data-envio="{{ $e->shipment_id }}" data-modo="entregar">@lang('logistica::app.entregas.registrar-entrega')</a>

@@ -16,6 +16,11 @@
 @endphp
 
 <div class="flex flex-wrap items-center justify-end gap-1.5" data-acciones-envio="{{ $pedido->id }}">
+    {{-- Mensaje de WhatsApp al cliente: el MISMO componente que Despachos y Entregas; el servidor ofrece solo lo que corresponde. --}}
+    @if (! in_array($pedido->status ?? null, ['canceled', 'closed', 'fraud'], true))
+        @include('logistica::admin.mensajes.boton', ['pedidoId' => $pedido->id, 'numero' => $pedido->increment_id])
+    @endif
+
     @if ($puedeDespachar && in_array($estadoEnvio, ['pendiente', 'parcial'], true))
         <button type="button" class="primary-button" data-logistica-despacho data-pedido="{{ $pedido->id }}" data-accion="{{ $accionPrincipal }}">
             @lang('logistica::app.despachos.acciones.'.$accionPrincipal)

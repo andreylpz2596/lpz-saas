@@ -13,6 +13,8 @@
 @endphp
 
 <div class="flex flex-wrap items-center justify-end gap-2" data-acciones="{{ $p->id }}">
+    @include('logistica::admin.mensajes.boton', ['pedidoId' => $p->id, 'numero' => $p->increment_id])
+
     @if ($pendiente && $puedeDespachar)
         <button type="button" class="primary-button" data-logistica-despacho data-pedido="{{ $p->id }}" data-accion="{{ $etiquetaPrincipal }}">
             @lang('logistica::app.despachos.acciones.'.$etiquetaPrincipal)

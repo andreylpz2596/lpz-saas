@@ -1,5 +1,6 @@
 <?php
 
+use ByLopez\Logistica\Http\Controllers\Admin\MensajesPedidoController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\AsesoresController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CarteraClienteController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CarteraController;
@@ -31,6 +32,13 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
         Route::get('pedidos/{pedido}/guias/{guia}/{modo}', [GuiaPedidoController::class, 'archivo'])
             ->whereNumber(['pedido', 'guia'])->where('modo', 'ver|descargar')
             ->name('admin.ventas_asesor.pedidos.guia');
+
+        // Mensajes al cliente (WhatsApp, solo lectura): MISMO controlador y servicio que las bandejas de Logistica; aqui la puerta de
+        // Ventas (clave view_own). El servicio exige que el pedido sea del asesor (o view_all) y no ofrece mensajes que no correspondan.
+        Route::get('pedidos/{pedido}/mensajes', [MensajesPedidoController::class, 'opciones'])
+            ->whereNumber('pedido')->name('admin.ventas_asesor.pedidos.mensajes.opciones');
+        Route::get('pedidos/{pedido}/mensajes/{clave}', [MensajesPedidoController::class, 'mensaje'])
+            ->whereNumber('pedido')->where('clave', '[a-z0-9\-]+')->name('admin.ventas_asesor.pedidos.mensajes.mensaje');
 
         // PAG-C: registrar un pago desde el pedido (clave ACL ventas_asesor.cartera.registrar).
         Route::post('pedidos/{pedido}/pagos', [PagosController::class, 'store'])

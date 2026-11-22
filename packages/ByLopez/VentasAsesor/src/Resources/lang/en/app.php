@@ -646,6 +646,28 @@ return [
             'solo-lectura' => 'Read-only view. Invoicing, shipping or canceling is handled in Sales > Orders by an authorized user.',
         ],
     ],
+    'mensajes' => [
+        'config' => [
+            'titulo' => 'WhatsApp messages',
+            'info' => 'Texts to copy and paste to the customer (the trade name is the one in Quotations › PDF header)',
+            'general' => 'Message style',
+            'general-info' => 'Templates are controlled by the system; only the style is adjusted here',
+            'usar-emojis' => 'Use emojis',
+            'usar-emojis-info' => 'When off, messages are sent without emojis.',
+            'frase-final' => 'Closing phrase',
+            'frase-final-info' => 'Replaces the closing of every message. You can use {marca}. Empty = the default closing.',
+        ],
+        'etiquetas' => [
+            'resumen' => 'Order summary',
+            'listo_domicilio' => 'Ready for delivery',
+            'listo_recoger' => 'Ready for pickup',
+            'despacho_completo' => 'Order shipped',
+            'despacho_parcial' => 'Partial shipment',
+            'despacho_final' => 'Last shipment',
+            'entregado' => 'Order delivered',
+            'despacho_n' => 'Shipment :n of :total',
+        ],
+    ],
     'cotizacion' => [
         'config' => [
             'titulo' => 'Advisor Sales',

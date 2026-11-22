@@ -183,5 +183,11 @@
 
         {{-- El MISMO componente que usa el listado de Pedidos del Administrador. --}}
         @include('logistica::admin.despachos.componente')
+
+        {{-- Mensaje de WhatsApp del pedido (mismo contrato y componente en Pedidos y Entregas). --}}
+        @include('logistica::admin.mensajes.whatsapp', [
+            'urlOpciones' => route('admin.logistica.despachos.mensajes.opciones', ['pedido' => '__ID__']),
+            'urlMensaje' => route('admin.logistica.despachos.mensajes.mensaje', ['pedido' => '__ID__', 'clave' => '__CLAVE__']),
+        ])
     </div>
 </x-admin::layouts>

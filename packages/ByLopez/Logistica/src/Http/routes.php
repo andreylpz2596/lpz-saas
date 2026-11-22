@@ -6,6 +6,7 @@ use ByLopez\Logistica\Http\Controllers\Admin\EntregasController;
 use ByLopez\Logistica\Http\Controllers\Admin\EntregasDrawerController;
 use ByLopez\Logistica\Http\Controllers\Admin\GuiasController;
 use ByLopez\Logistica\Http\Controllers\Admin\IncidenciasStockController;
+use ByLopez\Logistica\Http\Controllers\Admin\MensajesPedidoController;
 use ByLopez\Logistica\Http\Controllers\Admin\TransportadorasController;
 use ByLopez\Logistica\Http\Controllers\Admin\ZonasLocalesController;
 use Illuminate\Support\Facades\Route;
@@ -22,6 +23,9 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
 
     Route::prefix('despachos/pedidos/{pedido}')->whereNumber('pedido')->group(function () {
         Route::get('contexto', [DespachosController::class, 'contexto'])->name('admin.logistica.despachos.contexto');
+        // Mensajes al cliente (WhatsApp, solo lectura): las reglas viven en el contrato MensajesPedidoCliente.
+        Route::get('mensajes', [MensajesPedidoController::class, 'opciones'])->name('admin.logistica.despachos.mensajes.opciones');
+        Route::get('mensajes/{clave}', [MensajesPedidoController::class, 'mensaje'])->where('clave', '[a-z0-9\-]+')->name('admin.logistica.despachos.mensajes.mensaje');
         Route::post('despachar', [DespachosController::class, 'despachar'])->name('admin.logistica.despachos.despachar');
         Route::post('entregar-en-bodega', [DespachosController::class, 'entregarEnBodega'])->name('admin.logistica.despachos.entregar_bodega');
         // F6: decision de cobro de un pedido que no es contra entrega con dinero sin confirmar.
@@ -54,6 +58,12 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
 
     // Bandeja de entregas y, con ?envio=ID, el detalle del envio (historial de entregas y retornos).
     Route::get('entregas', [EntregasController::class, 'index'])->name('admin.logistica.entregas.index');
+
+    // Mensajes al cliente desde la bandeja de Entregas (mismo controlador y contrato que Despachos; ACL propia de Entregas).
+    Route::prefix('entregas/pedidos/{pedido}')->whereNumber('pedido')->group(function () {
+        Route::get('mensajes', [MensajesPedidoController::class, 'opciones'])->name('admin.logistica.entregas.mensajes.opciones');
+        Route::get('mensajes/{clave}', [MensajesPedidoController::class, 'mensaje'])->where('clave', '[a-z0-9\-]+')->name('admin.logistica.entregas.mensajes.mensaje');
+    });
 
     Route::prefix('entregas/envios/{envio}')->whereNumber('envio')->group(function () {
         Route::get('entregar', [EntregasController::class, 'crearEntrega'])->name('admin.logistica.entregas.crear');

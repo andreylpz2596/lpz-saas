@@ -95,7 +95,7 @@
             {{-- Despacho V1: envio y guia. El numero/tracking es el DATO del envio; el PDF es el documento (aparte). --}}
             @php
                 $envioGuia = (object) [
-                    'id' => $pedido->id, 'increment_id' => $pedido->increment_id, 'estado_despacho' => $estado_despacho,
+                    'id' => $pedido->id, 'increment_id' => $pedido->increment_id, 'status' => $pedido->status, 'estado_despacho' => $estado_despacho,
                     'shipping_method' => $pedido->shipping_method, 'guias' => $guias,
                 ];
             @endphp
@@ -140,6 +140,12 @@
             @if ($puedeDespachar || $puedeVerEnvio)
                 @include('logistica::admin.despachos.componente')
             @endif
+
+            {{-- Mensaje de WhatsApp del pedido (mismo contrato y componente que Despachos y Entregas). --}}
+            @include('logistica::admin.mensajes.whatsapp', [
+                'urlOpciones' => route('admin.ventas_asesor.pedidos.mensajes.opciones', ['pedido' => '__ID__']),
+                'urlMensaje' => route('admin.ventas_asesor.pedidos.mensajes.mensaje', ['pedido' => '__ID__', 'clave' => '__CLAVE__']),
+            ])
 
             @if ($verCartera && $cartera !== null)
                 {{-- PAG-C: todas las cifras salen de CarteraConsultaService; aqui no se calcula nada. --}}
