@@ -167,7 +167,7 @@ return [
         'todas' => 'Todas',
         'referencia' => 'Referencia',
         'buscar' => 'SKU o nombre',
-        'buscar-ayuda' => 'p. ej. 106DURZ o Negro',
+        'buscar-ayuda' => 'p. ej. 115dm (115 Dama M) o Negro',
         'tela' => 'Tipo de tela',
         'color' => 'Color',
         'talla' => 'Talla',

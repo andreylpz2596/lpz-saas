@@ -167,7 +167,7 @@ return [
         'todas' => 'All',
         'referencia' => 'Line',
         'buscar' => 'SKU or name',
-        'buscar-ayuda' => 'e.g. 106DURZ or Black',
+        'buscar-ayuda' => 'e.g. 115dm (115 Women M) or Black',
         'tela' => 'Fabric',
         'color' => 'Color',
         'talla' => 'Size',

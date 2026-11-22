@@ -3,6 +3,7 @@
 namespace ByLopez\VentasAsesor\Services\Precios;
 
 use ByLopez\VentasAsesor\Services\Rentabilidad\RentabilidadVentaService;
+use ByLopez\VentasAsesor\Support\Catalogo\BusquedaSku;
 use ByLopez\VentasAsesor\Support\Costos\CostoComisionableCatalogo;
 use ByLopez\VentasAsesor\Support\Precios\EvaluacionPrecioGrupo;
 use ByLopez\VentasAsesor\Support\Precios\MotorPrecioGrupo;
@@ -415,7 +416,10 @@ class ConsultaPreciosGrupoService
             });
         }
 
-        if (! empty($filtros['q'])) {
+        if (! empty($filtros['q']) && ($codigo = BusquedaSku::interpretar((string) $filtros['q'])) !== null) {
+            // Doc. 33: código rápido («115dm» → 115D-…-M; «115d» → todas las tallas de 115D).
+            $q->where('p.sku', 'like', $codigo['variante'] ?? $codigo['producto']);
+        } elseif (! empty($filtros['q'])) {
             $texto = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], (string) $filtros['q']).'%';
             $q->where(fn ($w) => $w->where('p.sku', 'like', $texto)->orWhere('padre.sku', 'like', $texto)
                 ->orWhere('pf.name', 'like', $texto)->orWhere('ppf.name', 'like', $texto));
