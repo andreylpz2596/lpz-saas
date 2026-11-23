@@ -42,6 +42,12 @@ return [
         'medios_con_referencia' => ['transferencia'],
     ],
 
+    // Doc. 33 P4: valores por defecto del autoservicio del cliente frecuente (no elige entrega ni pago; no registra dinero).
+    'autoservicio' => [
+        'metodo_entrega' => 'pickup',
+        'metodo_pago' => 'moneytransfer',
+    ],
+
     'pagos' => [
         /*
          * D-49: metodos de pago permitidos para el canal asesor. Lo ofrecido al borrador

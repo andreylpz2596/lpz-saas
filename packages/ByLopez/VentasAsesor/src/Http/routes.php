@@ -2,6 +2,7 @@
 
 use ByLopez\Logistica\Http\Controllers\Admin\MensajesPedidoController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\AsesoresController;
+use ByLopez\VentasAsesor\Http\Controllers\Admin\AutoservicioController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CarteraClienteController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CarteraController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\ClienteAccesoController;
@@ -21,6 +22,22 @@ use Illuminate\Support\Facades\Route;
 use Webkul\Core\Http\Middleware\NoCacheMiddleware;
 
 Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => config('app.admin_url')], function () {
+    // Doc. 33 P3: autoservicio del CLIENTE FRECUENTE. El cliente sale del vinculo (nunca de la peticion). Clave ACL autoservicio.comprar.
+    Route::prefix('autoservicio')->name('admin.autoservicio.')->group(function () {
+        Route::get('', [AutoservicioController::class, 'pantalla'])->name('pantalla');
+        Route::get('bootstrap', [AutoservicioController::class, 'bootstrap'])->name('estado_inicial');
+        Route::get('lineas/{clave}/colores', [AutoservicioController::class, 'colores'])->name('lineas.colores');
+        Route::get('matrices', [AutoservicioController::class, 'matrices'])->name('matrices');
+        Route::get('productos/{producto}/matriz', [AutoservicioController::class, 'matriz'])->whereNumber('producto')->name('productos.matriz');
+        Route::get('en-curso', [AutoservicioController::class, 'enCurso'])->name('en_curso');
+        Route::post('iniciar-con-tallas', [AutoservicioController::class, 'iniciarConTallas'])->name('iniciar_con_tallas');
+        Route::get('{borrador}', [AutoservicioController::class, 'estado'])->whereNumber('borrador')->name('estado');
+        Route::post('{borrador}/tallas', [AutoservicioController::class, 'aplicarTallas'])->whereNumber('borrador')->name('tallas');
+        Route::post('{borrador}/eliminar', [AutoservicioController::class, 'eliminar'])->whereNumber('borrador')->name('eliminar');
+        Route::post('{borrador}/preparar', [AutoservicioController::class, 'preparar'])->whereNumber('borrador')->name('preparar');
+        Route::post('{borrador}/confirmar', [AutoservicioController::class, 'confirmar'])->whereNumber('borrador')->name('confirmar');
+    });
+
     Route::prefix('ventas-asesor')->group(function () {
         Route::get('', [InicioController::class, 'index'])->name('admin.ventas_asesor.inicio.index');
 

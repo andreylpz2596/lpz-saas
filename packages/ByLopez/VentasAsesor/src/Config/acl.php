@@ -449,6 +449,31 @@ return [
         ],
         'sort' => 12,
     ], [
+        // Doc. 33 P3: autoservicio del cliente frecuente. Arbol PROPIO (no cuelga de ventas_asesor): marcar estas claves nunca
+        // concede la raiz ventas_asesor ni su pantalla de inicio. La ruta de login (primera hoja) es la pantalla de compra.
+        'key' => 'autoservicio',
+        'name' => 'ventasasesor::app.acl.autoservicio',
+        'route' => 'admin.autoservicio.pantalla',
+        'sort' => 20,
+    ], [
+        'key' => 'autoservicio.comprar',
+        'name' => 'ventasasesor::app.acl.autoservicio-comprar',
+        'route' => [
+            'admin.autoservicio.pantalla',
+            'admin.autoservicio.estado_inicial',
+            'admin.autoservicio.lineas.colores',
+            'admin.autoservicio.matrices',
+            'admin.autoservicio.productos.matriz',
+            'admin.autoservicio.en_curso',
+            'admin.autoservicio.iniciar_con_tallas',
+            'admin.autoservicio.estado',
+            'admin.autoservicio.tallas',
+            'admin.autoservicio.eliminar',
+            'admin.autoservicio.preparar',
+            'admin.autoservicio.confirmar',
+        ],
+        'sort' => 1,
+    ], [
         // Doc. 33 P1: administrar el acceso de clientes al aplicativo (crear/vincular usuario, suspender, reactivar, desvincular).
         // Sin asignar a ningun rol: la concede Camilo.
         'key' => 'ventas_asesor.clientes_acceso',

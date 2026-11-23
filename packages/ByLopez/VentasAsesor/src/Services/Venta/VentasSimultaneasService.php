@@ -58,6 +58,11 @@ class VentasSimultaneasService
     public function paraVariantes(array $varianteIds, Admin $actor, ?int $borradorId = null): array
     {
         if (! $this->autorizacion->tienePermiso($actor, BorradorVentaService::PERMISO)) {
+            // Doc. 33 P3: el cliente de autoservicio nunca recibe la senal de otras ventas (nombres de asesores, cantidades ajenas).
+            if ($this->autorizacion->tienePermiso($actor, AutorizacionVentasAsesor::PERMISO_AUTOSERVICIO_COMPRAR)) {
+                return [];
+            }
+
             throw new BorradorInvalido(BorradorInvalido::SIN_PERMISO);
         }
 

@@ -116,8 +116,10 @@ class NuevaVentaService
         int $productoId,
         array $cantidadesPorVariante,
         MecanismoCreacion $mecanismo = MecanismoCreacion::VENTAS_ASESOR,
+        bool $autoservicio = false,
     ): EstadoNuevaVenta {
-        $canal = $this->canalPermitido($canal);
+        // Doc. 33 P3: el autoservicio vende por el canal ecommerce (no esta en la lista de canales de los asesores).
+        $canal = $autoservicio ? CanalVenta::ECOMMERCE : $this->canalPermitido($canal);
 
         if (collect($cantidadesPorVariante)->filter(fn ($c) => is_numeric($c) && (int) $c > 0)->isEmpty()) {
             throw new Invalida(Invalida::LOTE_VACIO);
