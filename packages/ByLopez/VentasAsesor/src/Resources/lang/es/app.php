@@ -96,6 +96,8 @@ return [
     ],
 
     'acl' => [
+        'autoservicio' => 'Autoservicio de clientes',
+        'autoservicio-comprar' => 'Hacer pedidos (autoservicio)',
         'clientes-acceso' => 'Acceso de clientes',
         'clientes-acceso-administrar' => 'Administrar acceso de clientes',
         'title' => 'Ventas Asesor',

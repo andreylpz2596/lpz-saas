@@ -19,6 +19,11 @@ class AutorizacionVentasAsesor
 
     public const PERMISO_OPERAR_COMO_ASESOR = 'ventas_asesor.operar_como_asesor';
 
+    /* Doc. 33 P3: autoservicio del cliente frecuente (rol seguro; ver Support/Autoservicio/RolClienteFrecuente). */
+    public const PERMISO_AUTOSERVICIO_COMPRAR = 'autoservicio.comprar';
+
+    public const PERMISO_AUTOSERVICIO_PEDIDOS = 'autoservicio.pedidos';
+
     public const PERMISO_PEDIDOS_VER_PROPIOS = 'ventas_asesor.pedidos.view_own';
 
     public const PERMISO_PEDIDOS_VER_TODOS = 'ventas_asesor.pedidos.view_all';

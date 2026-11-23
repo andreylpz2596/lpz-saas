@@ -686,7 +686,8 @@ class ConfirmarVentaService
 
     protected function exigirPermiso(Admin $actor): void
     {
-        if (! $this->autorizacion->tienePermiso($actor, BorradorVentaService::PERMISO)) {
+        if (! $this->autorizacion->tienePermiso($actor, BorradorVentaService::PERMISO)
+            && ! $this->autorizacion->tienePermiso($actor, AutorizacionVentasAsesor::PERMISO_AUTOSERVICIO_COMPRAR)) {
             throw new BorradorInvalido(BorradorInvalido::SIN_PERMISO);
         }
 

@@ -132,11 +132,23 @@ class BorradorVentaService
         $this->exigirPropietario($borrador, $actor);
 
         // El cliente del precio debe ser el del borrador: ni se prea con otro cliente ni se consulta con un borrador ajeno.
-        if ($customerId !== null && (int) DB::table('cart')->where('id', $borrador->cart_id)->value('customer_id') !== $customerId) {
+        if ($customerId !== null && $this->clienteDelBorrador($borrador) !== $customerId) {
             throw new Invalido(Invalido::CLIENTE_NO_COINCIDE);
         }
 
         return $borrador;
+    }
+
+    /** Cliente del borrador: el de su carrito; si ya se confirmo y el carrito no existe, el de su pedido. Null = indeterminado (falla cerrado). */
+    protected function clienteDelBorrador(BorradorVenta $borrador): ?int
+    {
+        $id = $borrador->cart_id ? DB::table('cart')->where('id', $borrador->cart_id)->value('customer_id') : null;
+
+        if ($id === null && $borrador->order_id) {
+            $id = DB::table('orders')->where('id', $borrador->order_id)->value('customer_id');
+        }
+
+        return $id === null ? null : (int) $id;
     }
 
     /**
@@ -345,7 +357,9 @@ class BorradorVentaService
 
     protected function exigirPermiso(Admin $actor): void
     {
-        if (! $this->autorizacion->tienePermiso($actor, self::PERMISO)) {
+        // Doc. 33 P3: quien compra en autoservicio puede operar SU borrador; el cliente lo fija el servidor (ClienteActualService).
+        if (! $this->autorizacion->tienePermiso($actor, self::PERMISO)
+            && ! $this->autorizacion->tienePermiso($actor, AutorizacionVentasAsesor::PERMISO_AUTOSERVICIO_COMPRAR)) {
             throw new Invalido(Invalido::SIN_PERMISO);
         }
 
