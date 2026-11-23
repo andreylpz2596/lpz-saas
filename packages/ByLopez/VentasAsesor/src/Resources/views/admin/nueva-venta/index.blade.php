@@ -786,7 +786,7 @@
                                                     :class="celda.variante.stockVendible === 0 ? 'bg-red-50 text-gray-400 dark:bg-red-950/40 dark:text-gray-500' : cantidadDe(tarjeta.productId, celda.variante.productId) > celda.variante.stockVendible ? 'bg-red-50 dark:bg-red-950' : ''"
                                                 >
                                                     <td class="py-2 text-base font-bold text-gray-900 dark:text-white">
-                                                        @{{ celda.variante.opciones.size ? celda.variante.opciones.size.etiqueta : celda.variante.sku }}
+                                                        @{{ tallaDe(celda.variante) }}
                                                     </td>
 
                                                     <td
