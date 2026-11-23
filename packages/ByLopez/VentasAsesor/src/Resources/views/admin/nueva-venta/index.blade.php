@@ -1141,6 +1141,14 @@
                                                 <span class="block font-medium text-gray-800 dark:text-white">@{{ dir.nombre }} @{{ dir.apellido }}</span>
                                                 <span class="block text-xs text-gray-500 dark:text-gray-400">@{{ dir.direccion }} · @{{ dir.ciudad }}, @{{ nombreDepartamento(dir.departamento) }}</span>
                                             </span>
+                                            <button
+                                                type="button"
+                                                class="ml-auto shrink-0 text-xs font-semibold text-blue-600 hover:underline disabled:opacity-50 dark:text-blue-300"
+                                                :disabled="ocupado || ! ventaEditable"
+                                                @click.prevent.stop="abrirFormDireccion('facturacion', dir)"
+                                            >
+                                                Editar
+                                            </button>
                                         </label>
                                     </div>
 
@@ -1213,6 +1221,15 @@
                                             <span class="block text-gray-600 dark:text-gray-300">@{{ dir.direccion }}</span>
                                             <span class="block text-gray-600 dark:text-gray-300">@{{ dir.ciudad }}, @{{ nombreDepartamento(dir.departamento) }}</span>
                                         </span>
+
+                                        <button
+                                            type="button"
+                                            class="ml-auto shrink-0 rounded-md border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50 dark:border-blue-900 dark:text-blue-300 dark:hover:bg-blue-950"
+                                            :disabled="ocupado || ! ventaEditable"
+                                            @click.prevent.stop="abrirFormDireccion('envio', dir)"
+                                        >
+                                            Editar
+                                        </button>
                                     </label>
                                 </div>
 
@@ -1782,7 +1799,9 @@
                 <x-admin::modal ref="modalDireccion">
                     <x-slot:header>
                         <p class="text-lg font-bold text-gray-800 dark:text-white">
-                            @{{ formDireccion.para === 'facturacion' ? 'Agregar dirección de facturación' : 'Agregar dirección' }}
+                            @{{ formDireccion.editarId
+                                ? (formDireccion.para === 'facturacion' ? 'Editar dirección de facturación' : 'Editar dirección')
+                                : (formDireccion.para === 'facturacion' ? 'Agregar dirección de facturación' : 'Agregar dirección') }}
                         </p>
                     </x-slot>
 
@@ -1880,7 +1899,11 @@
                                 <input class="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900" inputmode="numeric" autocomplete="postal-code" v-model="formDireccion.datos.codigo_postal" />
                             </div>
 
-                            <label class="flex items-start gap-2 text-sm text-gray-700 sm:col-span-2 dark:text-gray-200">
+                            <p v-if="formDireccion.editarId" class="text-xs text-gray-500 sm:col-span-2 dark:text-gray-400">
+                                Se corrige la dirección guardada del cliente. Los pedidos ya creados conservan la dirección con la que se hicieron.
+                            </p>
+
+                            <label v-else class="flex items-start gap-2 text-sm text-gray-700 sm:col-span-2 dark:text-gray-200">
                                 <input type="checkbox" class="mt-0.5 h-4 w-4 accent-blue-600" v-model="formDireccion.guardar" />
                                 <span>
                                     Guardar en las direcciones del cliente
@@ -1896,7 +1919,7 @@
                         <div class="flex w-full flex-wrap justify-end gap-2">
                             <button type="button" class="transparent-button" @click="cerrarFormDireccion">Cancelar</button>
                             <button type="button" class="primary-button" :disabled="cargando.guardarDireccion" @click="guardarDireccionNueva">
-                                @{{ cargando.guardarDireccion ? 'Guardando…' : 'Guardar dirección' }}
+                                @{{ cargando.guardarDireccion ? 'Guardando…' : (formDireccion.editarId ? 'Guardar cambios' : 'Guardar dirección') }}
                             </button>
                         </div>
                     </x-slot:footer>
@@ -2398,6 +2421,8 @@
                             para: 'envio',
                             guardar: true,
                             error: null,
+                            // id de la direccion guardada que se esta corrigiendo (null = agregar una nueva).
+                            editarId: null,
                             // ubicacion: opcion elegida del autocomplete {municipio_codigo, municipio, departamento, etiqueta}.
                             // ciudad/departamento son solo para MOSTRAR la direccion puntual; el backend resuelve ambos del codigo.
                             datos: { nombre: '', apellido: '', telefono: '', linea: '', ciudad: '', departamento: '', codigo_postal: '', municipio_codigo: null, ubicacion: null },
@@ -3151,7 +3176,8 @@
                         this.aplicarRecogida();
                     },
 
-                    abrirFormDireccion(para) {
+                    /** Sin `dir` agrega una direccion; con `dir` (guardada del cliente) la abre precargada para corregirla. */
+                    abrirFormDireccion(para, dir = null) {
                         const c = this.clienteActual || {};
 
                         this.formDireccion = {
@@ -3159,7 +3185,12 @@
                             para,
                             guardar: true,
                             error: null,
-                            datos: {
+                            editarId: dir ? dir.id : null,
+                            datos: dir ? {
+                                nombre: dir.nombre || '', apellido: dir.apellido || '', telefono: dir.telefono || '',
+                                linea: String(dir.direccion || '').replace(/\s*\n\s*/g, ', '),
+                                ciudad: '', departamento: '', codigo_postal: dir.codigo_postal || '', municipio_codigo: null, ubicacion: null,
+                            } : {
                                 nombre: c.nombre || '', apellido: c.apellido || '',
                                 telefono: c.telefono_principal || c.telefonoPrincipal || '',
                                 linea: '', ciudad: '', departamento: '', codigo_postal: '', municipio_codigo: null, ubicacion: null,
@@ -3167,6 +3198,18 @@
                         };
 
                         this.reiniciarUbicacion();
+
+                        // Municipio guardado que coincide con el catalogo: queda elegido. Si no (texto libre historico),
+                        // el campo queda vacio y hay que elegirlo de la lista, como al agregar.
+                        if (dir && dir.municipio_codigo) {
+                            const departamento = this.nombreDepartamento(dir.departamento);
+
+                            this.elegirUbicacion({
+                                municipio_codigo: dir.municipio_codigo, municipio: dir.ciudad, departamento,
+                                etiqueta: departamento + ' — ' + dir.ciudad,
+                            });
+                        }
+
                         this.$refs.modalDireccion.open();
                     },
 
@@ -3321,7 +3364,14 @@
 
                         this.cargando.guardarDireccion = true;
 
-                        this.$axios.post("{{ url($rutaNv('direcciones.agregar', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
+                        // Editar = corregir la guardada (misma validacion). Al terminar se selecciona como al agregar: elegirla
+                        // vuelve a copiarla al carrito, asi la venta queda con los datos corregidos.
+                        const urlDireccion = this.formDireccion.editarId
+                            // 987654321 = marcador numerico (la ruta exige numero en {direccion}); se reemplaza por el id real.
+                            ? "{{ url($rutaNv('direcciones.editar', ['borrador' => '__ID__', 'direccion' => 987654321])) }}".replace('__ID__', this.borradorId).replace('987654321', this.formDireccion.editarId)
+                            : "{{ url($rutaNv('direcciones.agregar', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId);
+
+                        this.$axios.post(urlDireccion, {
                             nombre: d.nombre, apellido: d.apellido, telefono: d.telefono, lineas: [d.linea],
                             municipio_codigo: d.municipio_codigo, codigo_postal: d.codigo_postal,
                         })

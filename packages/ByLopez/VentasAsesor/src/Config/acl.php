@@ -94,6 +94,8 @@ return [
             'admin.ventas_asesor.nueva_venta.eliminar',
             // 03G-D (entrega): agregar direccion reutilizable al cliente del borrador (RT-04).
             'admin.ventas_asesor.nueva_venta.direcciones.agregar',
+            // Editar una direccion guardada del cliente del borrador (corrige errores de digitacion; mismas reglas que agregar).
+            'admin.ventas_asesor.nueva_venta.direcciones.editar',
             // GRP-01: ver el historial de grupo de la propia venta (solo lectura; cambiar/restaurar exigen su clave propia).
             'admin.ventas_asesor.nueva_venta.grupo.historial',
             // R2 (Doc. 23): advertencia de rentabilidad del propio borrador (sin costos para el asesor).

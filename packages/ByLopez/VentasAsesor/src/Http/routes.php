@@ -192,6 +192,7 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
             Route::post('{borrador}/confirmar', [NuevaVentaController::class, 'confirmar'])->name('confirmar');
             Route::post('{borrador}/eliminar', [NuevaVentaController::class, 'eliminar'])->name('eliminar');
             Route::post('{borrador}/direcciones', [NuevaVentaController::class, 'agregarDireccion'])->name('direcciones.agregar');
+            Route::post('{borrador}/direcciones/{direccion}', [NuevaVentaController::class, 'editarDireccion'])->whereNumber('direccion')->name('direcciones.editar');
             // GRP-01: grupo comercial TEMPORAL de la venta (nunca modifica al cliente).
             Route::post('{borrador}/grupo', [NuevaVentaController::class, 'cambiarGrupo'])->name('grupo.cambiar');
             Route::post('{borrador}/grupo/restaurar', [NuevaVentaController::class, 'restaurarGrupo'])->name('grupo.restaurar');

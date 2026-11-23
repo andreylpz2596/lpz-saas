@@ -126,3 +126,33 @@ test('P0 agregar direccion: devuelve la lista del cliente del borrador propio y 
     $propia = $this->actingAs($this->asesor1, 'admin')->postJson($ruta, $dir)->assertOk();
     expect($propia->json('direcciones'))->toHaveCount(2);
 });
+
+test('Editar direccion: corrige la guardada del cliente del borrador propio, conserva la predeterminada y no toca la de otro cliente', function () {
+    $borradorA = cf_iniciar($this, $this->asesor1, $this->clienteA->id);
+    $dirA = CustomerAddress::query()->where('customer_id', $this->clienteA->id)->firstOrFail();
+    $dirB = CustomerAddress::query()->where('customer_id', $this->clienteB->id)->firstOrFail();
+    $ruta = fn (int $dir) => route('admin.ventas_asesor.nueva_venta.direcciones.editar', ['borrador' => $borradorA, 'direccion' => $dir]);
+    $datos = ['nombre' => 'Ana', 'apellido' => 'Corregida', 'lineas' => ['Calle 3a # 05-14 Barrio Hunza'], 'municipio_codigo' => '11001', 'codigo_postal' => '110111', 'telefono' => '3001234567'];
+
+    // Borrador de otro asesor: 409 y nada cambia.
+    $this->actingAs($this->asesor2, 'admin')->postJson($ruta($dirA->id), $datos)->assertStatus(409);
+    expect($dirA->fresh()->address)->toBe('Calle secreta de Ana');
+
+    // Direccion de OTRO cliente desde el borrador propio: rechazada y la de B intacta.
+    $this->actingAs($this->asesor1, 'admin')->postJson($ruta($dirB->id), $datos)->assertStatus(422);
+    expect($dirB->fresh()->address)->toBe('Calle secreta de Beto');
+
+    // Propia: se corrige en el mismo registro (sin crear otra) y sigue siendo la predeterminada.
+    $r = $this->actingAs($this->asesor1, 'admin')->postJson($ruta($dirA->id), $datos)->assertOk();
+    $fresca = $dirA->fresh();
+    expect($r->json('direccion_id'))->toBe($dirA->id)
+        ->and($r->json('direcciones'))->toHaveCount(1)
+        ->and($r->json('direcciones.0.municipio_codigo'))->toBe('11001')
+        ->and($fresca->address)->toBe('Calle 3a # 05-14 Barrio Hunza')
+        ->and($fresca->last_name)->toBe('Corregida')
+        ->and((int) $fresca->default_address)->toBe(1)
+        ->and(CustomerAddress::query()->where('customer_id', $this->clienteA->id)->count())->toBe(1);
+
+    // Municipio escrito sin elegir de la lista: rechazado como al agregar.
+    $this->actingAs($this->asesor1, 'admin')->postJson($ruta($dirA->id), ['municipio_codigo' => null] + $datos)->assertStatus(422);
+});

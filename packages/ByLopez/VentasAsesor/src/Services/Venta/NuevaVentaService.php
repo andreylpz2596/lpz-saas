@@ -85,6 +85,26 @@ class NuevaVentaService
         });
     }
 
+    /**
+     * Corrige una direccion GUARDADA del cliente del borrador (p. ej. un error de digitacion). Mismas reglas que agregar;
+     * la direccion debe ser de ese cliente (GuardarDireccionClienteComercialService lo exige). La predeterminada sigue
+     * siendolo. Los pedidos ya creados no cambian: cada pedido guarda su propia copia de la direccion. No toca el carrito:
+     * si la venta ya usaba esa direccion, la pantalla la vuelve a aplicar (entregaRapida) para copiar los datos nuevos.
+     */
+    public function editarDireccionCliente(int $borradorId, int $direccionId, DireccionComercial $direccion, Admin $actor): CustomerAddress
+    {
+        return DB::transaction(function () use ($borradorId, $direccionId, $direccion, $actor) {
+            [, $carrito] = $this->borradores->bloquearParaEditar($borradorId, $actor);
+            $customerId = (int) $carrito->customer_id;
+
+            if (! $direccion->predeterminada && $this->direccionPredeterminadaId($customerId) === $direccionId) {
+                $direccion = $direccion->comoPredeterminada();
+            }
+
+            return $this->direccionesCliente->guardar($customerId, $direccion, $direccionId);
+        });
+    }
+
     /** Venta nueva para un cliente existente. Sin carrito hasta tener cliente valido. */
     public function iniciar(
         int $customerId,

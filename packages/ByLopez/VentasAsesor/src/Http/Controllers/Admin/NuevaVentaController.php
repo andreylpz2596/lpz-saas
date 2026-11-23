@@ -31,6 +31,7 @@ use ByLopez\VentasAsesor\Models\BorradorVenta;
 use ByLopez\VentasAsesor\Services\Rentabilidad\RentabilidadVentaService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Http\RespuestaErrorNuevaVenta as Respuesta;
+use ByLopez\VentasAsesor\Support\Logistica\MunicipioDesdeCatalogo;
 use ByLopez\VentasAsesor\Support\Venta\VenderPara;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -165,6 +166,9 @@ class NuevaVentaController extends Controller
                 'pais' => $d->country,
                 'telefono' => $d->phone,
                 'predeterminada' => (bool) $d->default_address,
+                // Para «Editar»: datos tal como estan guardados; el municipio solo si coincide exacto con el catalogo DIVIPOLA.
+                'codigo_postal' => $d->postcode,
+                'municipio_codigo' => app(MunicipioDesdeCatalogo::class)->municipioDeDireccion($d->city, $d->state, $d->country),
             ])
             ->values()
             ->all();
@@ -183,6 +187,19 @@ class NuevaVentaController extends Controller
             return [
                 'direccion_id' => (int) $nueva->id,
                 'direcciones' => $this->listaDirecciones((int) $nueva->customer_id),
+            ];
+        });
+    }
+
+    /** Editar una direccion guardada del cliente del borrador (misma validacion y propiedad que agregar). */
+    public function editarDireccion(int $borrador, int $direccion, AgregarDireccionNuevaVentaRequest $request): JsonResponse
+    {
+        return Respuesta::envolver(function () use ($borrador, $direccion, $request) {
+            $editada = $this->nuevaVenta->editarDireccionCliente($borrador, $direccion, $request->aDireccion(), $this->actor());
+
+            return [
+                'direccion_id' => (int) $editada->id,
+                'direcciones' => $this->listaDirecciones((int) $editada->customer_id),
             ];
         });
     }
