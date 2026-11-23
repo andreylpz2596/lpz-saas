@@ -345,7 +345,10 @@ class CatalogoVentaService
 
         $lote = new LoteCatalogo;
         $atributos = $this->superAtributos($producto);
-        $codigoTalla =(string) config('ventasasesor.nueva_venta.atributos.talla', 'size');
+        // Adulto ordena por `size`; niño por `grupo_de_edad_ninos` (el primero de la lista que tenga el producto).
+        $codigoTalla = (string) config('ventasasesor.nueva_venta.atributos.talla', 'size');
+        $codigoTalla = collect(config('ventasasesor.sku.atributos_talla', [$codigoTalla]))
+            ->first(fn ($codigo) => $atributos->firstWhere('code', $codigo) !== null) ?? $codigoTalla;
         $codigoColor = (string) config('ventasasesor.nueva_venta.atributos.color', 'color');
         $ordenTalla = $atributos->firstWhere('code', $codigoTalla)?->options->pluck('sort_order', 'id') ?? collect();
 
