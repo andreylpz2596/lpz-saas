@@ -142,7 +142,8 @@ test('la pantalla inicial no escribe ni consulta tablas propias, pedidos ni RMA'
         ->get(route(va01_rutaInicio()))
         ->assertOk();
 
-    $sql = implode("\n", $consultas);
+    // Doc. 33 P3: unica lectura permitida: el vinculo de autoservicio (middleware deny-by-default).
+    $sql = str_replace('bylopez_va_clientes_acceso', '', implode("\n", $consultas));
 
     expect($sql)->not->toContain('bylopez_va_')
         ->and($sql)->not->toMatch('/\b(from|join)\s+`?orders`?\b/')
