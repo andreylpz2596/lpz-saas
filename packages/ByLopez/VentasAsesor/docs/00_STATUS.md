@@ -2,6 +2,8 @@
 
 Estado consolidado de las fases del módulo `ByLopez\VentasAsesor`.
 
+**2026-11-22 — Estado de cuenta de WhatsApp del cliente:** `31_MENSAJES_WHATSAPP.md` §11. Botón en Cartera › cliente (solo alcance «todos»); pedidos con saldo agrupados por día, total pendiente, abonos en verificación y datos de pago. Solo lectura.
+
 **2026-11-22 — «Costos y precios» › Precios por grupo (develop → pruebas.alpz para revisión de Camilo; producción pendiente de aprobación):** `32_COSTOS_Y_PRECIOS_POR_GRUPO.md`. Caracterización del motor real (12 pruebas): `discount` = % sobre el precio BASE (sigue al base); `fixed` = precio unitario que solo aplica si es menor que el vigente; escalón por SKU; gana el menor entre el precio de grupo y el especial o la regla de catálogo; con 1 u. se lee el índice. Nueva pestaña con consulta por grupo (filtros del catálogo, agrupación por referencia+color, origen del precio, índice desactualizado, costo solo con permiso), edición individual y masiva (fijo, %, ajuste único de fijos, completar faltantes, quitar escalón). La vista previa usa el indexador de Bagisto sobre reglas en memoria. Confirmación con bloqueo previo, token, idempotencia, lote atómico, bitácora y reindexación con el job de Bagisto. Sin claves ACL nuevas (rutas en `costos.actualizar` + `catalog.products.edit`). Migración `2026_11_21_000001` aplicada en `lpz_saas_testing` y `lpz_saas` (aditiva). Pruebas: PG01 12/12, PG02 18/18, concurrencia 2/2 con procesos reales. Sin Safari/iPhone físico. Pendientes P1–P4 en el Doc. 32 §10.
 
 **2026-11-17 — Mensajes de WhatsApp al cliente (dev, sin commit, sin producción):** `31_MENSAJES_WHATSAPP.md`. Previsualizar → copiar → pegar (no envía nada).

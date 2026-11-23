@@ -107,3 +107,26 @@ Configuración › Ventas Asesor › **Mensajes de WhatsApp**: «Usar emojis» y
 - `tests/Unit/MensajePedidoPlantillasTest.php` (13): cada tipo, emojis, dinero, consolidación (solo líneas idénticas), color solo si el nombre no lo trae, y ningún término interno.
 - `tests/Feature/MensajePedidoWhatsAppTest.php` (9, pedidos reales despachados con `DespachoService`): sin despachar y sin efectos, completo, guía corregida, guía interna, parcial + segundo despacho (una guía por despacho), domicilio local, recogida, entregado (y su anulación), permisos (asesor propio/ajeno, administrador, BODEGA sin dinero, sin permisos, inexistente, cancelado), HTTP por las tres puertas con su ACL, y dinero (sin abonos, parcial, pagado, revisión, fuera de Cartera, sin alcance de Cartera).
 - Navegador real (jornada, 390/430/1366 px): ver el informe de la entrega.
+
+## 11. Estado de cuenta del cliente (Cartera › cliente) — 2026-11-22
+
+Mismo componente (botón «WhatsApp» + modal); solo cambian las URL y los textos del sujeto («Cliente»). Solo lectura.
+
+| Pieza | Qué hace |
+|---|---|
+| `Services/Mensajes/MensajeCarteraClienteService` | Decide qué pedidos entran, a partir de `CarteraConsultaService::saldosDePedidos` (los mismos saldos de la pantalla). |
+| `Services/Mensajes/PlantillaEstadoCuenta` | Solo formatea (pura). |
+| `Http/Controllers/Admin/MensajesCarteraController` | `GET cartera/clientes/{cliente}/mensajes[/{clave}]` (`admin.ventas_asesor.cartera.mensajes.*`). |
+| `Exceptions/MensajeCarteraNoDisponibleException` | `sin_permiso` 403, `cliente_inexistente` 404, `mensaje_no_disponible` 409. |
+
+**Reglas aprobadas por Camilo:**
+- Formato agrupado por **día**, del pedido más antiguo al más nuevo (orden FIFO de Cartera); una línea por pedido con su **saldo**; «(total, abonado)» solo si hubo abono. Más de 10 pedidos: los 10 más antiguos + «… y N pedidos más por $ X»; el total pendiente siempre los incluye a todos.
+- Solo lo genera quien tiene **alcance «todos»** de Cartera (`ventas_asesor.cartera.view_all`, ruta y servicio). Con «ver propios» el total saldría incompleto si el cliente le debe a otra asesora.
+- Entran los pedidos **dentro de Cartera, con saldo > 0 y sin revisión**. Los «por revisar» y los **anteriores a la fecha de corte** no salen en el texto: se avisan a quien lo genera (`avisos`, en amarillo en el modal; nunca se copian).
+- Los abonos registrados sin confirmar ya los resta Cartera: el texto lo aclara («Incluye abonos por $ X que estamos verificando»).
+- Medios de pago: los de Configuración › Cotizaciones › Datos de pago (si no hay, no sale el bloque).
+- Cliente sin saldo: «¡Estás al día!».
+- **No** se menciona el saldo a favor (crédito D10): no se resta solo y queda como decisión pendiente.
+- Teléfono (solo en la respuesta, no en el texto): `customers.phone`.
+
+Pruebas: `tests/Unit/MensajeEstadoCuentaPlantillaTest.php` (5) y `tests/Feature/MensajeEstadoCuentaTest.php` (3, pagos y aplicaciones reales; el total coincide con `carteraDelCliente`).
