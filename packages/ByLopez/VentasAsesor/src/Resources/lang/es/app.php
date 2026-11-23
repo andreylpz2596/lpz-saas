@@ -96,6 +96,8 @@ return [
     ],
 
     'acl' => [
+        'clientes-acceso' => 'Acceso de clientes',
+        'clientes-acceso-administrar' => 'Administrar acceso de clientes',
         'title' => 'Ventas Asesor',
         'operar-como-asesor' => 'Operar como asesor',
         'pedidos' => 'Pedidos',

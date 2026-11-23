@@ -108,6 +108,8 @@ class NuevaVentaController extends Controller
             'puedeCambiarGrupo' => $this->grupos->puedeCambiar($this->actor()),
             // R2: «Vender para» solo con `pedidos.assign` (el servicio lo vuelve a exigir al confirmar).
             'puedeVenderPara' => app(VenderPara::class)->puedeElegir($this->actor()),
+            // Doc. 33 P1: «Habilitar acceso» al crear un cliente solo con la clave de administrar accesos.
+            'puedeAdministrarAcceso' => app(AutorizacionVentasAsesor::class)->tienePermiso($this->actor(), \ByLopez\VentasAsesor\Services\Clientes\ClienteAccesoService::PERMISO),
             'asesoresVenta' => app(VenderPara::class)->puedeElegir($this->actor()) ? app(VenderPara::class)->opciones() : [],
         ]);
     }

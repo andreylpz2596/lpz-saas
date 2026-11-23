@@ -1919,9 +1919,15 @@
                             </div>
 
                             <div class="col-span-2">
-                                <label class="text-sm text-gray-600 dark:text-gray-300">Email (opcional)</label>
+                                <label class="text-sm text-gray-600 dark:text-gray-300">Email @{{ crearClienteForm.habilitar_acceso ? '*' : '(opcional)' }}</label>
                                 <input class="mt-1 w-full rounded-lg border px-3 py-1.5 dark:border-gray-800 dark:bg-gray-900" v-model="crearClienteForm.email" />
                             </div>
+
+                            <!-- Doc. 33 P1: solo quien puede administrar accesos. El usuario nace con contrasena propia (enlace por correo). -->
+                            <label v-if="puedeAdministrarAcceso" class="col-span-2 flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200" data-habilitar-acceso>
+                                <input type="checkbox" class="mt-1" v-model="crearClienteForm.habilitar_acceso" />
+                                <span>Habilitar acceso para realizar pedidos<span class="block text-xs text-gray-500">Se crea su usuario y se le envía un enlace para definir su contraseña.</span></span>
+                            </label>
                         </div>
 
                         <p
@@ -2341,6 +2347,7 @@
                         // R2 (Doc. 23): «Vender para» solo con `pedidos.assign` ('' = regla automatica, 'empresa' o admin_id),
                         // y la advertencia de rentabilidad del borrador (sin costos; el servidor vuelve a evaluar al confirmar).
                         puedeVenderPara: @json($puedeVenderPara),
+                        puedeAdministrarAcceso: @json($puedeAdministrarAcceso ?? false),
                         asesoresVenta: @json($asesoresVenta),
                         venderPara: '',
                         rentabilidad: null,
@@ -2428,7 +2435,7 @@
                         // tipo: lo que el asesor ELIGIO (null = aun no). Lo APLICADO al carrito es tipoAplicado.
                         entregaForm: { tipo: null, metodo: null },
 
-                        crearClienteForm: { nombre: '', apellido: '', telefono: '', customer_group_id: null, email: '' },
+                        crearClienteForm: { nombre: '', apellido: '', telefono: '', customer_group_id: null, email: '', habilitar_acceso: false },
                         errorCrearCliente: null,
 
                         ventasEnCurso: [],
@@ -3502,8 +3509,7 @@
                             .then((response) => {
                                 const grupo = this.grupos.find((g) => g.id === this.crearClienteForm.customer_group_id);
 
-                                this.$refs.modalCrearCliente.close();
-                                this.seleccionarClienteEncontrado({
+                                const datosCliente = {
                                     customerId: response.data.customer_id,
                                     nombre: this.crearClienteForm.nombre,
                                     apellido: this.crearClienteForm.apellido,
@@ -3511,7 +3517,30 @@
                                     telefonoPrincipal: this.crearClienteForm.telefono,
                                     grupoId: this.crearClienteForm.customer_group_id,
                                     grupoNombre: grupo ? grupo.name : null,
-                                });
+                                };
+                                const habilitar = this.puedeAdministrarAcceso && this.crearClienteForm.habilitar_acceso;
+
+                                this.$refs.modalCrearCliente.close();
+                                this.seleccionarClienteEncontrado(datosCliente);
+
+                                // El cliente ya existe; el acceso es un paso aparte y su fallo NO deshace el cliente ni la venta.
+                                if (habilitar) {
+                                    this.$axios.post("{{ url(route('admin.ventas_asesor.clientes_acceso.crear_usuario', ['cliente' => '__ID__'])) }}".replace('__ID__', datosCliente.customerId), {
+                                        email: this.crearClienteForm.email || null,
+                                    })
+                                        .then((r) => this.$emitter.emit('add-flash', {
+                                            type: 'success',
+                                            message: r.data.enlace_enviado
+                                                ? 'Cliente creado y acceso habilitado. Se envió el enlace para crear su contraseña.'
+                                                : 'Cliente creado y acceso habilitado, pero no se pudo enviar el correo.',
+                                        }))
+                                        .catch((e) => this.$emitter.emit('add-flash', {
+                                            type: 'warning',
+                                            message: 'Cliente creado, pero el acceso no se habilitó: ' + (e?.response?.data?.mensaje || 'intenta desde la ficha del cliente.'),
+                                        }));
+                                }
+
+                                this.crearClienteForm = { nombre: '', apellido: '', telefono: '', customer_group_id: null, email: '', habilitar_acceso: false };
                             })
                             .catch((error) => {
                                 this.errorCrearCliente = error?.response?.data?.mensaje

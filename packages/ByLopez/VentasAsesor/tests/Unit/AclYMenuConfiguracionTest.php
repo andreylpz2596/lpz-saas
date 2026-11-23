@@ -13,7 +13,7 @@ uses(TestCase::class);
 test('la ACL del paquete se fusiona sin reemplazar la de Bagisto ni la de otros paquetes', function () {
     $claves = collect(config('acl'))->pluck('key')->all();
 
-    expect(va01_clavesAcl())->toHaveCount(54)
+    expect(va01_clavesAcl())->toHaveCount(56)
         ->and($claves)->toContain('dashboard')
         ->and($claves)->toContain('sales.orders.view')
         ->and($claves)->toContain('corte_confeccion');
@@ -68,6 +68,9 @@ test('el arbol ACL del modulo es exactamente el definido para VentasAsesor', fun
         'ventas_asesor.cartera.credito.reversar',
         'ventas_asesor.cartera.credito.ajustar',
         'ventas_asesor.cartera.reversar',
+        // Doc. 33 P1: acceso de clientes al aplicativo (autoservicio).
+        'ventas_asesor.clientes_acceso',
+        'ventas_asesor.clientes_acceso.manage',
         // ASESOR-01: ficha de asesores.
         'ventas_asesor.asesores',
         'ventas_asesor.asesores.view_own',
@@ -183,6 +186,7 @@ test('el arbol ACL se construye completo para la pantalla de roles de Bagisto', 
             'ventas_asesor.precios_grupo',
             'ventas_asesor.rentabilidad',
             'ventas_asesor.cotizaciones_datos',
+            'ventas_asesor.clientes_acceso',
         ]);
 
     $pedidos = $raiz->children->first(fn ($item) => $item->key === 'ventas_asesor.pedidos');
@@ -225,7 +229,7 @@ test('03G-C: la API de "nueva venta rapida" la autoriza el mismo permiso que Bor
     }
 
     // No se duplico ninguna clave del modulo para lograrlo (las pruebas de conteo/arbol arriba lo exigen).
-    expect(va01_clavesAcl())->toHaveCount(54);
+    expect(va01_clavesAcl())->toHaveCount(56);
 });
 
 test('las claves del servicio existen en la ACL y ninguna clave usa guiones', function () {

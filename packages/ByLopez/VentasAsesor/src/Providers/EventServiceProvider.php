@@ -11,6 +11,7 @@ use ByLopez\VentasAsesor\Listeners\ComunicarDomiciliarioALogistica;
 use ByLopez\VentasAsesor\Listeners\EnlazarPedidoConBorrador;
 use ByLopez\VentasAsesor\Listeners\FijarContextoPrecioEnRutasDelPanel;
 use ByLopez\VentasAsesor\Listeners\MostrarAntecedentesEnviosEnFichaCliente;
+use ByLopez\VentasAsesor\Listeners\MostrarAccesoEnFichaCliente;
 use ByLopez\VentasAsesor\Listeners\MostrarCarteraEnFichaCliente;
 use ByLopez\VentasAsesor\Listeners\MostrarTipoOperacionEnPedido;
 use ByLopez\VentasAsesor\Listeners\ProtegerReservasEnDespachoLegado;
@@ -88,6 +89,9 @@ class EventServiceProvider extends ServiceProvider
 
         // PAG-D: tarjeta «Pago / Cartera» en la ficha nativa del cliente (hook propio de Bagisto, sin tocar Webkul).
         Event::listen(MostrarCarteraEnFichaCliente::EVENTO, MostrarCarteraEnFichaCliente::class.'@handle');
+
+        // Doc. 33 P1: «Acceso al aplicativo» (autoservicio del cliente) en la misma ficha.
+        Event::listen(MostrarAccesoEnFichaCliente::EVENTO, MostrarAccesoEnFichaCliente::class.'@handle');
 
         // Clientes historicos: «Historial reportado por 99 Envios» en la misma ficha (solo lectura, informativo).
         Event::listen(MostrarAntecedentesEnviosEnFichaCliente::EVENTO, MostrarAntecedentesEnviosEnFichaCliente::class.'@handle');
