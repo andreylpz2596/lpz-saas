@@ -53,9 +53,21 @@ abstract class TestCase extends BaseTestCase
         @set_time_limit(0);
     }
 
+    /**
+     * Una rama de trabajo puede tener su PROPIA base de pruebas, para no compartir escritura con otros hilos. Solo vale si
+     * se declara explicitamente (BASE_DE_PRUEBAS_EXCLUSIVA en .env.testing, que no se versiona) y su nombre empieza por
+     * lpz_cf_: nunca habilita lpz_saas, preproduccion ni ninguna otra.
+     */
+    protected static function esBaseExclusivaDeRama(string $base): bool
+    {
+        $declarada = (string) ($_ENV['BASE_DE_PRUEBAS_EXCLUSIVA'] ?? getenv('BASE_DE_PRUEBAS_EXCLUSIVA') ?: '');
+
+        return $declarada !== '' && $declarada === $base && preg_match('/^lpz_cf_[a-z0-9_]+$/', $base) === 1;
+    }
+
     public static function verificarConexionDePruebas(string $base, string $host): void
     {
-        if ($base !== self::BASE_DE_PRUEBAS) {
+        if ($base !== self::BASE_DE_PRUEBAS && ! self::esBaseExclusivaDeRama($base)) {
             throw new RuntimeException('Ejecución bloqueada: las pruebas no están conectadas a lpz_saas_testing.');
         }
 
