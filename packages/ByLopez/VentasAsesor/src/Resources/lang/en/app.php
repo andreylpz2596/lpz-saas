@@ -96,6 +96,8 @@ return [
     ],
 
     'acl' => [
+        'clientes-acceso' => 'Customer access',
+        'clientes-acceso-administrar' => 'Manage customer access',
         'title' => 'Sales Advisor',
         'operar-como-asesor' => 'Operate as advisor',
         'pedidos' => 'Orders',

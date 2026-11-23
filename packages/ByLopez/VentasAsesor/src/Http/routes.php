@@ -4,6 +4,7 @@ use ByLopez\Logistica\Http\Controllers\Admin\MensajesPedidoController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\AsesoresController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CarteraClienteController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CarteraController;
+use ByLopez\VentasAsesor\Http\Controllers\Admin\ClienteAccesoController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\ComisionesController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\ControlCostosController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CotizacionController;
@@ -24,6 +25,16 @@ use Webkul\Core\Http\Middleware\NoCacheMiddleware;
 Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => config('app.admin_url')], function () {
     Route::prefix('ventas-asesor')->group(function () {
         Route::get('', [InicioController::class, 'index'])->name('admin.ventas_asesor.inicio.index');
+
+        // Doc. 33 P1: acceso de un cliente al aplicativo (autoservicio), desde la ficha del cliente. Clave ventas_asesor.clientes_acceso.manage.
+        Route::prefix('clientes/{cliente}/acceso')->whereNumber('cliente')->name('admin.ventas_asesor.clientes_acceso.')->group(function () {
+            Route::get('', [ClienteAccesoController::class, 'mostrar'])->name('mostrar');
+            Route::post('crear-usuario', [ClienteAccesoController::class, 'crearUsuario'])->name('crear_usuario');
+            Route::post('vincular', [ClienteAccesoController::class, 'vincular'])->name('vincular');
+            Route::post('suspender', [ClienteAccesoController::class, 'suspender'])->name('suspender');
+            Route::post('reactivar', [ClienteAccesoController::class, 'reactivar'])->name('reactivar');
+            Route::post('desvincular', [ClienteAccesoController::class, 'desvincular'])->name('desvincular');
+        });
 
         // D-58: autocomplete de ubicaciones colombianas (catalogo DIVIPOLA local), reutilizable.
         Route::get('ubicaciones', [UbicacionesController::class, 'buscar'])->name('admin.ventas_asesor.ubicaciones.buscar');

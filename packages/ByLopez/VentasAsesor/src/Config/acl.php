@@ -454,6 +454,26 @@ return [
         ],
         'sort' => 12,
     ], [
+        // Doc. 33 P1: administrar el acceso de clientes al aplicativo (crear/vincular usuario, suspender, reactivar, desvincular).
+        // Sin asignar a ningun rol: la concede Camilo.
+        'key' => 'ventas_asesor.clientes_acceso',
+        'name' => 'ventasasesor::app.acl.clientes-acceso',
+        'route' => $inicio,
+        'sort' => 13,
+    ], [
+        'key' => 'ventas_asesor.clientes_acceso.manage',
+        'name' => 'ventasasesor::app.acl.clientes-acceso-administrar',
+        'route' => [
+            $inicio,
+            'admin.ventas_asesor.clientes_acceso.mostrar',
+            'admin.ventas_asesor.clientes_acceso.crear_usuario',
+            'admin.ventas_asesor.clientes_acceso.vincular',
+            'admin.ventas_asesor.clientes_acceso.suspender',
+            'admin.ventas_asesor.clientes_acceso.reactivar',
+            'admin.ventas_asesor.clientes_acceso.desvincular',
+        ],
+        'sort' => 1,
+    ], [
         // Debe ser la ultima entrada: ver la regla 2 del encabezado.
         'key' => 'ventas_asesor',
         'name' => 'ventasasesor::app.acl.title',
