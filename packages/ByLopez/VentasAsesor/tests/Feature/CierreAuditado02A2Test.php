@@ -294,7 +294,7 @@ test('12. el esquema conserva RESTRICT y solo la ficha de asesor apunta a admins
         // posterior es DELIBERADA y documentada: ASESOR-01 (doc. 05 y doc. 15) ata la ficha del asesor a su usuario con
         // RESTRICT porque el perfil es inmutable y nunca se borra (se inactiva). Los módulos posteriores añadieron sus
         // propias FK `bylopez_va_*`, por eso ya no se exige un total fijo.
-        ->and($reglas->filter(fn ($regla) => str_contains($regla, '-> admins'))->all())->toBe(['bvaas_admin_fk' => 'RESTRICT -> admins']);
+        ->and($reglas->filter(fn ($regla) => str_contains($regla, '-> admins'))->all())->toBe(['bvaas_admin_fk' => 'RESTRICT -> admins', 'bvaca_admin_fk' => 'RESTRICT -> admins', 'bvacc_admin_fk' => 'RESTRICT -> admins']);
 });
 
 test('el historial inicial de un fallo tecnico es el unico portador del codigo', function () {
