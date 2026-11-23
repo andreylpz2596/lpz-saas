@@ -38,6 +38,9 @@ use ByLopez\VentasAsesor\Support\Logistica\SugiereRecaudoDesdeCartera;
 use ByLopez\VentasAsesor\Support\Telefono\NormalizadorTelefonoBasico;
 use ByLopez\VentasAsesor\Support\Venta\ConfirmacionEnCurso;
 use Illuminate\Console\Scheduling\Schedule;
+use ByLopez\VentasAsesor\Http\Middleware\RestringirUsuarioAutoservicio;
+use Illuminate\Routing\Events\RouteMatched;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Webkul\Core\Http\Middleware\PreventRequestsDuringMaintenance;
@@ -155,6 +158,13 @@ class VentasAsesorServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Route::middleware(['web', PreventRequestsDuringMaintenance::class])->group(__DIR__.'/../Http/routes.php');
+
+        // Doc. 33: deny-by-default para el usuario de autoservicio en TODA ruta del panel (Bagisto deja rutas sin ACL).
+        Event::listen(RouteMatched::class, function (RouteMatched $evento) {
+            if (str_starts_with((string) $evento->route->getName(), 'admin.')) {
+                $evento->route->middleware(RestringirUsuarioAutoservicio::class);
+            }
+        });
 
         // Tablas propias con prefijo bylopez_va_. Ninguna migracion toca el core.
         $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');

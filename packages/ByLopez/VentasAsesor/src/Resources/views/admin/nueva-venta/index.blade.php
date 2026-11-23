@@ -1,3 +1,8 @@
+@php
+    // Doc. 33 P3: la MISMA vista sirve a asesores y al cliente de autoservicio; solo cambia el juego de rutas.
+    $nv = ($modoCliente ?? false) ? 'admin.autoservicio.' : 'admin.ventas_asesor.nueva_venta.';
+    $rutaNv = fn (string $nombre, array $parametros = []) => \Illuminate\Support\Facades\Route::has($nv.$nombre) ? route($nv.$nombre, $parametros) : '#';
+@endphp
 <x-admin::layouts>
     <x-slot:title>
         @lang('ventasasesor::app.nueva-venta.title')
@@ -161,6 +166,17 @@
                     </div>
                 </div>
 
+                <!-- Doc. 33 P4: pedido del cliente confirmado. Solo lo que le corresponde: numero, total, entrega y pago pendiente. -->
+                <div v-if="confirmacionCliente" class="mt-3 rounded-lg border border-green-300 bg-green-50 p-4 text-green-900 dark:bg-green-950 dark:text-green-100" data-pedido-confirmado role="status">
+                    <p class="text-base font-bold">¡Pedido #@{{ confirmacionCliente.numero }} confirmado!</p>
+                    <p class="mt-1 text-sm">Total @{{ precio(confirmacionCliente.total) }} · @{{ confirmacionCliente.entrega }} · Pago: @{{ confirmacionCliente.pago }}.</p>
+                    <p class="mt-1 text-sm">Te avisaremos cuando esté listo. El pago se confirma cuando recibamos tu transferencia.</p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <a href="{{ route('admin.autoservicio.pedidos.index') }}" class="primary-button">Ver mis pedidos</a>
+                        <button type="button" class="secondary-button" @click="otroPedido">Hacer otro pedido</button>
+                    </div>
+                </div>
+
                 <!-- Indicador de progreso (no es wizard: solo informa y permite saltar con scroll) -->
                 <div
                     v-if="borradorId"
@@ -250,7 +266,7 @@
                         <!-- ---------- CLIENTE ---------- -->
                         <!-- Desaparece al iniciar la venta: el cliente ya se muestra en la cabecera. -->
                         <div
-                            v-if="! borradorId"
+                            v-if="! borradorId && ! modoCliente"
                             id="seccion-cliente"
                             class="box-shadow rounded bg-white p-4 dark:bg-gray-900"
                         >
@@ -1011,7 +1027,7 @@
                                  Cada opcion es un radio grande al estilo del checkout de Bagisto. La recogida aplica
                                  SOLA el carrier real `pickup` sobre la bodega real (D-41): no se vuelve a preguntar. -->
                             <div
-                                v-if="estado && estado.lineas.length"
+                                v-if="estado && estado.lineas.length && ! modoCliente"
                                 id="seccion-entrega"
                                 class="box-shadow rounded bg-white p-4 dark:bg-gray-900"
                             >
@@ -1410,6 +1426,7 @@
                                         </dd>
                                     </div>
 
+                                    <template v-if="! modoCliente">
                                     <!-- GRP-01: grupo habitual (el real del cliente) vs grupo aplicado SOLO a esta venta -->
                                     <div class="flex justify-between">
                                         <dt class="text-gray-500 dark:text-gray-300">Grupo habitual</dt>
@@ -1463,6 +1480,7 @@
                                             Ver historial de grupo
                                         </button>
                                     </div>
+                                    </template>
 
                                     <!-- Entrega y pago REALES del carrito (lo aplicado), no lo que se esta eligiendo -->
                                     <div class="flex justify-between gap-2">
@@ -1595,6 +1613,8 @@
                                     </div>
                                 </dl>
 
+                                <p v-if="modoCliente" class="mt-1 text-xs text-gray-500 dark:text-gray-400" data-precio-mayorista>Tu precio mayorista</p>
+
                                 <p
                                     v-if="grupoAplicadoNombre"
                                     class="mt-1 text-xs text-gray-400 dark:text-gray-500"
@@ -1603,7 +1623,7 @@
                                 </p>
 
                                 <p
-                                    v-if="estado.confirmable && ! entregaLista"
+                                    v-if="! modoCliente && estado.confirmable && ! entregaLista"
                                     class="mt-3 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300"
                                 >
                                     ⚠ Termina de definir la entrega elegida antes de confirmar.
@@ -1698,16 +1718,17 @@
                                 <button
                                     type="button"
                                     class="primary-button mt-4 w-full justify-center py-2.5 text-base"
-                                    :disabled="! estado.confirmable || ! entregaLista || ! ventaEditable || ocupado"
+                                    :disabled="! estado.confirmable || (! modoCliente && ! entregaLista) || ! ventaEditable || ocupado"
                                     @click="confirmar"
                                 >
                                     <span
                                         v-if="cargando.confirmar"
                                         class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
                                     ></span>
-                                    CONFIRMAR VENTA
+                                    @{{ modoCliente ? 'CONFIRMAR PEDIDO' : 'CONFIRMAR VENTA' }}
                                 </button>
 
+                                <template v-if="! modoCliente">
                                 <!-- Cotizacion: PDF para el cliente. No crea pedido, no reserva stock; el domicilio se cobra por aparte. -->
                                 <button
                                     type="button"
@@ -1748,6 +1769,7 @@
                                 </div>
 
                                 <p v-if="errorCotizacion" class="nv-cot-error" role="alert">@{{ errorCotizacion }}</p>
+                                </template>
                             </template>
                         </div>
                     </div>
@@ -2393,6 +2415,10 @@
                         canalSeleccionado: null,
                         // P7: identificador de ESTA venta (uno por intento). Hace idempotente la creacion del borrador.
                         referenciaVenta: null,
+                        // Doc. 33 P3: modo cliente (autoservicio): sin buscador, grupos, rentabilidad, cotizaciones, entrega ni pago.
+                        modoCliente: @json($modoCliente ?? false),
+                        nombreCliente: null,
+                        confirmacionCliente: null,
 
                         borradorId: null,
                         estado: null,
@@ -2463,11 +2489,16 @@
                 mounted() {
                     this.$refs.buscadorCliente?.focus();
 
-                    this.$axios.get("{{ route('admin.ventas_asesor.nueva_venta.estado_inicial') }}")
+                    this.$axios.get("{{ $rutaNv('estado_inicial') }}")
                         .then((response) => {
-                            this.canales = response.data.canales;
+                            this.canales = response.data.canales || [];
                             this.canalSeleccionado = this.canales[0] || null;
                             this.accesosRapidos = response.data.accesos_rapidos;
+
+                            if (this.modoCliente) {
+                                this.nombreCliente = response.data.cliente?.nombre || '';
+                                this.fijarClienteAutoservicio();
+                            }
                         })
                         .catch((error) => this.manejarError(error));
                 },
@@ -3013,7 +3044,7 @@
 
                     /** Eliminar venta en curso = BorradorVentaService::descartar() (ownership y lock ya existentes). */
                     eliminarVentaEnCurso(borradorId) {
-                        this.$axios.post("{{ url(route('admin.ventas_asesor.nueva_venta.eliminar', ['borrador' => '__ID__'])) }}".replace('__ID__', borradorId))
+                        this.$axios.post("{{ url($rutaNv('eliminar', ['borrador' => '__ID__'])) }}".replace('__ID__', borradorId))
                             .then(() => {
                                 this.confirmarEliminarId = null;
                                 this.ventasEnCurso = this.ventasEnCurso.filter((b) => b.id !== borradorId);
@@ -3037,7 +3068,7 @@
                         this.direccionesCargadas = false;
                         this.cargando.direccion = true;
 
-                        return this.$axios.get("{{ url(route('admin.ventas_asesor.nueva_venta.clientes.direcciones', ['cliente' => '__ID__'])) }}".replace('__ID__', customerId))
+                        return this.$axios.get("{{ url($rutaNv('clientes.direcciones', ['cliente' => '__ID__'])) }}".replace('__ID__', customerId))
                             .then((response) => {
                                 this.direccionesCliente = response.data;
 
@@ -3290,7 +3321,7 @@
 
                         this.cargando.guardarDireccion = true;
 
-                        this.$axios.post("{{ url(route('admin.ventas_asesor.nueva_venta.direcciones.agregar', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
+                        this.$axios.post("{{ url($rutaNv('direcciones.agregar', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
                             nombre: d.nombre, apellido: d.apellido, telefono: d.telefono, lineas: [d.linea],
                             municipio_codigo: d.municipio_codigo, codigo_postal: d.codigo_postal,
                         })
@@ -3449,7 +3480,7 @@
 
                         const criterio = /\d/.test(this.busquedaCliente) ? { telefono: this.busquedaCliente } : { nombre: this.busquedaCliente };
 
-                        this.$axios.post("{{ route('admin.ventas_asesor.nueva_venta.clientes.buscar') }}", criterio)
+                        this.$axios.post("{{ $rutaNv('clientes.buscar') }}", criterio)
                             .then((response) => {
                                 this.resultadoBusqueda = response.data;
                             })
@@ -3502,7 +3533,7 @@
                         this.cargando.crearCliente = true;
 
                         // P7: se crea el cliente (dato real) pero NO la venta; esta nace al agregar la primera prenda.
-                        this.$axios.post("{{ route('admin.ventas_asesor.nueva_venta.clientes.crear') }}", {
+                        this.$axios.post("{{ $rutaNv('clientes.crear') }}", {
                             ...this.crearClienteForm,
                             canal: this.canalSeleccionado,
                         })
@@ -3601,7 +3632,9 @@
 
                         const customerId = estado.borrador.cliente?.customer_id;
 
-                        if (customerId && this._direccionesCargadasPara !== customerId) {
+                        if (this.modoCliente) {
+                            this.prepararCliente(estado);
+                        } else if (customerId && this._direccionesCargadasPara !== customerId) {
                             this._direccionesCargadasPara = customerId;
                             this.cargarDireccionesCliente(customerId);
                         }
@@ -3615,7 +3648,7 @@
                      */
                     refrescarEstado(conMetodosDePago = false) {
                         const token = this.nuevaOperacion();
-                        const url = "{{ url(route('admin.ventas_asesor.nueva_venta.estado', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId)
+                        const url = "{{ url($rutaNv('estado', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId)
                             + (conMetodosDePago ? '?con_metodos_pago=true' : '');
 
                         // Resuelve true si el estado recibido se aplico; false si era viejo o fallo.
@@ -3712,7 +3745,7 @@
                         this.cargando.colores = true;
                         delete this.erroresColoresLinea[clave];
 
-                        this.$axios.get("{{ url(route('admin.ventas_asesor.nueva_venta.lineas.colores', ['clave' => '__CLAVE__'])) }}".replace('__CLAVE__', clave))
+                        this.$axios.get("{{ url($rutaNv('lineas.colores', ['clave' => '__CLAVE__'])) }}".replace('__CLAVE__', clave))
                             .then((response) => { this.coloresPorLinea[clave] = response.data; })
                             .catch((error) => {
                                 const linea = this.accesosRapidos.find((a) => a.clave === clave);
@@ -3955,7 +3988,7 @@
                         this.cargando.matrices = true;
                         this.avisoSinTallas = null;
 
-                        return this.$axios.get("{{ url(route('admin.ventas_asesor.nueva_venta.matrices')) }}", {
+                        return this.$axios.get("{{ url($rutaNv('matrices')) }}", {
                             params: {
                                 productos,
                                 customer_id: this.estado ? this.estado.borrador.cliente.customer_id : this.clienteIdPendiente(),
@@ -4162,14 +4195,14 @@
                         // P7: sin venta todavia, la primera prenda la crea (idempotente por `referencia`); las siguientes usan el borrador.
                         const creaVenta = ! this.borradorId;
                         const peticion = creaVenta
-                            ? this.$axios.post("{{ route('admin.ventas_asesor.nueva_venta.iniciar_con_tallas') }}", {
+                            ? this.$axios.post("{{ $rutaNv('iniciar_con_tallas') }}", {
                                 customer_id: this.clienteIdPendiente(),
                                 canal: this.canalSeleccionado,
                                 referencia: this.referenciaVenta,
                                 producto_id: productId,
                                 cantidades,
                             })
-                            : this.$axios.post("{{ url(route('admin.ventas_asesor.nueva_venta.tallas', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
+                            : this.$axios.post("{{ url($rutaNv('tallas', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
                                 producto_id: productId,
                                 cantidades,
                             });
@@ -4314,7 +4347,7 @@
                         this.errorGeneral = null;
                         this.cargando.entrega = true;
 
-                        this.$axios.post("{{ url(route('admin.ventas_asesor.nueva_venta.entrega', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), cuerpo)
+                        this.$axios.post("{{ url($rutaNv('entrega', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), cuerpo)
                             .then((response) => {
                                 if (! this.operacionVigente(token)) {
                                     return;   // llego una respuesta vieja: ya hay otra operacion mas reciente
@@ -4364,7 +4397,7 @@
                         this.errorGeneral = null;
                         this.cargando.domiciliario = true;
 
-                        this.$axios.post("{{ url(route('admin.ventas_asesor.nueva_venta.domiciliario', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
+                        this.$axios.post("{{ url($rutaNv('domiciliario', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
                             transportadora_id: valor ? parseInt(valor, 10) : null,
                         })
                             .then((response) => {
@@ -4389,7 +4422,7 @@
                         this.guardandoPago = true;
                         this._pagoToken = token;
 
-                        this.$axios.post("{{ url(route('admin.ventas_asesor.nueva_venta.pago', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), { metodo })
+                        this.$axios.post("{{ url($rutaNv('pago', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), { metodo })
                             .then((response) => {
                                 if (! this.operacionVigente(token)) {
                                     return;
@@ -4415,7 +4448,7 @@
 
                     /** R2: advertencia de rentabilidad (solo nombres de referencia; nunca costos). Un fallo no bloquea la pantalla. */
                     cargarRentabilidad() {
-                        if (! this.borradorId || ! this.estado || ! (this.estado.lineas || []).length) {
+                        if (this.modoCliente || ! this.borradorId || ! this.estado || ! (this.estado.lineas || []).length) {
                             this.rentabilidad = null;
 
                             return;
@@ -4423,7 +4456,7 @@
 
                         const id = this.borradorId;
 
-                        this.$axios.get("{{ url(route('admin.ventas_asesor.nueva_venta.rentabilidad', ['borrador' => '__ID__'])) }}".replace('__ID__', id), {
+                        this.$axios.get("{{ url($rutaNv('rentabilidad', ['borrador' => '__ID__'])) }}".replace('__ID__', id), {
                             params: { vender_para: this.venderPara, tipo_operacion: this.puedeClasificar ? this.tipoOperacion : 'venta_normal' },
                         })
                             .then((response) => {
@@ -4435,10 +4468,14 @@
                     },
 
                     confirmar() {
+                        if (this.modoCliente) {
+                            return this.confirmarCliente();
+                        }
+
                         this.errorGeneral = null;
                         this.cargando.confirmar = true;
 
-                        this.$axios.post("{{ url(route('admin.ventas_asesor.nueva_venta.confirmar', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
+                        this.$axios.post("{{ url($rutaNv('confirmar', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
                             total_esperado: this.estado.total_esperado,
                             tipo_operacion: this.puedeClasificar ? this.tipoOperacion : 'venta_normal',
                             vender_para: this.puedeVenderPara ? this.venderPara : '',
@@ -4478,7 +4515,7 @@
                         this.cotizando = true;
                         this.errorCotizacion = null;
 
-                        this.$axios.post("{{ url(route('admin.ventas_asesor.nueva_venta.cotizaciones.store', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {})
+                        this.$axios.post("{{ url($rutaNv('cotizaciones.store', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {})
                             .then((response) => { this.cotizacion = response.data; })
                             .catch((error) => {
                                 this.errorCotizacion = error?.response?.data?.mensaje || 'No se pudo generar la cotización. Intenta de nuevo.';
@@ -4488,9 +4525,13 @@
 
                     /** Al reanudar una venta se muestra su ultima cotizacion (la mas nueva), si existe. */
                     cargarCotizacion() {
+                        if (this.modoCliente) {
+                            return;
+                        }
+
                         const id = this.borradorId;
 
-                        this.$axios.get("{{ url(route('admin.ventas_asesor.nueva_venta.cotizaciones.index', ['borrador' => '__ID__'])) }}".replace('__ID__', id))
+                        this.$axios.get("{{ url($rutaNv('cotizaciones.index', ['borrador' => '__ID__'])) }}".replace('__ID__', id))
                             .then((response) => {
                                 if (this.borradorId === id) {
                                     this.cotizacion = response.data[0] || null;
@@ -4568,8 +4609,8 @@
                         const totalAntes = this.estado?.total_esperado ?? null;
                         const hayLineas = this.hayLineasVenta;
                         const ruta = restaurar
-                            ? "{{ url(route('admin.ventas_asesor.nueva_venta.grupo.restaurar', ['borrador' => '__ID__'])) }}"
-                            : "{{ url(route('admin.ventas_asesor.nueva_venta.grupo.cambiar', ['borrador' => '__ID__'])) }}";
+                            ? "{{ url($rutaNv('grupo.restaurar', ['borrador' => '__ID__'])) }}"
+                            : "{{ url($rutaNv('grupo.cambiar', ['borrador' => '__ID__'])) }}";
                         const cuerpo = restaurar
                             ? { motivo: this.grupoForm.motivo }
                             : { grupo_id: this.grupoForm.grupo_id, motivo: this.grupoForm.motivo };
@@ -4615,7 +4656,7 @@
                         this.cargando.historialGrupo = true;
                         this.$refs.modalHistorialGrupo.open();
 
-                        this.$axios.get("{{ url(route('admin.ventas_asesor.nueva_venta.grupo.historial', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId))
+                        this.$axios.get("{{ url($rutaNv('grupo.historial', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId))
                             .then((response) => { this.historialGrupo = response.data.historial || []; })
                             .catch((error) => { this.errorHistorialGrupo = this.mensajeDeError(error); })
                             .finally(() => { this.cargando.historialGrupo = false; });
@@ -4648,7 +4689,7 @@
                         this.$refs.drawerEnCurso.open();
                         this.cargando.enCurso = true;
 
-                        this.$axios.get("{{ route('admin.ventas_asesor.nueva_venta.en_curso') }}")
+                        this.$axios.get("{{ $rutaNv('en_curso') }}")
                             .then((response) => { this.ventasEnCurso = response.data; })
                             .catch((error) => this.manejarError(error))
                             .finally(() => { this.cargando.enCurso = false; });
@@ -4713,7 +4754,54 @@
                         this.entregaForm = { tipo: null, metodo: null };
                         this.pago = null;
 
+                        if (this.modoCliente) {
+                            this.confirmacionCliente = null;
+                            this.confirmacion = null;
+                            this.fijarClienteAutoservicio();
+                        }
+
                         this.$nextTick(() => this.$refs.buscadorCliente?.focus());
+                    },
+
+                    /** Modo cliente: el cliente lo fija el servidor; aqui solo se muestra su nombre y se abre el catalogo. */
+                    fijarClienteAutoservicio() {
+                        this.clienteActual = { customer_id: null, nombre: this.nombreCliente, apellido: '', telefono_principal: null, clienteConfirmable: true };
+                        this.referenciaVenta = this.nuevaReferenciaVenta();
+                    },
+
+                    otroPedido() {
+                        this.reiniciar();
+                    },
+
+                    /** P4: aplica recogida + transferencia por defecto en el servidor para que el total y el boton queden listos. */
+                    prepararCliente(estado) {
+                        if (this._preparando || ! (estado.lineas || []).length || estado.confirmable || estado.borrador.estado !== 'activo') {
+                            return;
+                        }
+
+                        this._preparando = true;
+
+                        this.$axios.post("{{ url($rutaNv('preparar', ['borrador' => '__ID__'])) }}".replace('__ID__', estado.borrador.id))
+                            .then((response) => { this.estado = response.data; })
+                            .catch((error) => { this.errorGeneral = error?.response?.data?.mensaje || 'No pudimos preparar tu pedido. Inténtalo de nuevo.'; })
+                            .finally(() => { this._preparando = false; });
+                    },
+
+                    confirmarCliente() {
+                        this.errorGeneral = null;
+                        this.cargando.confirmar = true;
+
+                        this.$axios.post("{{ url($rutaNv('confirmar', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), { total_esperado: this.estado.total_esperado })
+                            .then((response) => {
+                                this.confirmacionCliente = response.data;
+                                // Bloquea la pantalla (ventaEditable) mientras se muestra el aviso.
+                                this.confirmacion = { cliente: true };
+                            })
+                            .catch((error) => {
+                                this.errorGeneral = error?.response?.data?.mensaje || 'No pudimos confirmar tu pedido. Inténtalo de nuevo.';
+                                this.refrescarEstado();
+                            })
+                            .finally(() => { this.cargando.confirmar = false; });
                     },
                 },
             });

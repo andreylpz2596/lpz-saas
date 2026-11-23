@@ -189,3 +189,31 @@ test('P3 el rol del cliente es el de autoservicio y no tiene ninguna clave admin
     expect($rol->name)->toBe(RolClienteFrecuente::NOMBRE)
         ->and(app(RolClienteFrecuente::class)->esSeguro($rol))->toBeTrue();
 });
+
+test('P3 el login del cliente lo lleva a su pantalla de compra (la hoja de redireccion tiene ruta en texto)', function () {
+    Admin::query()->whereKey($this->userA->id)->update(['password' => bcrypt('Clave-Prueba-2026')]);
+
+    $r = $this->post(route('admin.session.store'), ['email' => $this->userA->email, 'password' => 'Clave-Prueba-2026']);
+
+    expect($r->getStatusCode())->toBe(302)->and($r->headers->get('Location'))->toBe(route('admin.autoservicio.pantalla'));
+    $this->get(route('admin.autoservicio.pantalla'))->assertOk();
+});
+
+test('P3 un usuario con el rol pero sin la hoja comprar no opera aunque tenga el grupo', function () {
+    $rol = Role::factory()->create(['name' => 'Parcial '.uniqid(), 'permission_type' => 'custom', 'permissions' => ['autoservicio']]);
+    DB::table('admins')->where('id', $this->userA->id)->update(['role_id' => $rol->id]);
+
+    $this->actingAs(Admin::query()->find($this->userA->id), 'admin')->getJson(cf3_ruta('estado_inicial'))->assertStatus(403);
+});
+
+test('P3 rutas nativas de Bagisto sin ACL (notificaciones con pedidos de todos, cuenta, ayuda): cerradas al cliente, abiertas al asesor', function () {
+    foreach ([route('admin.notification.get_notification'), route('admin.notification.index'), route('admin.account.edit'), route('admin.help.index')] as $url) {
+        $this->actingAs($this->userA, 'admin')->getJson($url)->assertStatus(403);
+    }
+
+    // El asesor no cambia: el middleware solo restringe a usuarios de autoservicio.
+    $this->actingAs(f03b_admin('all'), 'admin')->get(route('admin.notification.index'))->assertStatus(200);
+
+    // Cerrar sesion si puede.
+    expect($this->actingAs($this->userA, 'admin')->delete(route('admin.session.destroy'))->getStatusCode())->toBeIn([200, 302]);
+});

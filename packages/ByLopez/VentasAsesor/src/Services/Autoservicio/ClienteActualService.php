@@ -4,6 +4,7 @@ namespace ByLopez\VentasAsesor\Services\Autoservicio;
 
 use ByLopez\VentasAsesor\Exceptions\AutoservicioInvalidoException as Invalido;
 use ByLopez\VentasAsesor\Models\ClienteAcceso;
+use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use Webkul\Customer\Models\Customer;
 use Webkul\User\Contracts\Admin as AdminContract;
 
@@ -14,9 +15,12 @@ use Webkul\User\Contracts\Admin as AdminContract;
  */
 class ClienteActualService
 {
-    public function de(?AdminContract $actor): Customer
+    public function __construct(protected AutorizacionVentasAsesor $autorizacion) {}
+
+    /** El cliente vinculado de `$actor`, exigiendo ademas la clave hoja de la operacion (comprar | pedidos). */
+    public function de(?AdminContract $actor, string $permiso = AutorizacionVentasAsesor::PERMISO_AUTOSERVICIO_COMPRAR): Customer
     {
-        if (! $actor?->id) {
+        if (! $actor?->id || ! $this->autorizacion->tienePermiso($actor, $permiso)) {
             throw new Invalido(Invalido::SIN_VINCULO);
         }
 

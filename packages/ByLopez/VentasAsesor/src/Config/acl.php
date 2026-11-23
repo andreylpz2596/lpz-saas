@@ -449,17 +449,14 @@ return [
         ],
         'sort' => 12,
     ], [
-        // Doc. 33 P3: autoservicio del cliente frecuente. Arbol PROPIO (no cuelga de ventas_asesor): marcar estas claves nunca
-        // concede la raiz ventas_asesor ni su pantalla de inicio. La ruta de login (primera hoja) es la pantalla de compra.
+        // Doc. 33 P3/P5: autoservicio del cliente frecuente. Arbol PROPIO (no cuelga de ventas_asesor): marcar estas claves nunca
+        // concede la raiz ventas_asesor ni su pantalla de inicio.
+        // Regla 3 (cabecera): las HOJAS (autoservicio.comprar / .pedidos) llevan ruta en TEXTO porque SessionController redirige
+        // tras el login a la primera hoja accesible; las rutas de la API van en la clave de grupo `autoservicio`, y cada operacion
+        // exige ademas su hoja en ClienteActualService (defensa en profundidad).
         'key' => 'autoservicio',
         'name' => 'ventasasesor::app.acl.autoservicio',
-        'route' => 'admin.autoservicio.pantalla',
-        'sort' => 20,
-    ], [
-        'key' => 'autoservicio.comprar',
-        'name' => 'ventasasesor::app.acl.autoservicio-comprar',
         'route' => [
-            'admin.autoservicio.pantalla',
             'admin.autoservicio.estado_inicial',
             'admin.autoservicio.lineas.colores',
             'admin.autoservicio.matrices',
@@ -471,16 +468,19 @@ return [
             'admin.autoservicio.eliminar',
             'admin.autoservicio.preparar',
             'admin.autoservicio.confirmar',
+            'admin.autoservicio.pedidos.data',
+            'admin.autoservicio.pedidos.show',
         ],
+        'sort' => 20,
+    ], [
+        'key' => 'autoservicio.comprar',
+        'name' => 'ventasasesor::app.acl.autoservicio-comprar',
+        'route' => 'admin.autoservicio.pantalla',
         'sort' => 1,
     ], [
         'key' => 'autoservicio.pedidos',
         'name' => 'ventasasesor::app.acl.autoservicio-pedidos',
-        'route' => [
-            'admin.autoservicio.pedidos.index',
-            'admin.autoservicio.pedidos.data',
-            'admin.autoservicio.pedidos.show',
-        ],
+        'route' => 'admin.autoservicio.pedidos.index',
         'sort' => 2,
     ], [
         // Doc. 33 P1: administrar el acceso de clientes al aplicativo (crear/vincular usuario, suspender, reactivar, desvincular).

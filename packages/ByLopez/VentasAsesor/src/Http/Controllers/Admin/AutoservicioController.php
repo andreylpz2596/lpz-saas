@@ -14,6 +14,7 @@ use ByLopez\VentasAsesor\Services\Autoservicio\PedidosClienteService;
 use ByLopez\VentasAsesor\Services\Venta\BorradorVentaService;
 use ByLopez\VentasAsesor\Services\Venta\CatalogoVentaService;
 use ByLopez\VentasAsesor\Services\Venta\NuevaVentaService;
+use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Autoservicio\LimiteInventarioCliente;
 use ByLopez\VentasAsesor\Support\Http\RespuestaErrorNuevaVenta as Respuesta;
 use Illuminate\Contracts\View\View;
@@ -60,20 +61,20 @@ class AutoservicioController extends Controller
     /** P5: «Mis pedidos» (pantalla). Los datos los pide la propia pagina a pedidos.data. */
     public function pedidosPantalla(): View
     {
-        $this->clientes->de($this->actor());
+        $this->clientes->de($this->actor(), AutorizacionVentasAsesor::PERMISO_AUTOSERVICIO_PEDIDOS);
 
         return view('ventasasesor::admin.autoservicio.pedidos');
     }
 
     public function pedidosData(Request $request): JsonResponse
     {
-        return $this->responder(fn () => $this->pedidos->listar($this->clientes->de($this->actor()), max(1, (int) $request->query('pagina', 1))));
+        return $this->responder(fn () => $this->pedidos->listar($this->clientes->de($this->actor(), AutorizacionVentasAsesor::PERMISO_AUTOSERVICIO_PEDIDOS), max(1, (int) $request->query('pagina', 1))));
     }
 
     public function pedidoDetalle(int $pedido): JsonResponse
     {
         return $this->responder(function () use ($pedido) {
-            $detalle = $this->pedidos->detalle($this->clientes->de($this->actor()), $pedido);
+            $detalle = $this->pedidos->detalle($this->clientes->de($this->actor(), AutorizacionVentasAsesor::PERMISO_AUTOSERVICIO_PEDIDOS), $pedido);
 
             // Ajeno e inexistente son indistinguibles: el mismo 404.
             return $detalle ?? response()->json(['codigo' => 'no_encontrado', 'mensaje' => ''], 404);
