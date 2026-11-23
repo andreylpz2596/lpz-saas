@@ -15,6 +15,7 @@ use ByLopez\VentasAsesor\Console\Commands\IndexarTelefonosClientesCommand;
 use ByLopez\VentasAsesor\Console\Commands\NormalizarSkuCommand;
 use ByLopez\VentasAsesor\Console\Commands\ProgramarReglaComisionCommand;
 use ByLopez\VentasAsesor\Console\Commands\ReconciliarAtribucionesCommand;
+use ByLopez\VentasAsesor\Console\Commands\RolClienteFrecuenteCommand;
 use ByLopez\VentasAsesor\Contracts\CalendarioLaboral;
 use ByLopez\VentasAsesor\Contracts\NormalizadorTelefono;
 use ByLopez\VentasAsesor\Listeners\Correo\CustomerConDestinatarioVerificado;
@@ -146,6 +147,7 @@ class VentasAsesorServiceProvider extends ServiceProvider
                 NormalizarSkuCommand::class,
                 GeoImportarDivipolaCommand::class,
                 EvaluarComisionesCommand::class,
+                RolClienteFrecuenteCommand::class,
             ]);
         }
     }
