@@ -1,7 +1,7 @@
 # 33 — Cliente frecuente en Nueva venta y corrección de Ventas en curso (AUDITORÍA Y PROPUESTA)
 
 **Estado:** AUDITORÍA Y DISEÑO FUNCIONAL. **Nada implementado.** Sin código, sin migraciones, sin cambios de roles ni de datos.
-**Fecha:** 2026-11-22 · **Responsable funcional:** Camilo Gaitán.
+**Fecha:** 2026-11-22 · **Responsable funcional:** el responsable funcional.
 
 **Código auditado:** `C:/xampp/htdocs/lpzsan`, rama `develop`, commit `8b4f448a0b` (la rama vigente). En las rutas, métodos y
 tablas de este documento no hay diferencias con `upgrade/bagisto-2.4.9`.
@@ -10,7 +10,7 @@ tablas de este documento no hay diferencias con `upgrade/bagisto-2.4.9`.
 producción, r3). **Producción no se consultó.**
 
 > Regla de lectura: lo marcado **[VERIFICADO]** se comprobó en el código o en la base. Lo marcado **[PROPUESTA]** es diseño y
-> necesita la aprobación de Camilo. Lo marcado **[POR VERIFICAR]** no se pudo comprobar en esta fase.
+> necesita la aprobación del responsable funcional. Lo marcado **[POR VERIFICAR]** no se pudo comprobar en esta fase.
 
 ---
 
@@ -64,7 +64,7 @@ producción, r3). **Producción no se consultó.**
   12069/12070/12071»).
 - **Base limpia de preproducción:** existen los mismos roles 12069, 12070 y 12071, **sin usuarios**.
 - **Producción:** [POR VERIFICAR] no se consultó. Si se restauró desde r3, tiene los mismos roles. Pueden existir usuarios que
-  Camilo creó después.
+  El responsable creó después.
 - Ningún código del repositorio menciona «CLIENTE FRECUENTE» (solo una línea del Doc. 28, que lo lista como rol denegado
   para el crédito).
 
@@ -79,7 +79,7 @@ producción, r3). **Producción no se consultó.**
 
 ### 1.3 Autenticación, menú, rutas y middleware [VERIFICADO]
 
-- El usuario entra por el login de **administración** de Bagisto (`admins`, guard `admin`). Así quiere Camilo que funcione:
+- El usuario entra por el login de **administración** de Bagisto (`admins`, guard `admin`). Así quiere el responsable funcional que funcione:
   usuario administrativo con un rol.
 - Todas las rutas de Ventas Asesor están en el grupo `['admin', NoCacheMiddleware]`. El middleware `admin` incluye el **Bouncer**
   de `Webkul\User\Http\Middleware\Bouncer`, que en 2.4.9 **falla cerrado**: una ruta que no está en ningún `acl.php` ni en
@@ -695,7 +695,7 @@ autoservicio.
 
 ---
 
-## 20. Decisiones que necesitan la aprobación de Camilo
+## 20. Decisiones que necesitan la aprobación del responsable funcional
 
 | Id | Decisión | Recomendación |
 |---|---|---|
@@ -730,7 +730,7 @@ precios, comisiones o Logística, Webkul, commits, push ni despliegue. Producci�
 
 # 22. Decisiones definitivas v2 y estado de implementación (rama `feature/cliente-frecuente`)
 
-> Esta sección **reemplaza** a §20 donde haya diferencias. Fuente: instrucción de Camilo del 2026-11-22. Todo se probó SOLO en la base
+> Esta sección **reemplaza** a §20 donde haya diferencias. Fuente: instrucción del responsable funcional del 2026-11-22. Todo se probó SOLO en la base
 > exclusiva `lpz_cf_test` (copia de `lpz_saas_testing`); nada se ejecutó en desarrollo, preproducción ni producción; sin push ni despliegue.
 > Estados: **Aprobado / Implementado / Probado / Pendiente / Requiere decisión**.
 
@@ -762,7 +762,7 @@ precios, comisiones o Logística, Webkul, commits, push ni despliegue. Producci�
 | P5 Mis pedidos | `ea26579276` | Solo pedidos del cliente vinculado; ajeno = 404 igual que inexistente. 5 pruebas. |
 | P3 vista + middleware | (siguiente commit) | Misma vista de Nueva venta en modo cliente; deny-by-default para el usuario de autoservicio. |
 
-## 22.3 Hallazgos de la implementación (relevantes para Camilo)
+## 22.3 Hallazgos de la implementación (relevantes para el responsable funcional)
 
 1. **«La tabla de Clientes de Ventas Asesor» no existe en este módulo.** La tabla de clientes es la de Bagisto (Webkul) y no se puede modificar. Por eso NO hay columna «Acceso al aplicativo», filtro por estado ni contadores en la grilla; el estado, los contadores (activos / suspendidos / sin acceso) y las acciones están en la **tarjeta de la ficha del cliente**. Alternativas si se quiere la columna: (a) modificar el DataGrid de Webkul (prohibido hoy), (b) una vista propia de solo lectura «Accesos de clientes» (rechazada en la instrucción: no crear otra pantalla de clientes). **Requiere decisión.**
 2. **Rutas nativas de Bagisto sin ACL** (cualquier administrador autenticado entra): `get-notifications` devolvía pedidos de **todos** los clientes; `account`, `help`, `notifications` también. Se cerraron con el middleware `RestringirUsuarioAutoservicio` (deny-by-default: el usuario de autoservicio solo llega a `admin.autoservicio.*` y a cerrar sesión). Esto ya ocurría para cualquier administrador autenticado (comprobado con el rol de acceso total; no se probó con un rol custom): conviene revisarlo aparte.

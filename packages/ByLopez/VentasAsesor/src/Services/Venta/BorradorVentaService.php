@@ -460,7 +460,7 @@ class BorradorVentaService
                 'nombre' => (string) $cliente->first_name,
                 'apellido' => (string) $cliente->last_name,
                 'email' => $cliente->email,
-                // D-57 (Camilo): el telefono de la direccion predeterminada es el del envio y
+                // D-57 (el responsable funcional): el telefono de la direccion predeterminada es el del envio y
                 // pesa mas para el asesor; si no existe, se cae al telefono de la ficha del
                 // cliente. `addresses` va eager-cargada (sin N+1): no dispara consulta nueva.
                 'telefono_principal' => optional($cliente->addresses->firstWhere('default_address', true))->phone ?: $cliente->phone,

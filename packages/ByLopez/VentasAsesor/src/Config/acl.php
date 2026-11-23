@@ -489,7 +489,7 @@ return [
         'sort' => 2,
     ], [
         // Doc. 33 P1: administrar el acceso de clientes al aplicativo (crear/vincular usuario, suspender, reactivar, desvincular).
-        // Sin asignar a ningun rol: la concede Camilo.
+        // Sin asignar a ningun rol: la concedel responsable funcional.
         'key' => 'ventas_asesor.clientes_acceso',
         'name' => 'ventasasesor::app.acl.clientes-acceso',
         'route' => $inicio,

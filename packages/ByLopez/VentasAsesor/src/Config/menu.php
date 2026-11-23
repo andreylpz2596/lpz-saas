@@ -85,7 +85,7 @@ return [
     ],
 
     /*
-     * 2026-11-22 (Camilo): menu «Administracion», SOLO del administrador. Costos y precios, Rentabilidad y Datos de cotizacion
+     * 2026-11-22 (el responsable funcional): menu «Administracion», SOLO del administrador. Costos y precios, Rentabilidad y Datos de cotizacion
      * salen de «Ventas Asesor» y viven aqui. Las claves `administracion*` NO son claves ACL a proposito: ningun rol `custom`
      * puede recibirlas desde Roles, y el composer de VentasAsesorServiceProvider ademas las quita a todo el que no sea el
      * administrador autorizado (un rol `all` de QA tampoco las ve). Las rutas no cambian y siguen protegidas por su clave ACL
