@@ -135,6 +135,7 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
             Route::post('clientes/buscar', [NuevaVentaController::class, 'buscarCliente'])->name('clientes.buscar');
             Route::post('clientes', [NuevaVentaController::class, 'crearCliente'])->name('clientes.crear');
             Route::post('iniciar', [NuevaVentaController::class, 'iniciar'])->name('iniciar');
+            Route::post('iniciar-con-tallas', [NuevaVentaController::class, 'iniciarConTallas'])->name('iniciar_con_tallas');
             Route::post('iniciar-cliente-nuevo', [NuevaVentaController::class, 'iniciarConClienteNuevo'])->name('iniciar_cliente_nuevo');
             Route::get('lineas/{clave}/colores', [NuevaVentaController::class, 'colores'])->name('lineas.colores');
             Route::get('productos/{producto}/matriz', [NuevaVentaController::class, 'matriz'])->name('productos.matriz');

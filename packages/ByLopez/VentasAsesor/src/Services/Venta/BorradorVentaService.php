@@ -152,11 +152,14 @@ class BorradorVentaService
     }
 
     /** @return list<Vista> */
-    public function listarDelPropietario(int $adminId, bool $soloActivos = true): array
+    public function listarDelPropietario(int $adminId, bool $soloActivos = true, bool $soloConLineas = false): array
     {
         return BorradorVenta::query()
             ->with('carrito.customer.group', 'carrito.customer.addresses')
             ->where('propietario_admin_id', $adminId)
+            // P7: una venta en curso real tiene al menos una prenda; las vacias (consulta de inventario) no se muestran.
+            ->when($soloConLineas, fn ($q) => $q->whereExists(fn ($e) => $e->select(DB::raw(1))->from('cart_items')
+                ->whereColumn('cart_items.cart_id', 'bylopez_va_borradores_venta.cart_id')))
             ->when($soloActivos, fn ($q) => $q->where('estado', Estado::ACTIVO->value))
             ->orderByDesc('id')
             ->get()
