@@ -23,6 +23,9 @@ class BorradorVentaInvalidoException extends RuntimeException
 
     public const CLIENTE_INEXISTENTE = 'cliente_inexistente';
 
+    /** El cliente que se pide no es el del borrador (P0: nunca se consulta ni se precia con otro cliente). */
+    public const CLIENTE_NO_COINCIDE = 'cliente_no_coincide';
+
     /** Referencia externa vacia tras recortar o de mas de 191 caracteres. */
     public const REFERENCIA_INVALIDA = 'referencia_externa_invalida';
 

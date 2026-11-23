@@ -121,6 +121,36 @@ class BorradorVentaService
         return $this->vista($borrador);
     }
 
+    /**
+     * P0 (Cliente frecuente, doc 33): lectura o uso de un borrador solo por su propietario. No devuelve datos del
+     * borrador ajeno; inexistente = 404 y ajeno = 403, igual que el resto de la API.
+     */
+    public function exigirDelPropietario(int $borradorId, Admin $actor, ?int $customerId = null): BorradorVenta
+    {
+        $borrador = BorradorVenta::query()->find($borradorId) ?? throw new Invalido(Invalido::INEXISTENTE);
+
+        $this->exigirPropietario($borrador, $actor);
+
+        // El cliente del precio debe ser el del borrador: ni se prea con otro cliente ni se consulta con un borrador ajeno.
+        if ($customerId !== null && (int) DB::table('cart')->where('id', $borrador->cart_id)->value('customer_id') !== $customerId) {
+            throw new Invalido(Invalido::CLIENTE_NO_COINCIDE);
+        }
+
+        return $borrador;
+    }
+
+    /**
+     * P0: el actor solo puede leer las direcciones de un cliente con el que trabaja, es decir, si es propietario de un
+     * borrador cuyo carrito es de ese cliente.
+     */
+    public function actorTrabajaConCliente(int $customerId, Admin $actor): bool
+    {
+        return BorradorVenta::query()
+            ->where('propietario_admin_id', (int) $actor->id)
+            ->whereIn('cart_id', fn ($q) => $q->select('id')->from('cart')->where('customer_id', $customerId))
+            ->exists();
+    }
+
     /** @return list<Vista> */
     public function listarDelPropietario(int $adminId, bool $soloActivos = true): array
     {
