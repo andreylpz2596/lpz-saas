@@ -13,14 +13,14 @@ return [
     'borradores' => [
         /*
          * Dias habiles que un borrador de venta queda asignado a su propietario antes de
-         * que otro asesor autorizado pueda reclamarlo (decision de Camilo Gaitan, 03B).
+         * que otro asesor autorizado pueda reclamarlo (decision del responsable funcional Gaitan, 03B).
          */
         'dias_habiles_asignacion' => 1,
     ],
 
     'calendario_laboral' => [
         /*
-         * Dias laborales ISO-8601 (1 = lunes ... 7 = domingo). D-35 (Camilo Gaitan): lunes a
+         * Dias laborales ISO-8601 (1 = lunes ... 7 = domingo). D-35 (el responsable funcional Gaitan): lunes a
          * sabado; el domingo no es laboral.
          */
         'dias_laborales' => [1, 2, 3, 4, 5, 6],
@@ -66,7 +66,7 @@ return [
          * Por medio: `etiqueta` (clave de traduccion), `activo` y `referencia`: politica de la referencia del
          * pago (`requerida` | `opcional` | `no_aplica`). La politica vive aqui y no se dispersa en
          * controladores (C-1). Valores iniciales conceptuales (Doc. 05 §42.7); la lista final la confirma
-         * Camilo. Sin integraciones con Nequi, Daviplata, bancos ni pasarelas.
+         * el responsable funcional. Sin integraciones con Nequi, Daviplata, bancos ni pasarelas.
          */
         /*
          * Plataformas donde entra el dinero de una TRANSFERENCIA (obligatoria en ese medio; los demas no la usan).
@@ -116,7 +116,7 @@ return [
         'fecha_corte' => env('VENTASASESOR_CARTERA_FECHA_CORTE'),
 
         /*
-         * 2026-11-22 (Camilo): un pago o abono registrado por el ADMINISTRADOR autorizado (rol administrador, ver
+         * 2026-11-22 (el responsable funcional): un pago o abono registrado por el ADMINISTRADOR autorizado (rol administrador, ver
          * `credito.rol_administrador_id`) queda confirmado en el acto, sin pasar por la bandeja de Cartera. Si no se puede
          * confirmar (sin factura abierta, pedido en revision), queda sin revisar y se avisa. false = todos validan en Cartera.
          */
@@ -163,7 +163,7 @@ return [
     ],
 
     /*
-     * R2 (Doc. 23): proteccion de rentabilidad. TODO apagado por defecto: el bloqueo solo se activa cuando Camilo apruebe
+     * R2 (Doc. 23): proteccion de rentabilidad. TODO apagado por defecto: el bloqueo solo se activa cuando el responsable funcional apruebe
      * los parametros reales y se revisen las listas de precios («Precios por grupo frente al mínimo»).
      */
     'rentabilidad' => [

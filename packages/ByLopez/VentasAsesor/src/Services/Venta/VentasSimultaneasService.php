@@ -23,7 +23,7 @@ use Webkul\User\Contracts\Admin;
  * - ventas sin confirmar: borradores `activo`/`confirmando` + su Cart + cart_items. En un
  *   configurable la VARIANTE sale del hijo y la CANTIDAD del padre (el hijo vale 0 en Bagisto
  *   2.4.9); en un simple, de la propia linea. Sin exclusion por antiguedad (decision de
- *   Camilo): se informa la ultima actividad;
+ *   el responsable funcional): se informa la ultima actividad;
  * - confirmados sin despachar: order_items con la formula nativa qty_to_ship (ordenado −
  *   despachado − reembolsado − cancelado), en pedidos que Bagisto aun puede despachar (no
  *   `closed` ni `fraud`, como Order::canShip). En un configurable, del padre.
@@ -229,7 +229,7 @@ class VentasSimultaneasService
     }
 
     /**
-     * Solo el nombre visible (decision de Camilo: coordinacion interna). Sin correo ni otros
+     * Solo el nombre visible (decision del responsable funcional: coordinacion interna). Sin correo ni otros
      * datos del administrador. Sin FK: un administrador borrado queda sin nombre.
      *
      * @return array<int, string>

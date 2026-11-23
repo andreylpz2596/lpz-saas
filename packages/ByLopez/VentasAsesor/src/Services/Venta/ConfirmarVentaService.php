@@ -571,7 +571,7 @@ class ConfirmarVentaService
     }
 
     /**
-     * Paso C (decidido por Camilo): se borra el Cart como el panel. La FK SET NULL deja
+     * Paso C (decidido por el responsable funcional): se borra el Cart como el panel. La FK SET NULL deja
      * borradores.cart_id en NULL; orders.cart_id conserva el id. El pedido ya esta enlazado:
      * si el borrado falla, el carrito queda huerfano (inofensivo) y solo se registra.
      */
