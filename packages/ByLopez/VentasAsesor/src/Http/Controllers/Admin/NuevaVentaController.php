@@ -13,6 +13,7 @@ use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\ConfirmarNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\CrearClienteNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\EntregaNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\IniciarConClienteNuevoNuevaVentaRequest;
+use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\IniciarConTallasNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\IniciarNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\MatricesNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\MatrizNuevaVentaRequest;
@@ -116,7 +117,7 @@ class NuevaVentaController extends Controller
     {
         return Respuesta::envolver(fn () => array_map(
             fn ($v) => get_object_vars($v),
-            $this->borradores->listarDelPropietario((int) $this->actor()->id),
+            $this->borradores->listarDelPropietario((int) $this->actor()->id, soloConLineas: true),
         ));
     }
 
@@ -221,6 +222,19 @@ class NuevaVentaController extends Controller
     }
 
     /** D. Alta minima de cliente + venta nueva en una transaccion (telefono no encontrado). */
+    /** P7: la venta nace con la primera prenda (idempotente por referencia); consultar productos no crea borradores. */
+    public function iniciarConTallas(IniciarConTallasNuevaVentaRequest $request): JsonResponse
+    {
+        return Respuesta::envolver(fn () => $this->nuevaVenta->iniciarConTallas(
+            (int) $request->integer('customer_id'),
+            $this->actor(),
+            (string) $request->string('canal'),
+            (string) $request->string('referencia'),
+            (int) $request->integer('producto_id'),
+            $request->cantidadesPorVariante(),
+        )->toArray());
+    }
+
     public function iniciarConClienteNuevo(IniciarConClienteNuevoNuevaVentaRequest $request): JsonResponse
     {
         return Respuesta::envolver(fn () => $this->nuevaVenta->iniciarConClienteNuevo(

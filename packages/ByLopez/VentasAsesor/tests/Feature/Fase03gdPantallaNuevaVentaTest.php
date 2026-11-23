@@ -70,9 +70,19 @@ test('en-curso: lista los borradores activos del asesor autenticado (BorradorVen
     $asesor = f03gd_asesor();
     $cliente = f03b_cliente(f03b_grupo('G'), ['first_name' => 'Ana', 'last_name' => 'Curso']);
 
-    $this->actingAs($asesor, 'admin')
+    // P7: una venta en curso nace con su primera prenda; la vacia (solo iniciar) no se lista.
+    $vacia = $this->actingAs($asesor, 'admin')
         ->postJson(route('admin.ventas_asesor.nueva_venta.iniciar'), ['customer_id' => $cliente->id, 'canal' => 'whatsapp'])
-        ->assertOk();
+        ->assertOk()->json('borrador.id');
+
+    $configurable = f03b_configurable(10000.0);
+    $variante = $configurable->variants()->first();
+    f03b_stock($variante, 20);
+    $this->actingAs($asesor, 'admin')
+        ->postJson(route('admin.ventas_asesor.nueva_venta.iniciar_con_tallas'), [
+            'customer_id' => $cliente->id, 'canal' => 'whatsapp', 'referencia' => 'ref-prueba-en-curso',
+            'producto_id' => $configurable->id, 'cantidades' => [$variante->id => 1],
+        ])->assertOk();
 
     $respuesta = $this->actingAs($asesor, 'admin')
         ->getJson(route('admin.ventas_asesor.nueva_venta.en_curso'))

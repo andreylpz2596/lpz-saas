@@ -151,7 +151,7 @@
                         </button>
 
                         <button
-                            v-if="borradorId"
+                            v-if="borradorId || clienteActual"
                             type="button"
                             class="secondary-button"
                             @click="reiniciar"
@@ -390,7 +390,7 @@
                             <template v-else-if="! borradorId">
                                 <div class="flex items-center justify-between">
                                     <span
-                                        v-if="! estado.borrador.clienteConfirmable"
+                                        v-if="clienteActual && clienteActual.clienteConfirmable === false"
                                         class="rounded-md bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300"
                                     >
                                         Cliente no habilitado para confirmar venta
@@ -399,7 +399,7 @@
                                     <button
                                         type="button"
                                         class="text-sm text-blue-600 underline dark:text-blue-300"
-                                        @click="clienteActual = null; resultadoBusqueda = null; busquedaCliente = ''"
+                                        @click="reiniciar"
                                     >
                                         Cambiar cliente
                                     </button>
@@ -422,20 +422,16 @@
                                         </option>
                                     </select>
 
-                                    <button
-                                        type="button"
-                                        class="primary-button"
-                                        :disabled="cargando.cliente"
-                                        @click="iniciarVenta"
-                                    >
-                                        Iniciar venta
-                                    </button>
+                                    <!-- P7: la venta en curso nace al agregar la primera prenda; consultar productos no guarda nada. -->
+                                    <span class="text-xs text-gray-500 dark:text-gray-400" data-venta="venta-se-guarda-al-agregar">
+                                        La venta se guarda al agregar el primer producto.
+                                    </span>
                                 </div>
                             </template>
                         </div>
 
                         <!-- ---------- ACCESOS RÁPIDOS, LÍNEA/COLOR Y MATRIZ (solo con borrador) ---------- -->
-                        <template v-if="borradorId">
+                        <template v-if="borradorId || clienteActual">
                             <!-- Productos y Colores -->
                             <div class="flex flex-col gap-4">
                                 <div
@@ -1401,7 +1397,7 @@
 
                             <template v-if="! estado">
                                 <p class="text-sm text-gray-500 dark:text-gray-300">
-                                    Busca o selecciona un cliente para empezar.
+                                    @{{ clienteActual ? 'Agrega el primer producto para guardar la venta.' : 'Busca o selecciona un cliente para empezar.' }}
                                 </p>
                             </template>
 
@@ -2388,6 +2384,8 @@
                         resultadoBusqueda: null,
                         clienteActual: null,
                         canalSeleccionado: null,
+                        // P7: identificador de ESTA venta (uno por intento). Hace idempotente la creacion del borrador.
+                        referenciaVenta: null,
 
                         borradorId: null,
                         estado: null,
@@ -3452,20 +3450,38 @@
                             .finally(() => { this.cargando.cliente = false; });
                     },
 
+                    /**
+                     * P7: elegir cliente NO crea ninguna venta en curso. Se queda en pantalla como cliente pendiente (sin
+                     * borrador ni carrito) para consultar productos e inventario; el borrador nace al agregar la primera prenda.
+                     */
                     seleccionarClienteEncontrado(cliente) {
-                        this.cargando.cliente = true;
-
-                        this.$axios.post("{{ route('admin.ventas_asesor.nueva_venta.iniciar') }}", {
+                        this.borradorId = null;
+                        this.estado = null;
+                        this.referenciaVenta = this.nuevaReferenciaVenta();
+                        this.clienteActual = {
                             customer_id: cliente.customerId,
-                            canal: this.canalSeleccionado,
-                        })
-                            .then((response) => this.fijarEstado(response.data))
-                            .catch((error) => this.manejarError(error))
-                            .finally(() => { this.cargando.cliente = false; });
+                            nombre: cliente.nombre,
+                            apellido: cliente.apellido,
+                            email: cliente.email ?? null,
+                            telefono_principal: cliente.telefonoPrincipal ?? null,
+                            grupo_id: cliente.grupoId ?? null,
+                            grupo_nombre: cliente.grupoNombre ?? null,
+                            // Solo informativo: el servidor vuelve a validar el cliente al crear la venta y al confirmar.
+                            clienteConfirmable: !! (cliente.activo !== false && ! cliente.suspendido && cliente.grupoApto !== false),
+                        };
                     },
 
-                    iniciarVenta() {
-                        this.seleccionarClienteEncontrado({ customerId: this.clienteActual.customer_id ?? this.clienteActual.customerId });
+                    /** Un identificador por venta (no secreto): su unico fin es que un reintento no cree dos ventas. */
+                    nuevaReferenciaVenta() {
+                        if (window.crypto && window.crypto.randomUUID) {
+                            return window.crypto.randomUUID();
+                        }
+
+                        return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+                    },
+
+                    clienteIdPendiente() {
+                        return this.clienteActual ? (this.clienteActual.customer_id ?? this.clienteActual.customerId) : null;
                     },
 
                     abrirCrearCliente() {
@@ -3478,13 +3494,24 @@
                         this.errorCrearCliente = null;
                         this.cargando.crearCliente = true;
 
-                        this.$axios.post("{{ route('admin.ventas_asesor.nueva_venta.iniciar_cliente_nuevo') }}", {
+                        // P7: se crea el cliente (dato real) pero NO la venta; esta nace al agregar la primera prenda.
+                        this.$axios.post("{{ route('admin.ventas_asesor.nueva_venta.clientes.crear') }}", {
                             ...this.crearClienteForm,
                             canal: this.canalSeleccionado,
                         })
                             .then((response) => {
+                                const grupo = this.grupos.find((g) => g.id === this.crearClienteForm.customer_group_id);
+
                                 this.$refs.modalCrearCliente.close();
-                                this.fijarEstado(response.data);
+                                this.seleccionarClienteEncontrado({
+                                    customerId: response.data.customer_id,
+                                    nombre: this.crearClienteForm.nombre,
+                                    apellido: this.crearClienteForm.apellido,
+                                    email: this.crearClienteForm.email || null,
+                                    telefonoPrincipal: this.crearClienteForm.telefono,
+                                    grupoId: this.crearClienteForm.customer_group_id,
+                                    grupoNombre: grupo ? grupo.name : null,
+                                });
                             })
                             .catch((error) => {
                                 this.errorCrearCliente = error?.response?.data?.mensaje
@@ -3902,7 +3929,7 @@
                         return this.$axios.get("{{ url(route('admin.ventas_asesor.nueva_venta.matrices')) }}", {
                             params: {
                                 productos,
-                                customer_id: this.estado.borrador.cliente.customer_id,
+                                customer_id: this.estado ? this.estado.borrador.cliente.customer_id : this.clienteIdPendiente(),
                                 borrador_id: this.borradorId,
                                 // Editar lo que ya esta en la venta no se limita por stock (hay que poder bajarlo o quitarlo).
                                 solo_vendibles: edicion ? 0 : 1,
@@ -3967,7 +3994,7 @@
                         const cantidades = {};
 
                         (this.matricesPorProducto[productId]?.celdas || []).forEach((celda) => {
-                            const linea = this.estado.lineas.find((l) => l.varianteId === celda.variante.productId);
+                            const linea = (this.estado?.lineas || []).find((l) => l.varianteId === celda.variante.productId);
 
                             cantidades[celda.variante.productId] = linea ? linea.cantidad : 0;
                         });
@@ -4103,10 +4130,22 @@
                      * Resuelve { ok } sin lanzar, para que el llamador decida si cierra la modal.
                      */
                     aplicarCantidadesProducto(productId, cantidades, { sincronizar = true } = {}) {
-                        return this.$axios.post("{{ url(route('admin.ventas_asesor.nueva_venta.tallas', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
-                            producto_id: productId,
-                            cantidades,
-                        })
+                        // P7: sin venta todavia, la primera prenda la crea (idempotente por `referencia`); las siguientes usan el borrador.
+                        const creaVenta = ! this.borradorId;
+                        const peticion = creaVenta
+                            ? this.$axios.post("{{ route('admin.ventas_asesor.nueva_venta.iniciar_con_tallas') }}", {
+                                customer_id: this.clienteIdPendiente(),
+                                canal: this.canalSeleccionado,
+                                referencia: this.referenciaVenta,
+                                producto_id: productId,
+                                cantidades,
+                            })
+                            : this.$axios.post("{{ url(route('admin.ventas_asesor.nueva_venta.tallas', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
+                                producto_id: productId,
+                                cantidades,
+                            });
+
+                        return peticion
                             .then((response) => {
                                 this.fijarEstado(response.data);
 
@@ -4122,6 +4161,14 @@
 
                                 if (datos?.codigo === 'lote_rechazado' && datos?.variante_id) {
                                     this.erroresPorVariante[datos.variante_id] = mensaje;
+                                }
+
+                                // Aun no hay venta (la primera prenda no se pudo confirmar): reintentar es seguro, la referencia evita duplicarla.
+                                if (! this.borradorId) {
+                                    return Promise.resolve({
+                                        ok: false,
+                                        mensaje: datos ? mensaje : 'No pudimos confirmar si se guardó. Vuelve a pulsar «Agregar»: no se duplicará la venta.',
+                                    });
                                 }
 
                                 // Se relee el estado REAL de la venta (mecanismo existente) para saber que quedo guardado: un corte
@@ -4608,6 +4655,7 @@
                         this.busquedaCliente = '';
                         this.resultadoBusqueda = null;
                         this.clienteActual = null;
+                        this.referenciaVenta = null;
                         this.borradorId = null;
                         this.estado = null;
                         this.entrega = null;

@@ -101,6 +101,39 @@ class NuevaVentaService
     }
 
     /**
+     * P7: la venta en curso NACE con la primera prenda. Consultar productos o inventario no crea nada; al agregar la
+     * primera talla se crea el borrador y se aplican las cantidades en UNA transaccion (si el lote se rechaza no queda
+     * un borrador vacio). Es idempotente: la referencia (generada por la pantalla, ligada al actor) hace que un
+     * reintento, un doble clic o una respuesta perdida devuelvan la misma venta con las mismas cantidades finales.
+     *
+     * @param  array<int|string, mixed>  $cantidadesPorVariante  variante_id => cantidad final (al menos una > 0)
+     */
+    public function iniciarConTallas(
+        int $customerId,
+        Admin $actor,
+        CanalVenta|string $canal,
+        string $referencia,
+        int $productoId,
+        array $cantidadesPorVariante,
+        MecanismoCreacion $mecanismo = MecanismoCreacion::VENTAS_ASESOR,
+    ): EstadoNuevaVenta {
+        $canal = $this->canalPermitido($canal);
+
+        if (collect($cantidadesPorVariante)->filter(fn ($c) => is_numeric($c) && (int) $c > 0)->isEmpty()) {
+            throw new Invalida(Invalida::LOTE_VACIO);
+        }
+
+        // La referencia es del actor: otro usuario que repita el mismo valor nunca recibe (ni toca) la venta ajena.
+        $referenciaDelActor = 'nv:'.(int) $actor->id.':'.$referencia;
+
+        return DB::transaction(function () use ($customerId, $actor, $canal, $referenciaDelActor, $productoId, $cantidadesPorVariante, $mecanismo) {
+            $borrador = $this->borradores->crear($customerId, $actor, $canal, $mecanismo, $referenciaDelActor);
+
+            return $this->aplicarTallas((int) $borrador->id, $productoId, $cantidadesPorVariante, $actor);
+        });
+    }
+
+    /**
      * Alta minima del cliente (RT-04: grupo explicito, telefono como identidad, email
      * opcional) y venta nueva, en UNA transaccion: si algo falla no queda un cliente a medias.
      */

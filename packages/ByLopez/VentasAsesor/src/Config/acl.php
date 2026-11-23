@@ -71,6 +71,8 @@ return [
             'admin.ventas_asesor.nueva_venta.clientes.buscar',
             'admin.ventas_asesor.nueva_venta.clientes.crear',
             'admin.ventas_asesor.nueva_venta.iniciar',
+            // P7: la venta nace con la primera prenda (consultar productos no crea borradores).
+            'admin.ventas_asesor.nueva_venta.iniciar_con_tallas',
             'admin.ventas_asesor.nueva_venta.iniciar_cliente_nuevo',
             'admin.ventas_asesor.nueva_venta.lineas.colores',
             'admin.ventas_asesor.nueva_venta.productos.matriz',
