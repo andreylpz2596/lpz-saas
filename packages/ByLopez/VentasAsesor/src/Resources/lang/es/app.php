@@ -12,6 +12,7 @@ return [
         'comisiones' => 'Comisiones',
         'rentabilidad' => 'Rentabilidad',
         'cotizaciones-datos' => 'Datos de cotización',
+        'administracion' => 'Administración',
     ],
 
     'asesores' => [

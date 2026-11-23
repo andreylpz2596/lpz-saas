@@ -135,10 +135,7 @@ test('el menu del paquete tiene un nodo raiz y solo hijos con clave ACL existent
         'ventas_asesor.pedidos',
         'ventas_asesor.cartera',
         'ventas_asesor.asesores',
-        'ventas_asesor.costos',
         'ventas_asesor.comisiones',
-        'ventas_asesor.rentabilidad',
-        'ventas_asesor.cotizaciones_datos',
         'ventas_asesor.pedidos.create',
     ])
         ->and($menu->first()['route'])->toBe(va01_rutaInicio())
@@ -156,6 +153,28 @@ test('el menu del paquete tiene un nodo raiz y solo hijos con clave ACL existent
 
     // PAG-E: Cartera / Pagos ya tiene su bandeja; la entrada de menu abre la agrupadora (una ruta real, sin parametros).
     expect($menu->firstWhere('key', 'ventas_asesor.cartera')['route'])->toBe('admin.ventas_asesor.cartera.index');
+});
+
+test('el menu «Administracion» agrupa costos, rentabilidad y datos de cotizacion con rutas GET reales y claves fuera de la ACL', function () {
+    $menu = collect(config('menu.admin'))->filter(fn ($item) => str_starts_with($item['key'], 'administracion'));
+
+    expect($menu->pluck('route', 'key')->all())->toBe([
+        'administracion' => 'admin.ventas_asesor.costos.index',
+        'administracion.costos' => 'admin.ventas_asesor.costos.index',
+        'administracion.rentabilidad' => 'admin.ventas_asesor.rentabilidad.index',
+        'administracion.cotizaciones_datos' => 'admin.ventas_asesor.nueva_venta.cotizaciones.datos',
+    ]);
+
+    foreach ($menu as $item) {
+        $ruta = Route::getRoutes()->getByName($item['route']);
+
+        // Fuera de la ACL a proposito: ningun rol `custom` puede recibir el menu desde Roles.
+        expect(collect(config('acl'))->pluck('key')->all())->not->toContain($item['key'])
+            ->and($ruta)->not->toBeNull($item['key'])
+            ->and($ruta->methods())->toContain('GET')
+            ->and($ruta->parameterNames())->toBe([])
+            ->and(trans($item['name']))->not->toBe($item['name']);
+    }
 });
 
 test('"Ver pedido" de la venta creada va al detalle del modulo y no a una ruta nativa inexistente o ajena a su ACL', function () {

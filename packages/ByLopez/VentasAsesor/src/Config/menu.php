@@ -51,13 +51,6 @@ return [
         'sort' => 4,
         'icon' => '',
     ], [
-        // D-COST-04/05: comparacion costo comisionable vs productivo y actualizacion masiva (solo administracion).
-        'key' => 'ventas_asesor.costos',
-        'name' => 'ventasasesor::app.menu.costos',
-        'route' => 'admin.ventas_asesor.costos.index',
-        'sort' => 5,
-        'icon' => '',
-    ], [
         // Doc. 23: comisiones (resumen del mes, acuerdos, liquidaciones). El controlador exige view_own o view_all.
         'key' => 'ventas_asesor.comisiones',
         'name' => 'ventasasesor::app.menu.comisiones',
@@ -65,24 +58,46 @@ return [
         'sort' => 6,
         'icon' => '',
     ], [
-        // Doc. 23: rentabilidad (diagnostico de listas, configuracion, panel mensual). Solo administracion.
-        'key' => 'ventas_asesor.rentabilidad',
-        'name' => 'ventasasesor::app.menu.rentabilidad',
-        'route' => 'admin.ventas_asesor.rentabilidad.index',
-        'sort' => 7,
-        'icon' => '',
-    ], [
-        // Cotizaciones: datos de pago, vigencia y condiciones del PDF (abre Configuracion > Ventas Asesor > Cotizaciones).
-        'key' => 'ventas_asesor.cotizaciones_datos',
-        'name' => 'ventasasesor::app.menu.cotizaciones-datos',
-        'route' => 'admin.ventas_asesor.nueva_venta.cotizaciones.datos',
-        'sort' => 8,
-        'icon' => '',
-    ], [
         'key' => 'ventas_asesor.pedidos.create',
         'name' => 'ventasasesor::app.menu.nueva-venta',
         'route' => 'admin.ventas_asesor.nueva_venta.pantalla',
         'sort' => 1,
+        'icon' => '',
+    ],
+
+    /*
+     * 2026-11-22 (Camilo): menu «Administracion», SOLO del administrador. Costos y precios, Rentabilidad y Datos de cotizacion
+     * salen de «Ventas Asesor» y viven aqui. Las claves `administracion*` NO son claves ACL a proposito: ningun rol `custom`
+     * puede recibirlas desde Roles, y el composer de VentasAsesorServiceProvider ademas las quita a todo el que no sea el
+     * administrador autorizado (un rol `all` de QA tampoco las ve). Las rutas no cambian y siguen protegidas por su clave ACL
+     * de siempre (ventas_asesor.costos, .rentabilidad, .cotizaciones_datos).
+     */
+    [
+        'key' => 'administracion',
+        'name' => 'ventasasesor::app.menu.administracion',
+        'route' => 'admin.ventas_asesor.costos.index',
+        'sort' => 14,
+        'icon' => 'icon-settings',
+    ], [
+        // D-COST-04/05 y Doc. 32: costos (comisionable vs productivo) y precios por grupo.
+        'key' => 'administracion.costos',
+        'name' => 'ventasasesor::app.menu.costos',
+        'route' => 'admin.ventas_asesor.costos.index',
+        'sort' => 1,
+        'icon' => '',
+    ], [
+        // Doc. 23: rentabilidad (diagnostico de listas, configuracion, panel mensual).
+        'key' => 'administracion.rentabilidad',
+        'name' => 'ventasasesor::app.menu.rentabilidad',
+        'route' => 'admin.ventas_asesor.rentabilidad.index',
+        'sort' => 2,
+        'icon' => '',
+    ], [
+        // Cotizaciones: datos de pago, vigencia y condiciones del PDF (abre Configuracion > Ventas Asesor > Cotizaciones).
+        'key' => 'administracion.cotizaciones_datos',
+        'name' => 'ventasasesor::app.menu.cotizaciones-datos',
+        'route' => 'admin.ventas_asesor.nueva_venta.cotizaciones.datos',
+        'sort' => 3,
         'icon' => '',
     ],
 ];
