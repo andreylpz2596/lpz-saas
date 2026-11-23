@@ -665,6 +665,7 @@ return [
             'requiere-revision' => 'Requiere revisión',
             'abono-registrado' => 'Abono registrado',
             'abono-detalle' => ':monto · sin revisar · aplicado a :pedidos pedido(s).',
+            'abono-detalle-confirmado' => ':monto · aprobado · aplicado a :pedidos pedido(s).',
         ],
 
         'abono' => [
@@ -698,6 +699,8 @@ return [
             'cancelar' => 'Cancelar',
             'registrando' => 'Registrando…',
             'exito' => 'Pago registrado. Queda sin revisar y el saldo ya bajó.',
+            'exito-confirmado' => 'Pago registrado y aprobado.',
+            'auto-no-confirmado' => 'Pago registrado, pero no se pudo aprobar: :motivo Queda sin revisar en Cartera.',
             'duplicado' => 'Este pago ya estaba registrado; no se duplicó.',
             'monto-mayor' => 'El monto no puede superar el saldo actual.',
             'comprobante' => 'Comprobante / soporte',

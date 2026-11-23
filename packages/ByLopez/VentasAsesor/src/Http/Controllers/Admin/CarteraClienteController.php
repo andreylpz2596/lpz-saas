@@ -6,6 +6,7 @@ use ByLopez\VentasAsesor\Enums\AlcanceVisibilidad;
 use ByLopez\VentasAsesor\Exceptions\RegistroPagoInvalidoException;
 use ByLopez\VentasAsesor\Http\Requests\Cartera\RegistrarAbonoClienteRequest;
 use ByLopez\VentasAsesor\Services\Cartera\CarteraConsultaService;
+use ByLopez\VentasAsesor\Services\Cartera\AutoConfirmacionAdministrador;
 use ByLopez\VentasAsesor\Services\Cartera\RegistrarAbonoClienteService;
 use ByLopez\VentasAsesor\Services\Credito\CreditoClienteService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
@@ -93,6 +94,13 @@ class CarteraClienteController extends Controller
             ], fn ($v) => $v !== null), $e->estadoHttp());
         }
 
-        return response()->json($resultado->toArray(), $resultado->duplicado ? 200 : 201);
+        // Administrador: el abono recien registrado se confirma en el acto (si no se puede, queda sin revisar con el motivo).
+        $auto = app(AutoConfirmacionAdministrador::class)
+            ->despuesDeRegistrar(auth()->guard('admin')->user(), $resultado->pagoId, $resultado->estado, $resultado->duplicado);
+
+        return response()->json(
+            ['estado' => $auto['estado'], 'aviso_confirmacion' => $auto['aviso']] + $resultado->toArray(),
+            $resultado->duplicado ? 200 : 201,
+        );
     }
 }
