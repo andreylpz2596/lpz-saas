@@ -150,7 +150,8 @@
                 if (e.target.closest('[data-acceso-cerrar]')) { modal().close(); }
             });
 
-            if (document.readyState === 'complete') { cargar(); } else { window.addEventListener('load', cargar); }
+            // El layout monta Vue en un 'load' registrado DESPUES de este script: se espera a que termine (setTimeout 0) para no pintar sobre nodos que Vue va a reemplazar.
+            if (document.readyState === 'complete') { setTimeout(cargar, 0); } else { window.addEventListener('load', () => setTimeout(cargar, 0)); }
         })();
     </script>
 @endPushOnce
