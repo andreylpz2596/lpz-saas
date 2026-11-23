@@ -278,7 +278,12 @@ return [
     ], [
         'key' => 'ventas_asesor.cartera.view_all',
         'name' => 'ventasasesor::app.acl.ver-todos',
-        'route' => $inicio,
+        // Estado de cuenta de WhatsApp del cliente: solo con alcance «todos» ($inicio sigue primero, regla 3).
+        'route' => [
+            $inicio,
+            'admin.ventas_asesor.cartera.mensajes.opciones',
+            'admin.ventas_asesor.cartera.mensajes.mensaje',
+        ],
         'sort' => 2,
     ], [
         'key' => 'ventas_asesor.cartera.registrar',

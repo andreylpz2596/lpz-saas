@@ -12,6 +12,7 @@ return [
         'comisiones' => 'Comisiones',
         'rentabilidad' => 'Rentabilidad',
         'cotizaciones-datos' => 'Datos de cotización',
+        'administracion' => 'Administración',
     ],
 
     'asesores' => [
@@ -670,6 +671,7 @@ return [
             'requiere-revision' => 'Requiere revisión',
             'abono-registrado' => 'Abono registrado',
             'abono-detalle' => ':monto · sin revisar · aplicado a :pedidos pedido(s).',
+            'abono-detalle-confirmado' => ':monto · aprobado · aplicado a :pedidos pedido(s).',
         ],
 
         'abono' => [
@@ -703,6 +705,8 @@ return [
             'cancelar' => 'Cancelar',
             'registrando' => 'Registrando…',
             'exito' => 'Pago registrado. Queda sin revisar y el saldo ya bajó.',
+            'exito-confirmado' => 'Pago registrado y aprobado.',
+            'auto-no-confirmado' => 'Pago registrado, pero no se pudo aprobar: :motivo Queda sin revisar en Cartera.',
             'duplicado' => 'Este pago ya estaba registrado; no se duplicó.',
             'monto-mayor' => 'El monto no puede superar el saldo actual.',
             'comprobante' => 'Comprobante / soporte',
@@ -895,7 +899,15 @@ return [
             'despacho_final' => 'Último despacho',
             'entregado' => 'Pedido entregado',
             'despacho_n' => 'Despacho :n de :total',
+            'estado_cuenta' => 'Estado de cuenta',
         ],
+        // Solo para quien genera el estado de cuenta (nunca en el texto al cliente).
+        'avisos' => [
+            'por_revisar' => ':n pedido(s) con revisión pendiente en Cartera no se incluyen.',
+            'anteriores' => ':n pedido(s) anteriores a la fecha de corte de Cartera (:fecha) no se incluyen.',
+        ],
+        'cliente' => 'Cliente',
+        'cambio_cartera' => 'La cartera del cliente cambió desde que abriste este mensaje. Revisa el texto actualizado y cópialo de nuevo.',
     ],
     'cotizacion' => [
         'config' => [

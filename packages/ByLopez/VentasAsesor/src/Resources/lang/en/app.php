@@ -12,6 +12,7 @@ return [
         'comisiones' => 'Commissions',
         'rentabilidad' => 'Profitability',
         'cotizaciones-datos' => 'Quotation settings',
+        'administracion' => 'Administration',
     ],
 
     'asesores' => [
@@ -670,6 +671,7 @@ return [
             'requiere-revision' => 'Needs review',
             'abono-registrado' => 'Payment registered',
             'abono-detalle' => ':monto · unreviewed · applied to :pedidos order(s).',
+            'abono-detalle-confirmado' => ':monto · approved · applied to :pedidos order(s).',
         ],
 
         'abono' => [
@@ -703,6 +705,8 @@ return [
             'cancelar' => 'Cancel',
             'registrando' => 'Registering…',
             'exito' => 'Payment registered. It is unreviewed and the balance already dropped.',
+            'exito-confirmado' => 'Payment registered and approved.',
+            'auto-no-confirmado' => 'Payment registered, but it could not be approved: :motivo It stays unreviewed in Cartera.',
             'duplicado' => 'This payment was already registered; it was not duplicated.',
             'monto-mayor' => 'The amount cannot exceed the current balance.',
             'comprobante' => 'Receipt / supporting document',
@@ -895,7 +899,14 @@ return [
             'despacho_final' => 'Last shipment',
             'entregado' => 'Order delivered',
             'despacho_n' => 'Shipment :n of :total',
+            'estado_cuenta' => 'Account statement',
         ],
+        'avisos' => [
+            'por_revisar' => ':n order(s) pending review in Receivables are not included.',
+            'anteriores' => ':n order(s) before the Receivables cut-off date (:fecha) are not included.',
+        ],
+        'cliente' => 'Customer',
+        'cambio_cartera' => 'The customer\'s receivables changed since you opened this message. Review the updated text and copy it again.',
     ],
     'cotizacion' => [
         'config' => [

@@ -12,6 +12,7 @@ use ByLopez\VentasAsesor\Http\Controllers\Admin\CotizacionController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CreditoClienteController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\GuiaPedidoController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\InicioController;
+use ByLopez\VentasAsesor\Http\Controllers\Admin\MensajesCarteraController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\NuevaVentaController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\PagosController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\PedidosAsesorController;
@@ -94,6 +95,11 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
         Route::post('cartera/clientes/{cliente}/abonos', [CarteraClienteController::class, 'abonar'])
             ->whereNumber('cliente')
             ->name('admin.ventas_asesor.cartera.abonos.store');
+        // Estado de cuenta de WhatsApp del cliente (clave view_all: con «ver propios» el total saldria incompleto). Solo lectura.
+        Route::get('cartera/clientes/{cliente}/mensajes', [MensajesCarteraController::class, 'opciones'])
+            ->whereNumber('cliente')->name('admin.ventas_asesor.cartera.mensajes.opciones');
+        Route::get('cartera/clientes/{cliente}/mensajes/{clave}', [MensajesCarteraController::class, 'mensaje'])
+            ->whereNumber('cliente')->where('clave', '[a-z0-9\-]+')->name('admin.ventas_asesor.cartera.mensajes.mensaje');
 
         // D10 V1: credito del cliente (ver / aplicar / reembolsar / reversar / ajustar). Cada hoja ACL autoriza SOLO su ruta;
         // los servicios vuelven a validar permiso y alcance «todos».

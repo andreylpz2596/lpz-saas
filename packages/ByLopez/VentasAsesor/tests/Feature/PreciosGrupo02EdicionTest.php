@@ -403,10 +403,10 @@ test('PG02-15 permisos PROPIOS de precios (separados de costos) y costos ocultos
     expect(pg02_reglas($this->s->id, $this->vip2->id)[0][3])->toBe(7900.0);
     $this->actingAs($editor, 'admin')->get(route('admin.ventas_asesor.costos.index'))->assertUnauthorized();
 
-    // Menu: UNA entrada «Costos y precios»; con solo precios apunta a la pestaña de precios.
+    // Menu (2026-11-22): «Costos y precios» vive en «Administracion», solo del administrador; el editor entra por la URL.
     $menu = $this->actingAs($editor, 'admin')->get($url)->getContent();
-    expect(substr_count($menu, route('admin.ventas_asesor.precios_grupo.index').'"'))->toBeGreaterThanOrEqual(1)
-        ->and($menu)->not->toContain('href="'.route('admin.ventas_asesor.costos.index').'"');
+    expect($menu)->not->toContain('href="'.route('admin.ventas_asesor.costos.index').'"')
+        ->and($menu)->not->toContain(trans('ventasasesor::app.menu.administracion'));
 
     // Costo: solo con permiso de costos; sin costo NO se muestra 0.
     $conCosto = $this->consulta->referencias($this->vip2, [$this->s->id, $this->m->id], 1, true)[0]['variantes'];

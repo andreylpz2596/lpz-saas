@@ -6,6 +6,7 @@ use ByLopez\VentasAsesor\Enums\AlcanceVisibilidad;
 use ByLopez\VentasAsesor\Exceptions\RegistroPagoInvalidoException;
 use ByLopez\VentasAsesor\Http\Requests\Cartera\RegistrarAbonoClienteRequest;
 use ByLopez\VentasAsesor\Services\Cartera\CarteraConsultaService;
+use ByLopez\VentasAsesor\Services\Cartera\AutoConfirmacionAdministrador;
 use ByLopez\VentasAsesor\Services\Cartera\RegistrarAbonoClienteService;
 use ByLopez\VentasAsesor\Services\Credito\CreditoClienteService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
@@ -62,6 +63,8 @@ class CarteraClienteController extends Controller
             'puedeReembolsar' => $tiene(AutorizacionVentasAsesor::PERMISO_CREDITO_REEMBOLSAR),
             'puedeReversar' => $tiene(AutorizacionVentasAsesor::PERMISO_CREDITO_REVERSAR),
             'puedeAbonar' => $this->autorizacion->tienePermiso($admin, AutorizacionVentasAsesor::PERMISO_CARTERA_ABONO_GENERAL),
+            // Estado de cuenta de WhatsApp: solo con alcance «todos» y Cartera activa (el servicio vuelve a autorizar).
+            'puedeMensaje' => $alcanceTotal && $ficha['cartera']->carteraActiva,
             'mediosCobro' => collect($this->medios->activos())->map(fn (array $m) => [
                 'codigo' => $m['codigo'],
                 'etiqueta' => $this->medios->etiqueta($m['codigo']),
@@ -91,6 +94,13 @@ class CarteraClienteController extends Controller
             ], fn ($v) => $v !== null), $e->estadoHttp());
         }
 
-        return response()->json($resultado->toArray(), $resultado->duplicado ? 200 : 201);
+        // Administrador: el abono recien registrado se confirma en el acto (si no se puede, queda sin revisar con el motivo).
+        $auto = app(AutoConfirmacionAdministrador::class)
+            ->despuesDeRegistrar(auth()->guard('admin')->user(), $resultado->pagoId, $resultado->estado, $resultado->duplicado);
+
+        return response()->json(
+            ['estado' => $auto['estado'], 'aviso_confirmacion' => $auto['aviso']] + $resultado->toArray(),
+            $resultado->duplicado ? 200 : 201,
+        );
     }
 }

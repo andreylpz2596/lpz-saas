@@ -114,6 +114,13 @@ return [
          * zona horaria de la aplicacion. Debe fijarse DESPUES de alinear la configuracion de `moneytransfer`.
          */
         'fecha_corte' => env('VENTASASESOR_CARTERA_FECHA_CORTE'),
+
+        /*
+         * 2026-11-22 (Camilo): un pago o abono registrado por el ADMINISTRADOR autorizado (rol administrador, ver
+         * `credito.rol_administrador_id`) queda confirmado en el acto, sin pasar por la bandeja de Cartera. Si no se puede
+         * confirmar (sin factura abierta, pedido en revision), queda sin revisar y se avisa. false = todos validan en Cartera.
+         */
+        'auto_confirmar_administrador' => (bool) env('VENTASASESOR_AUTO_CONFIRMAR_ADMIN', true),
     ],
 
     'nueva_venta' => [

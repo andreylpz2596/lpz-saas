@@ -665,13 +665,19 @@
                             if (this.esTransferencia && this.comprobante) datos.append('comprobante', this.comprobante);
                             this.$axios.post(this.url, datos)
                                 .then(respuesta => {
+                                    const r = respuesta.data;
+                                    const aviso = r.aviso_confirmacion;
+
                                     this.$emitter.emit('add-flash', {
-                                        type: 'success',
-                                        message: respuesta.data.duplicado ? this.textos.modal.duplicado : (respuesta.data.combinado ? this.textos.modal['exito-combinado'] : this.textos.modal.exito),
+                                        type: aviso ? 'warning' : 'success',
+                                        message: r.duplicado ? this.textos.modal.duplicado
+                                            : (aviso ? this.textos.modal['auto-no-confirmado'].replace(':motivo', aviso)
+                                            : (r.confirmado ? this.textos.modal['exito-confirmado']
+                                            : (r.combinado ? this.textos.modal['exito-combinado'] : this.textos.modal.exito))),
                                     });
 
-                                    // Las cifras del bloque salen del servidor: se recarga en vez de recalcular aqui.
-                                    window.location.reload();
+                                    // Las cifras del bloque salen del servidor: se recarga en vez de recalcular aqui (con aviso, se deja leer antes).
+                                    setTimeout(() => window.location.reload(), aviso ? 4000 : 0);
                                 })
                                 .catch(e => {
                                     const datos = (e.response && e.response.data) || {};
