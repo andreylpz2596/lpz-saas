@@ -474,6 +474,15 @@ return [
         ],
         'sort' => 1,
     ], [
+        'key' => 'autoservicio.pedidos',
+        'name' => 'ventasasesor::app.acl.autoservicio-pedidos',
+        'route' => [
+            'admin.autoservicio.pedidos.index',
+            'admin.autoservicio.pedidos.data',
+            'admin.autoservicio.pedidos.show',
+        ],
+        'sort' => 2,
+    ], [
         // Doc. 33 P1: administrar el acceso de clientes al aplicativo (crear/vincular usuario, suspender, reactivar, desvincular).
         // Sin asignar a ningun rol: la concede Camilo.
         'key' => 'ventas_asesor.clientes_acceso',

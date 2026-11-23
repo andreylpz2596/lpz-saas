@@ -96,6 +96,7 @@ return [
     ],
 
     'acl' => [
+        'autoservicio-pedidos' => 'View my orders (self-service)',
         'autoservicio' => 'Customer self-service',
         'autoservicio-comprar' => 'Place orders (self-service)',
         'clientes-acceso' => 'Customer access',

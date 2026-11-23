@@ -19,6 +19,25 @@
  */
 return [
     [
+        // Doc. 33 P3/P5: menu del CLIENTE de autoservicio (arbol propio). Solo ven estas dos entradas.
+        'key' => 'autoservicio',
+        'name' => 'Mis pedidos',
+        'route' => 'admin.autoservicio.pantalla',
+        'sort' => 1,
+        'icon' => 'icon-sales',
+    ], [
+        'key' => 'autoservicio.comprar',
+        'name' => 'Hacer pedido',
+        'route' => 'admin.autoservicio.pantalla',
+        'sort' => 1,
+        'icon' => '',
+    ], [
+        'key' => 'autoservicio.pedidos',
+        'name' => 'Mis pedidos',
+        'route' => 'admin.autoservicio.pedidos.index',
+        'sort' => 2,
+        'icon' => '',
+    ], [
         'key' => 'ventas_asesor',
         'name' => 'ventasasesor::app.menu.title',
         'route' => 'admin.ventas_asesor.inicio.index',
