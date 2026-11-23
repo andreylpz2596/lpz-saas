@@ -95,7 +95,7 @@
                 <div>
                     <p class="font-bold" style="color:#166534">@lang('ventasasesor::app.cartera.cliente.abono-registrado')</p>
                     <p class="text-sm" style="color:#166534">
-                        @lang('ventasasesor::app.cartera.cliente.abono-detalle', ['monto' => $dinero($abono['monto']), 'pedidos' => $abono['pedidos']])
+                        @lang($abono['estado'] === 'confirmado' ? 'ventasasesor::app.cartera.cliente.abono-detalle-confirmado' : 'ventasasesor::app.cartera.cliente.abono-detalle', ['monto' => $dinero($abono['monto']), 'pedidos' => $abono['pedidos']])
                     </p>
                 </div>
             </div>
