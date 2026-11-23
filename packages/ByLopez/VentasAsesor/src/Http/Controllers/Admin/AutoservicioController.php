@@ -10,6 +10,7 @@ use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\ColoresNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\IniciarConTallasAutoservicioRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\MatricesNuevaVentaRequest;
 use ByLopez\VentasAsesor\Services\Autoservicio\ClienteActualService;
+use ByLopez\VentasAsesor\Services\Autoservicio\PedidosClienteService;
 use ByLopez\VentasAsesor\Services\Venta\BorradorVentaService;
 use ByLopez\VentasAsesor\Services\Venta\CatalogoVentaService;
 use ByLopez\VentasAsesor\Services\Venta\NuevaVentaService;
@@ -36,6 +37,7 @@ class AutoservicioController extends Controller
         protected NuevaVentaService $nuevaVenta,
         protected CatalogoVentaService $catalogo,
         protected BorradorVentaService $borradores,
+        protected PedidosClienteService $pedidos,
     ) {}
 
     /** La MISMA vista de Nueva venta en modo cliente: sin buscador, grupos, rentabilidad, cotizaciones ni cartera. */
@@ -53,6 +55,29 @@ class AutoservicioController extends Controller
             'puedeAdministrarAcceso' => false,
             'asesorSinAsociacion' => false,
         ]);
+    }
+
+    /** P5: «Mis pedidos» (pantalla). Los datos los pide la propia pagina a pedidos.data. */
+    public function pedidosPantalla(): View
+    {
+        $this->clientes->de($this->actor());
+
+        return view('ventasasesor::admin.autoservicio.pedidos');
+    }
+
+    public function pedidosData(Request $request): JsonResponse
+    {
+        return $this->responder(fn () => $this->pedidos->listar($this->clientes->de($this->actor()), max(1, (int) $request->query('pagina', 1))));
+    }
+
+    public function pedidoDetalle(int $pedido): JsonResponse
+    {
+        return $this->responder(function () use ($pedido) {
+            $detalle = $this->pedidos->detalle($this->clientes->de($this->actor()), $pedido);
+
+            // Ajeno e inexistente son indistinguibles: el mismo 404.
+            return $detalle ?? response()->json(['codigo' => 'no_encontrado', 'mensaje' => ''], 404);
+        });
     }
 
     public function bootstrap(): JsonResponse
@@ -273,6 +298,7 @@ class AutoservicioController extends Controller
 
         return match (true) {
             str_contains($clave, 'stock') => 'No hay suficientes unidades disponibles de esta talla.',
+            $clave === 'no_encontrado' => 'No encontramos ese pedido.',
             in_array($clave, ['no_es_propietario', 'borrador_inexistente', 'cliente_no_coincide'], true) => 'No encontramos esa venta.',
             in_array($clave, ['borrador_no_editable'], true) => 'Esta venta ya no se puede modificar.',
             in_array($clave, ['rentabilidad_insuficiente', 'pedido_rechazado_por_cerco', 'cliente_no_confirmable', 'propiedad_comercial_invalida', 'tipo_operacion_sin_permiso'], true) => 'No podemos confirmar este pedido en línea. Comunícate con nuestro equipo para ayudarte.',

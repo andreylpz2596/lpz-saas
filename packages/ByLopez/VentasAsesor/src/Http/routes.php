@@ -27,6 +27,9 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
     // Doc. 33 P3: autoservicio del CLIENTE FRECUENTE. El cliente sale del vinculo (nunca de la peticion). Clave ACL autoservicio.comprar.
     Route::prefix('autoservicio')->name('admin.autoservicio.')->group(function () {
         Route::get('', [AutoservicioController::class, 'pantalla'])->name('pantalla');
+        Route::get('pedidos', [AutoservicioController::class, 'pedidosPantalla'])->name('pedidos.index');
+        Route::get('pedidos/datos', [AutoservicioController::class, 'pedidosData'])->name('pedidos.data');
+        Route::get('pedidos/{pedido}', [AutoservicioController::class, 'pedidoDetalle'])->whereNumber('pedido')->name('pedidos.show');
         Route::get('bootstrap', [AutoservicioController::class, 'bootstrap'])->name('estado_inicial');
         Route::get('lineas/{clave}/colores', [AutoservicioController::class, 'colores'])->name('lineas.colores');
         Route::get('matrices', [AutoservicioController::class, 'matrices'])->name('matrices');
