@@ -3,6 +3,7 @@
 namespace ByLopez\VentasAsesor\Http\Controllers\Admin;
 
 use ByLopez\VentasAsesor\Enums\TipoOperacionPedido;
+use ByLopez\VentasAsesor\Exceptions\BorradorVentaInvalidoException;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\AgregarDireccionNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\AplicarTallasNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\CambiarGrupoNuevaVentaRequest;
@@ -135,7 +136,19 @@ class NuevaVentaController extends Controller
      */
     public function direccionesCliente(int $cliente): JsonResponse
     {
-        return Respuesta::envolver(fn () => CustomerAddress::query()
+        // P0: solo las direcciones de un cliente con el que el actor tiene una venta propia (antes: cualquier cliente).
+        return Respuesta::envolver(function () use ($cliente) {
+            if (! $this->borradores->actorTrabajaConCliente($cliente, $this->actor())) {
+                throw new BorradorVentaInvalidoException(BorradorVentaInvalidoException::NO_ES_PROPIETARIO);
+            }
+
+            return $this->listaDirecciones($cliente);
+        });
+    }
+
+    protected function listaDirecciones(int $cliente): array
+    {
+        return CustomerAddress::query()
             ->where('customer_id', $cliente)
             ->orderByDesc('default_address')
             ->get(['id', 'first_name', 'last_name', 'address', 'city', 'state', 'country', 'postcode', 'phone', 'default_address'])
@@ -151,7 +164,7 @@ class NuevaVentaController extends Controller
                 'predeterminada' => (bool) $d->default_address,
             ])
             ->values()
-            ->all());
+            ->all();
     }
 
     /**
@@ -166,7 +179,7 @@ class NuevaVentaController extends Controller
 
             return [
                 'direccion_id' => (int) $nueva->id,
-                'direcciones' => $this->direccionesCliente((int) $nueva->customer_id)->getData(true),
+                'direcciones' => $this->listaDirecciones((int) $nueva->customer_id),
             ];
         });
     }
@@ -230,13 +243,28 @@ class NuevaVentaController extends Controller
     /** G. Matriz de tallas/variantes de un color (producto de primer nivel). */
     public function matriz(int $producto, MatrizNuevaVentaRequest $request): JsonResponse
     {
-        return Respuesta::envolver(fn () => $this->catalogo->matriz(
-            $producto,
-            (int) $request->integer('customer_id'),
-            $this->actor(),
-            1,
-            $request->integer('borrador_id') ?: null,
-        )->toArray());
+        return Respuesta::envolver(function () use ($producto, $request) {
+            $this->exigirBorradorDeLaConsulta($request->integer('borrador_id') ?: null, (int) $request->integer('customer_id'));
+
+            return $this->catalogo->matriz(
+                $producto,
+                (int) $request->integer('customer_id'),
+                $this->actor(),
+                1,
+                $request->integer('borrador_id') ?: null,
+            )->toArray();
+        });
+    }
+
+    /**
+     * P0: si la consulta de precios trae un borrador, debe ser del actor y del mismo cliente; nunca se consulta ni se
+     * precia con el borrador de otro. Sin borrador (consulta previa a la venta) no hay nada que verificar aqui.
+     */
+    protected function exigirBorradorDeLaConsulta(?int $borradorId, int $customerId): void
+    {
+        if ($borradorId !== null) {
+            $this->borradores->exigirDelPropietario($borradorId, $this->actor(), $customerId);
+        }
     }
 
     /**
@@ -245,19 +273,28 @@ class NuevaVentaController extends Controller
      */
     public function matrices(MatricesNuevaVentaRequest $request): JsonResponse
     {
-        return Respuesta::envolver(fn () => $this->catalogo->matrices(
-            array_map('intval', (array) $request->input('productos')),
-            (int) $request->integer('customer_id'),
-            $this->actor(),
-            $request->integer('borrador_id') ?: null,
-            $request->has('solo_vendibles') ? $request->boolean('solo_vendibles') : true,
-        ));
+        return Respuesta::envolver(function () use ($request) {
+            $this->exigirBorradorDeLaConsulta($request->integer('borrador_id') ?: null, (int) $request->integer('customer_id'));
+
+            return $this->catalogo->matrices(
+                array_map('intval', (array) $request->input('productos')),
+                (int) $request->integer('customer_id'),
+                $this->actor(),
+                $request->integer('borrador_id') ?: null,
+                $request->has('solo_vendibles') ? $request->boolean('solo_vendibles') : true,
+            );
+        });
     }
 
     /** F. Estado/resumen actual de la venta (K). */
     public function estado(int $borrador): JsonResponse
     {
-        return Respuesta::envolver(fn () => $this->nuevaVenta->estado($borrador, conMetodosDePago: (bool) request()->boolean('con_metodos_pago'))->toArray());
+        // P0: el estado solo lo lee el propietario del borrador (antes: cualquier usuario con acceso a Nueva venta).
+        return Respuesta::envolver(function () use ($borrador) {
+            $this->borradores->exigirDelPropietario($borrador, $this->actor());
+
+            return $this->nuevaVenta->estado($borrador, conMetodosDePago: (bool) request()->boolean('con_metodos_pago'))->toArray();
+        });
     }
 
     /** H. Lote de cantidades por variante (M6/L6): todo o nada. */
