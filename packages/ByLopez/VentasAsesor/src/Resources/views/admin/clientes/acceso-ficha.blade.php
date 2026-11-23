@@ -34,17 +34,18 @@
 @pushOnce('scripts')
     <script>
         (function () {
-            const raiz = document.querySelector('[data-tarjeta-acceso]');
+            // Vue vuelve a pintar el HTML de la ficha al montarse: se busca SIEMPRE la tarjeta vigente (nada de nodos guardados).
+            const tarjeta = () => document.querySelector('[data-tarjeta-acceso]');
 
-            if (! raiz) {
+            if (! tarjeta()) {
                 return;
             }
 
-            const cliente = raiz.dataset.cliente;
+            const cliente = tarjeta().dataset.cliente;
             const base = @json(url(config('app.admin_url').'/ventas-asesor/clientes/__ID__/acceso')).replace('__ID__', cliente);
             const csrf = document.querySelector('meta[name="csrf-token"]')?.content || @json(csrf_token());
-            const modal = raiz.querySelector('[data-acceso-modal]');
-            const q = (s) => raiz.querySelector(s);
+            const modal = () => tarjeta().querySelector('[data-acceso-modal]');
+            const q = (s) => tarjeta().querySelector(s);
             const ETIQUETA = { sin_acceso: 'Sin acceso', activo: 'Activo', suspendido: 'Suspendido' };
             let datos = null;
 
@@ -144,9 +145,12 @@
                 try { datos = await llamar(''); pintar(); } catch (e) { texto(q('[data-acceso-estado]'), e.message); }
             }
 
-            q('[data-acceso-abrir]').addEventListener('click', () => { mensaje('error', null); if (datos) { pintar(); } modal.showModal(); });
-            q('[data-acceso-cerrar]').addEventListener('click', () => modal.close());
-            cargar();
+            document.addEventListener('click', (e) => {
+                if (e.target.closest('[data-acceso-abrir]')) { mensaje('error', null); if (datos) { pintar(); } modal().showModal(); }
+                if (e.target.closest('[data-acceso-cerrar]')) { modal().close(); }
+            });
+
+            if (document.readyState === 'complete') { cargar(); } else { window.addEventListener('load', cargar); }
         })();
     </script>
 @endPushOnce
