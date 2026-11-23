@@ -893,7 +893,15 @@ return [
             'despacho_final' => 'Último despacho',
             'entregado' => 'Pedido entregado',
             'despacho_n' => 'Despacho :n de :total',
+            'estado_cuenta' => 'Estado de cuenta',
         ],
+        // Solo para quien genera el estado de cuenta (nunca en el texto al cliente).
+        'avisos' => [
+            'por_revisar' => ':n pedido(s) con revisión pendiente en Cartera no se incluyen.',
+            'anteriores' => ':n pedido(s) anteriores a la fecha de corte de Cartera (:fecha) no se incluyen.',
+        ],
+        'cliente' => 'Cliente',
+        'cambio_cartera' => 'La cartera del cliente cambió desde que abriste este mensaje. Revisa el texto actualizado y cópialo de nuevo.',
     ],
     'cotizacion' => [
         'config' => [

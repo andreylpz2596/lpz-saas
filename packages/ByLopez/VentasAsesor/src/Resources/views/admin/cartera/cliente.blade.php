@@ -74,6 +74,29 @@
                 </p>
             </div>
 
+            @if ($puedeMensaje ?? false)
+                <div class="flex items-center gap-2" data-estado-cuenta>
+                    @include('logistica::admin.mensajes.boton', [
+                        'pedidoId' => $cliente['id'],
+                        'numero' => $cliente['id'],
+                        'etiqueta' => $cliente['nombre'] ?: '#'.$cliente['id'],
+                        'titulo' => trans('ventasasesor::app.mensajes.etiquetas.estado_cuenta'),
+                        'conTexto' => true,
+                    ])
+                </div>
+
+                {{-- Mismo componente de los mensajes del pedido; solo cambian las URL y los textos del sujeto. --}}
+                @include('logistica::admin.mensajes.whatsapp', [
+                    'urlOpciones' => route('admin.ventas_asesor.cartera.mensajes.opciones', ['cliente' => '__ID__']),
+                    'urlMensaje' => route('admin.ventas_asesor.cartera.mensajes.mensaje', ['cliente' => '__ID__', 'clave' => '__CLAVE__']),
+                    'textos' => [
+                        'pedido' => trans('ventasasesor::app.mensajes.cliente'),
+                        'sinMensajes' => trans('ventasasesor::app.cartera.cliente.inactiva'),
+                        'cambio' => trans('ventasasesor::app.mensajes.cambio_cartera'),
+                    ],
+                ])
+            @endif
+
             @if ($hayElegibles)
                 <v-registrar-abono
                     :elegibles='@json($elegibles)'

@@ -27,6 +27,7 @@
         .lg-wa__x { flex: none; width: 44px; height: 44px; margin: -8px -10px 0 0; border: 0; background: transparent; font-size: 28px; line-height: 1; color: #64748b; cursor: pointer; border-radius: 8px; }
         .lg-wa__cuerpo { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px 8px; }
         .lg-wa__chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+        .lg-wa__chips[hidden] { display: none; }
         .lg-wa__chip { min-height: 36px; padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 999px; background: #fff; color: #334155; font-size: 13px; font-weight: 600; cursor: pointer; text-align: left; }
         .lg-wa__chip[aria-selected="true"] { background: #2563eb; border-color: #2563eb; color: #fff; }
         .lg-wa__aviso { min-height: 0; margin: 0 0 8px; font-size: 13px; font-weight: 600; }
@@ -61,6 +62,9 @@
     foreach (['titulo', 'pedido', 'cargando', 'sin_mensajes', 'elige', 'copiar', 'copiado', 'no_copiado', 'cambio', 'telefono', 'cerrar', 'error', 'ayuda'] as $clave) {
         $textosWhatsApp[\Illuminate\Support\Str::camel($clave)] = __('logistica::app.whatsapp.'.$clave);
     }
+
+    // Otra entidad que reutiliza el componente (p. ej. el estado de cuenta del cliente en Cartera) puede cambiar textos.
+    $textosWhatsApp = array_merge($textosWhatsApp, $textos ?? []);
 @endphp
 
 @push('scripts')
@@ -124,6 +128,9 @@
                 a.className = 'lg-wa__aviso' + (tipo ? ' lg-wa__aviso--' + tipo : '');
             };
 
+            // Avisos para quien genera el mensaje (lo que NO entra en el texto); nunca forman parte de lo copiado.
+            const avisosInternos = (m) => { if (m && Array.isArray(m.avisos) && m.avisos.length) aviso(m.avisos.join(' '), 'alerta'); };
+
             const ponerEstado = (texto) => { const e = q('[data-wa-estado]'); e.textContent = texto || ''; e.hidden = ! texto; };
 
             const mostrarTexto = (texto, telefono) => {
@@ -170,6 +177,7 @@
                     if (ticket !== estado.token) return;
                     ponerEstado('');
                     mostrarTexto(m.texto, m.telefono);
+                    avisosInternos(m);
                 } catch (e) {
                     if (ticket !== estado.token) return;
                     ponerEstado('');

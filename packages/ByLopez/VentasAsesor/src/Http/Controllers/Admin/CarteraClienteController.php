@@ -63,6 +63,8 @@ class CarteraClienteController extends Controller
             'puedeReembolsar' => $tiene(AutorizacionVentasAsesor::PERMISO_CREDITO_REEMBOLSAR),
             'puedeReversar' => $tiene(AutorizacionVentasAsesor::PERMISO_CREDITO_REVERSAR),
             'puedeAbonar' => $this->autorizacion->tienePermiso($admin, AutorizacionVentasAsesor::PERMISO_CARTERA_ABONO_GENERAL),
+            // Estado de cuenta de WhatsApp: solo con alcance «todos» y Cartera activa (el servicio vuelve a autorizar).
+            'puedeMensaje' => $alcanceTotal && $ficha['cartera']->carteraActiva,
             'mediosCobro' => collect($this->medios->activos())->map(fn (array $m) => [
                 'codigo' => $m['codigo'],
                 'etiqueta' => $this->medios->etiqueta($m['codigo']),

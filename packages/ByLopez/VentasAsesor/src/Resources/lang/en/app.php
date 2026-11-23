@@ -893,7 +893,14 @@ return [
             'despacho_final' => 'Last shipment',
             'entregado' => 'Order delivered',
             'despacho_n' => 'Shipment :n of :total',
+            'estado_cuenta' => 'Account statement',
         ],
+        'avisos' => [
+            'por_revisar' => ':n order(s) pending review in Receivables are not included.',
+            'anteriores' => ':n order(s) before the Receivables cut-off date (:fecha) are not included.',
+        ],
+        'cliente' => 'Customer',
+        'cambio_cartera' => 'The customer\'s receivables changed since you opened this message. Review the updated text and copy it again.',
     ],
     'cotizacion' => [
         'config' => [
