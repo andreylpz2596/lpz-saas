@@ -35,8 +35,10 @@
 
     @if ($conPdf)
         <a href="{{ route('admin.ventas_asesor.pedidos.guia', ['pedido' => $pedido->id, 'guia' => $conPdf['id'], 'modo' => 'ver']) }}" target="_blank" rel="noopener noreferrer"
-           class="icon-printer inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-xl text-blue-600 transition-all hover:bg-blue-50 dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-950"
-           data-accion="ver_guia" title="@lang('logistica::app.despachos.acciones.ver_guia')" aria-label="@lang('logistica::app.despachos.acciones.ver_guia') #{{ $pedido->increment_id }}"></a>
+           class="secondary-button inline-flex items-center gap-1"
+           data-accion="ver_guia" title="@lang('logistica::app.despachos.acciones.ver_guia')" aria-label="@lang('logistica::app.despachos.acciones.ver_guia') #{{ $pedido->increment_id }}">
+            <span class="icon-printer text-xl"></span> @lang('logistica::app.despachos.acciones.ver_guia')
+        </a>
 
         <a href="{{ route('admin.ventas_asesor.pedidos.guia', ['pedido' => $pedido->id, 'guia' => $conPdf['id'], 'modo' => 'descargar']) }}"
            class="icon-down-stat inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-xl text-blue-600 transition-all hover:bg-blue-50 dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-950"
