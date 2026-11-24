@@ -8,7 +8,7 @@ use ByLopez\VentasAsesor\Exceptions\AutoservicioInvalidoException;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\AplicarTallasNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\ColoresNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\IniciarConTallasAutoservicioRequest;
-use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\MatricesNuevaVentaRequest;
+use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\MatricesAutoservicioRequest;
 use ByLopez\VentasAsesor\Services\Autoservicio\ClienteActualService;
 use ByLopez\VentasAsesor\Services\Autoservicio\PedidosClienteService;
 use ByLopez\VentasAsesor\Services\Venta\BorradorVentaService;
