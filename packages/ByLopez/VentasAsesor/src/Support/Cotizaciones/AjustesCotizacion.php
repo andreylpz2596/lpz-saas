@@ -24,7 +24,22 @@ class AjustesCotizacion
             'nombre' => $this->valor('encabezado.empresa_nombre') ?: 'LÓPEZ LÓPEZ',
             'detalle' => $this->valor('encabezado.empresa_detalle'),
             'contacto' => $this->valor('encabezado.empresa_contacto'),
+            'logo' => $this->logoParaPdf(),
         ];
+    }
+
+    /** Logo de la empresa (el mismo de la factura, Configuracion > Ventas > Facturas) como data URI para dompdf; null si no hay. */
+    private function logoParaPdf(): ?string
+    {
+        $ruta = core()->getConfigData('sales.invoice_settings.pdf_print_outs.logo');
+
+        if (! $ruta || ! \Illuminate\Support\Facades\Storage::disk('public')->exists($ruta)) {
+            return null;
+        }
+
+        $mime = str_ends_with(strtolower($ruta), '.png') ? 'image/png' : 'image/jpeg';
+
+        return 'data:'.$mime.';base64,'.base64_encode(\Illuminate\Support\Facades\Storage::disk('public')->get($ruta));
     }
 
     /**

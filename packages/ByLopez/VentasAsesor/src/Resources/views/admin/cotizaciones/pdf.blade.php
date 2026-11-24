@@ -48,9 +48,14 @@
     <table class="top">
         <tr>
             <td>
+                @if (! empty($encabezado['logo']))
+                    <img src="{{ $encabezado['logo'] }}" alt="{{ $encabezado['nombre'] }}" style="height: 64px;">
+                    @if ($encabezado['detalle'])<div style="font-size: 9px; color: #5E6B9B; margin-top: 2px;">{{ $encabezado['detalle'] }}</div>@endif
+                @else
                 <div class="logo">{{ mb_strtoupper($encabezado['nombre']) }}
                     @if ($encabezado['detalle'])<small>{{ $encabezado['detalle'] }}</small>@endif
                 </div>
+                @endif
             </td>
             <td class="titulo">
                 <h1>Cotización</h1>
