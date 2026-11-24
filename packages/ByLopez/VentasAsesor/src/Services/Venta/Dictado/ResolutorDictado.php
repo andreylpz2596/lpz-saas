@@ -29,6 +29,34 @@ class ResolutorDictado
         return array_map(fn (array $l) => $this->resolver($l, $colores), $interprete->interpretar($texto));
     }
 
+    /** Tallas que se pueden elegir al corregir una linea: codigo del SKU → etiqueta. */
+    public const TALLAS = ['S' => 'S', 'M' => 'M', 'L' => 'L', 'XL' => 'XL', 'U' => 'Única', '2' => '2-4', '6' => '6-8', '10' => '10-12', '14' => '14-16'];
+
+    /**
+     * Corrige una linea a mano (selectores de la pantalla): mismos datos que entiende el dictado, ya elegidos, y la misma
+     * validacion contra el catalogo. El genero elegido cuenta como dicho (no se asume).
+     *
+     * @param  array{texto?: ?string, color: string, genero: ?string, linea: string, talla: string, cantidad: int}  $datos
+     */
+    public function corregir(array $datos): array
+    {
+        $talla = (string) $datos['talla'];
+
+        return $this->resolver([
+            'texto' => (string) ($datos['texto'] ?? ''),
+            'color' => (string) $datos['color'],
+            'candidatos' => [],
+            'genero' => $datos['linea'] === 'TP' ? 'D' : ($datos['genero'] ?? null),
+            'genero_explicito' => true,
+            'linea' => (string) $datos['linea'],
+            'talla' => $talla,
+            'talla_etiqueta' => self::TALLAS[$talla] ?? $talla,
+            'cantidad' => (int) $datos['cantidad'],
+            'problemas' => [],
+            'corregida' => true,
+        ], $this->colores());
+    }
+
     /** @return array<string, int> nombre de color del catalogo → numero del codigo unico */
     public function colores(): array
     {

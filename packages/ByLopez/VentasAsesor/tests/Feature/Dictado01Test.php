@@ -109,3 +109,54 @@ test('DIC01-5 la pantalla de Nueva venta muestra «Dictar pedido» y se apaga co
     $this->actingAs($admin, 'admin')->get(route('admin.ventas_asesor.nueva_venta.pantalla'))->assertOk()->assertDontSee('data-venta="dictado"', false);
     $this->actingAs($admin, 'admin')->postJson(route('admin.ventas_asesor.nueva_venta.dictado.interpretar'), ['texto' => 'roja 2-4 2'])->assertNotFound();
 });
+
+test('DIC01-6 corregir una linea con los selectores la valida otra vez contra el catalogo', function () {
+    $url = route('admin.ventas_asesor.nueva_venta.dictado.corregir');
+    $admin = f03b_admin();
+
+    // ❌ «negro M 4» (dama o caballero) corregida eligiendo Caballero.
+    $this->actingAs($admin, 'admin')
+        ->postJson($url, ['texto' => 'negro M 4', 'color' => 'Negro', 'genero' => 'H', 'linea' => 'DZ', 'talla' => 'M', 'cantidad' => 4])
+        ->assertOk()
+        ->assertJsonPath('linea.estado', 'ok')
+        ->assertJsonPath('linea.sku', '906H-DZ-M')
+        ->assertJsonPath('linea.variante_id', $this->negroCaballero['M'])
+        ->assertJsonPath('linea.producto_id', $this->negroCaballero['padre'])
+        ->assertJsonPath('linea.cantidad', 4)
+        ->assertJsonPath('linea.texto', 'negro M 4')
+        ->assertJsonPath('linea.corregida', true);
+
+    // Una combinacion que no existe sigue en error con el motivo.
+    $this->actingAs($admin, 'admin')
+        ->postJson($url, ['color' => 'Azul Rey', 'genero' => 'D', 'linea' => 'DZ', 'talla' => 'XL', 'cantidad' => 2])
+        ->assertOk()->assertJsonPath('linea.estado', 'error')->assertJsonPath('linea.mensaje', 'Azul Rey Dama no tiene talla XL.');
+
+    // Datos fuera de lo que ofrecen los selectores: 422.
+    $this->actingAs($admin, 'admin')->postJson($url, ['color' => 'Morado Inventado', 'genero' => 'D', 'linea' => 'DZ', 'talla' => 'M', 'cantidad' => 2])
+        ->assertUnprocessable()->assertJsonValidationErrors('color');
+    $this->actingAs($admin, 'admin')->postJson($url, ['color' => 'Negro', 'linea' => 'DZ', 'talla' => 'M', 'cantidad' => 2])
+        ->assertUnprocessable()->assertJsonValidationErrors('genero');
+    $this->actingAs($admin, 'admin')->postJson($url, ['color' => 'Negro', 'genero' => 'D', 'linea' => 'DZ', 'talla' => 'XXXL', 'cantidad' => 0])
+        ->assertUnprocessable()->assertJsonValidationErrors(['talla', 'cantidad']);
+
+    // Sin el permiso de Nueva venta no se puede.
+    $this->actingAs(f03b_admin('custom', ['ventas_asesor', 'ventas_asesor.pedidos']), 'admin')
+        ->postJson($url, ['color' => 'Negro', 'genero' => 'H', 'linea' => 'DZ', 'talla' => 'M', 'cantidad' => 4])->assertUnauthorized();
+});
+
+test('DIC01-7 interpretar devuelve los colores y tallas para los selectores; la pantalla trae Corregir y Omitir', function () {
+    $admin = f03b_admin();
+
+    $this->actingAs($admin, 'admin')->postJson(route('admin.ventas_asesor.nueva_venta.dictado.interpretar'), ['texto' => 'azul S 3'])
+        ->assertOk()
+        ->assertJsonPath('lineas.0.estado', 'error')
+        ->assertJsonPath('colores', ['Negro', 'Azul Oscuro', 'Azul Rey', 'Rojo'])
+        ->assertJsonPath('tallas.2', '2-4')
+        ->assertJsonPath('tallas.U', 'Única');
+
+    $this->actingAs($admin, 'admin')->get(route('admin.ventas_asesor.nueva_venta.pantalla'))
+        ->assertOk()
+        ->assertSee('data-venta="dictado-corregir"', false)
+        ->assertSee('data-venta="dictado-omitir"', false)
+        ->assertSee(route('admin.ventas_asesor.nueva_venta.dictado.corregir'), false);
+});

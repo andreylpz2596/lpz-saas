@@ -274,7 +274,34 @@ class NuevaVentaController extends Controller
         abort_unless((bool) config('ventasasesor.dictado.activo', true), 404);
         $datos = $request->validate(['texto' => ['required', 'string', 'max:3000']]);
 
-        return Respuesta::envolver(fn () => ['lineas' => app(ResolutorDictado::class)->interpretar((string) $datos['texto'])]);
+        $resolutor = app(ResolutorDictado::class);
+
+        return Respuesta::envolver(fn () => [
+            'lineas' => $resolutor->interpretar((string) $datos['texto']),
+            'colores' => array_keys($resolutor->colores()),
+            'tallas' => ResolutorDictado::TALLAS,
+        ]);
+    }
+
+    /** Doc. 34: una linea dictada corregida con los selectores; se valida igual contra el catalogo. No toca la venta. */
+    public function corregirDictado(Request $request): JsonResponse
+    {
+        abort_unless((bool) config('ventasasesor.dictado.activo', true), 404);
+        $resolutor = app(ResolutorDictado::class);
+
+        $datos = $request->validate([
+            'texto' => ['nullable', 'string', 'max:500'],
+            'color' => ['required', 'string', \Illuminate\Validation\Rule::in(array_keys($resolutor->colores()))],
+            'genero' => ['nullable', 'in:D,H,N', 'required_unless:linea,TP'],
+            'linea' => ['required', 'in:DZ,TP'],
+            'talla' => ['required', 'string', \Illuminate\Validation\Rule::in(array_map('strval', array_keys(ResolutorDictado::TALLAS)))],
+            'cantidad' => ['required', 'integer', 'min:1', 'max:9999'],
+        ], [
+            'color.in' => 'Elige un color del catálogo.',
+            'genero.required_unless' => 'Elige dama, caballero o niño.',
+        ]);
+
+        return Respuesta::envolver(fn () => ['linea' => $resolutor->corregir($datos)]);
     }
 
     /** E. Colores de un acceso rapido (linea x color), resuelto por config, nunca por id. */
