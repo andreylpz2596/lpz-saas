@@ -34,14 +34,10 @@
 @pushOnce('scripts')
     <script>
         (function () {
-            // Vue vuelve a pintar el HTML de la ficha al montarse: se busca SIEMPRE la tarjeta vigente (nada de nodos guardados).
+            // La tarjeta vive DENTRO del x-template de la ficha (v-customer-view): al correr este script aun no existe en el DOM y
+            // Vue la crea despues (y puede recrearla). Se busca SIEMPRE la tarjeta vigente y se espera a que aparezca.
             const tarjeta = () => document.querySelector('[data-tarjeta-acceso]');
-
-            if (! tarjeta()) {
-                return;
-            }
-
-            const cliente = tarjeta().dataset.cliente;
+            const cliente = @json((string) $clienteId);
             const base = @json(url(config('app.admin_url').'/ventas-asesor/clientes/__ID__/acceso')).replace('__ID__', cliente);
             const csrf = document.querySelector('meta[name="csrf-token"]')?.content || @json(csrf_token());
             const modal = () => tarjeta().querySelector('[data-acceso-modal]');
@@ -141,8 +137,30 @@
                 }
             }
 
-            async function cargar() {
-                try { datos = await llamar(''); pintar(); } catch (e) { texto(q('[data-acceso-estado]'), e.message); }
+            let pedido = null;
+            let errorCarga = null;
+
+            // Pinta la tarjeta vigente si aun no lo esta (nueva o recreada por Vue). La consulta al servidor se hace UNA vez.
+            function asegurar() {
+                const t = tarjeta();
+
+                if (! t || t.dataset.accesoListo === '1') {
+                    return;
+                }
+
+                t.dataset.accesoListo = '1';
+
+                if (datos) { pintar(); return; }
+                if (errorCarga) { texto(q('[data-acceso-estado]'), errorCarga); return; }
+
+                pedido = pedido || llamar('')
+                    .then((r) => { datos = r; })
+                    .catch((e) => { errorCarga = e.message; });
+
+                pedido.then(() => {
+                    if (! tarjeta()) { return; }
+                    if (datos) { pintar(); } else { texto(q('[data-acceso-estado]'), errorCarga); }
+                });
             }
 
             document.addEventListener('click', (e) => {
@@ -150,8 +168,9 @@
                 if (e.target.closest('[data-acceso-cerrar]')) { modal().close(); }
             });
 
-            // El layout monta Vue en un 'load' registrado DESPUES de este script: se espera a que termine (setTimeout 0) para no pintar sobre nodos que Vue va a reemplazar.
-            if (document.readyState === 'complete') { setTimeout(cargar, 0); } else { window.addEventListener('load', () => setTimeout(cargar, 0)); }
+            new MutationObserver(asegurar).observe(document.documentElement, { childList: true, subtree: true });
+
+            if (document.readyState === 'complete') { setTimeout(asegurar, 0); } else { window.addEventListener('load', () => setTimeout(asegurar, 0)); }
         })();
     </script>
 @endPushOnce
