@@ -25,6 +25,7 @@ use ByLopez\VentasAsesor\Services\Clientes\CrearClienteComercialService;
 use ByLopez\VentasAsesor\Services\Comisiones\TipoOperacionPedidoService;
 use ByLopez\VentasAsesor\Services\Venta\BorradorVentaService;
 use ByLopez\VentasAsesor\Services\Venta\CatalogoVentaService;
+use ByLopez\VentasAsesor\Services\Venta\Dictado\ResolutorDictado;
 use ByLopez\VentasAsesor\Services\Venta\GrupoVentaService;
 use ByLopez\VentasAsesor\Services\Venta\NuevaVentaService;
 use ByLopez\VentasAsesor\Models\BorradorVenta;
@@ -262,6 +263,18 @@ class NuevaVentaController extends Controller
             (string) $request->string('canal'),
             $request->string('referencia_externa')->trim()->value() ?: null,
         )->toArray());
+    }
+
+    /**
+     * Doc. 34: pedido por voz. Interpreta el texto dictado y valida cada linea contra el catalogo (solo lectura: no toca la
+     * venta). La pantalla agrega lo resuelto con «aplicar tallas», igual que la matriz.
+     */
+    public function interpretarDictado(Request $request): JsonResponse
+    {
+        abort_unless((bool) config('ventasasesor.dictado.activo', true), 404);
+        $datos = $request->validate(['texto' => ['required', 'string', 'max:3000']]);
+
+        return Respuesta::envolver(fn () => ['lineas' => app(ResolutorDictado::class)->interpretar((string) $datos['texto'])]);
     }
 
     /** E. Colores de un acceso rapido (linea x color), resuelto por config, nunca por id. */

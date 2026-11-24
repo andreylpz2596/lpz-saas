@@ -28,6 +28,24 @@
             .nv-cot-badge--vencida, .nv-cot-badge--reemplazada { background: #f3f4f6; color: #4b5563; }
             .nv-cot-badge--convertida { background: #dbeafe; color: #1e40af; }
             .nv-cot-error { margin-top: 6px; color: #b91c1c; font-size: 12px; }
+
+            /* Doc. 34: dictar pedido. */
+            .nv-dic-fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+            .nv-dic-ayuda { margin-top: 8px; color: #6b7280; font-size: 12px; }
+            .nv-dic-texto { margin-top: 8px; width: 100%; border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 10px; font-size: 14px; background: transparent; }
+            .nv-dic-acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+            .nv-dic-error { margin-top: 8px; color: #b91c1c; font-size: 13px; }
+            .nv-dic-lista { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+            .nv-dic-linea { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+            .nv-dic-linea--ok { border-color: #86efac; background: #f0fdf4; }
+            .nv-dic-linea--aviso { border-color: #fcd34d; background: #fffbeb; }
+            .nv-dic-linea--error { border-color: #fca5a5; background: #fef2f2; }
+            .nv-dic-producto { flex: 1 1 200px; font-weight: 600; color: #111827; }
+            .nv-dic-sku { color: #6b7280; font-weight: 400; font-size: 12px; }
+            .nv-dic-dato { font-weight: 600; color: #111827; white-space: nowrap; }
+            .nv-dic-dijo { margin-top: 2px; color: #6b7280; font-size: 12px; }
+            .nv-dic-mensaje { margin-top: 2px; color: #92400e; font-size: 12px; }
+            .nv-dic-linea--error .nv-dic-mensaje { color: #b91c1c; }
             .nv-cot-aviso { margin-top: 6px; border-radius: 6px; background: #fffbeb; color: #92400e; padding: 4px 8px; font-size: 12px; }
             html.dark .nv-cot { border-color: #374151; }
             html.dark .nv-cot-meta { color: #9ca3af; }
@@ -450,6 +468,85 @@
                         <template v-if="borradorId || clienteActual">
                             <!-- Productos y Colores -->
                             <div class="flex flex-col gap-4">
+                                @if ($rutaNv('dictado.interpretar') !== '#' && config('ventasasesor.dictado.activo', true))
+                                    <!-- Doc. 34: pedido por voz. El navegador transcribe; el servidor interpreta y valida; se agrega con «aplicar tallas». -->
+                                    <div class="box-shadow rounded bg-white p-4 dark:bg-gray-900" data-venta="dictado">
+                                        <div class="nv-dic-fila">
+                                            <p class="text-base font-semibold text-gray-800 dark:text-white">Dictar pedido</p>
+                                            <button type="button" class="secondary-button" data-venta="dictado-abrir" @click="dictado.abierto = ! dictado.abierto">
+                                                @{{ dictado.abierto ? 'Cerrar' : 'Dictar' }}
+                                            </button>
+                                        </div>
+
+                                        <template v-if="dictado.abierto">
+                                            <p class="nv-dic-ayuda">
+                                                Di color, dama/caballero/niño, talla y cantidad. Ej.: «roja 2-4, 2 unidades; azul rey talla S de dama, 15 unidades».
+                                            </p>
+
+                                            <textarea
+                                                v-model="dictado.texto"
+                                                rows="3"
+                                                class="nv-dic-texto"
+                                                data-venta="dictado-texto"
+                                                placeholder="Toca «Hablar» o escribe / dicta con el teclado…"
+                                            ></textarea>
+
+                                            <div class="nv-dic-acciones">
+                                                <button type="button" :class="dictado.escuchando ? 'primary-button' : 'secondary-button'" data-venta="dictado-hablar" @click="dictadoEscuchar">
+                                                    @{{ dictado.escuchando ? '■ Detener' : '🎤 Hablar' }}
+                                                </button>
+                                                <button type="button" class="primary-button" data-venta="dictado-interpretar" :disabled="dictado.cargando || ! dictado.texto.trim()" @click="dictadoInterpretar">
+                                                    @{{ dictado.cargando ? 'Interpretando…' : 'Interpretar' }}
+                                                </button>
+                                                <button type="button" class="transparent-button" @click="dictadoLimpiar">Limpiar</button>
+                                            </div>
+
+                                            <p v-if="dictado.error" class="nv-dic-error" data-venta="dictado-error">@{{ dictado.error }}</p>
+
+                                            <div v-if="dictado.lineas.length" class="nv-dic-lista" data-venta="dictado-lineas">
+                                                <div
+                                                    v-for="(l, i) in dictado.lineas"
+                                                    :key="i"
+                                                    class="nv-dic-linea"
+                                                    :class="'nv-dic-linea--' + l.estado"
+                                                >
+                                                    <div class="nv-dic-fila">
+                                                        <span class="nv-dic-estado">@{{ l.estado === 'ok' ? '✅' : (l.estado === 'aviso' ? '⚠️' : '❌') }}</span>
+                                                        <span class="nv-dic-producto">
+                                                            <template v-if="l.nombre">@{{ l.nombre }} <span class="nv-dic-sku">@{{ l.sku }}</span></template>
+                                                            <template v-else>@{{ l.color || 'Sin color' }}</template>
+                                                        </span>
+                                                        <span class="nv-dic-dato">Talla @{{ l.talla_etiqueta || '—' }}</span>
+                                                        <span class="nv-dic-dato">× @{{ l.cantidad ?? '—' }}</span>
+                                                    </div>
+                                                    <p class="nv-dic-dijo">Dijo: «@{{ l.texto }}»</p>
+                                                    <p v-if="l.mensaje" class="nv-dic-mensaje">@{{ l.mensaje }}</p>
+                                                </div>
+
+                                                <p v-if="dictadoValidas.length < dictado.lineas.length" class="nv-dic-ayuda">
+                                                    Las líneas con ❌ no se agregan: corrige el texto y vuelve a «Interpretar».
+                                                </p>
+
+                                                <div v-if="dictado.resultado" class="nv-dic-error">
+                                                    <p v-if="dictado.resultado.guardados.length">Agregados: @{{ dictado.resultado.guardados.join(', ') }}.</p>
+                                                    <p v-for="p in dictado.resultado.pendientes">No se agregó @{{ p.nombre }}: @{{ p.mensaje }}</p>
+                                                </div>
+
+                                                <button
+                                                    v-if="dictadoValidas.length"
+                                                    type="button"
+                                                    class="primary-button"
+                                                    data-venta="dictado-agregar"
+                                                    :disabled="dictado.agregando"
+                                                    @click="dictadoAgregar"
+                                                >
+                                                    @{{ dictado.agregando ? 'Agregando…' : 'Agregar ' + dictadoValidas.length + (dictadoValidas.length === 1 ? ' línea' : ' líneas') + ' a la venta' }}
+                                                </button>
+                                            </div>
+                                        </template>
+                                    </div>
+                                @endif
+
                                 <div
                                     id="seccion-productos"
                                     class="box-shadow rounded bg-white p-4 dark:bg-gray-900"
@@ -2503,6 +2600,9 @@
                         creditoCliente: null,
                         creditoAplicar: { monto: '', enviando: false, error: null, hecho: null, claves: {} },
 
+                        // Doc. 34: pedido por voz (el navegador transcribe; el servidor interpreta y valida contra el catalogo).
+                        dictado: { abierto: false, texto: '', escuchando: false, cargando: false, agregando: false, lineas: [], error: null, resultado: null },
+
                         cargando: {
                             cliente: false, colores: false, matrices: false, tallas: false, direccion: false,
                             entrega: false, pago: false, confirmar: false, domiciliario: false, crearCliente: false, enCurso: false,
@@ -2529,6 +2629,11 @@
                 },
 
                 computed: {
+                    /** Doc. 34: lineas dictadas que ya tienen una variante exacta (ok o aviso). */
+                    dictadoValidas() {
+                        return this.dictado.lineas.filter((l) => l.variante_id && l.estado !== 'error');
+                    },
+
                     /** D10 V1: tope aplicable = menor entre el saldo a favor y lo que debe el pedido recien creado. */
                     creditoMaximoAplicable() {
                         const disponible = Number(this.creditoCliente?.total_disponible ?? 0);
@@ -2934,6 +3039,141 @@
                 },
 
                 methods: {
+                    /**
+                     * Doc. 34: dictar con el reconocimiento de voz del navegador (Chrome, Edge, Android; Safari en iPhone con el
+                     * dictado activado). Sin soporte se explica que se use el microfono del teclado sobre el mismo cuadro.
+                     */
+                    dictadoEscuchar() {
+                        const Reconocimiento = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+                        if (this.dictado.escuchando) {
+                            this._reconocimiento && this._reconocimiento.stop();
+
+                            return;
+                        }
+
+                        if (! Reconocimiento) {
+                            this.dictado.error = 'Este navegador no reconoce la voz. Toca el cuadro de texto y usa el micrófono del teclado del celular.';
+
+                            return;
+                        }
+
+                        const r = new Reconocimiento();
+                        const base = this.dictado.texto.trim() ? this.dictado.texto.trim() + ', ' : '';
+
+                        r.lang = 'es-CO';
+                        r.continuous = true;
+                        r.interimResults = true;
+                        r.onresult = (evento) => {
+                            let finales = '';
+                            let parcial = '';
+
+                            for (let i = 0; i < evento.results.length; i++) {
+                                const trozo = evento.results[i][0].transcript.trim();
+
+                                if (evento.results[i].isFinal) {
+                                    finales += trozo + ', ';
+                                } else {
+                                    parcial += trozo + ' ';
+                                }
+                            }
+
+                            this.dictado.texto = (base + finales + parcial).trim();
+                        };
+                        r.onerror = (evento) => {
+                            this.dictado.error = evento.error === 'not-allowed' || evento.error === 'service-not-allowed'
+                                ? 'Permite el uso del micrófono para este sitio en el navegador.'
+                                : (evento.error === 'no-speech' ? 'No se escuchó nada. Intenta de nuevo.' : 'No se pudo escuchar (' + evento.error + ').');
+                        };
+                        r.onend = () => { this.dictado.escuchando = false; };
+
+                        this._reconocimiento = r;
+                        this.dictado.error = null;
+                        this.dictado.escuchando = true;
+                        r.start();
+                    },
+
+                    dictadoInterpretar() {
+                        if (this.dictado.escuchando && this._reconocimiento) {
+                            this._reconocimiento.stop();
+                        }
+
+                        this.dictado.cargando = true;
+                        this.dictado.error = null;
+                        this.dictado.resultado = null;
+
+                        this.$axios.post("{{ $rutaNv('dictado.interpretar') }}", { texto: this.dictado.texto })
+                            .then((response) => {
+                                this.dictado.lineas = response.data.lineas || [];
+
+                                if (! this.dictado.lineas.length) {
+                                    this.dictado.error = 'No se entendió ninguna prenda. Ejemplo: «roja talla M de dama, 10 unidades».';
+                                }
+                            })
+                            .catch((error) => {
+                                this.dictado.error = error.response?.data?.message || error.response?.data?.mensaje || 'No se pudo interpretar el pedido.';
+                            })
+                            .finally(() => { this.dictado.cargando = false; });
+                    },
+
+                    dictadoLimpiar() {
+                        this.dictado.texto = '';
+                        this.dictado.lineas = [];
+                        this.dictado.error = null;
+                        this.dictado.resultado = null;
+                    },
+
+                    /**
+                     * Agrega las lineas validas con el MISMO «aplicar tallas» de la matriz: un lote por producto (linea x color), en
+                     * secuencia (el primero crea la venta si aun no existe). aplicarTallas recibe la cantidad FINAL por talla: se suma lo
+                     * que la venta ya tenia de esa talla + lo dictado (y lo repetido en el dictado).
+                     */
+                    dictadoAgregar() {
+                        const porProducto = {};
+
+                        this.dictadoValidas.forEach((l) => {
+                            porProducto[l.producto_id] = porProducto[l.producto_id] || {};
+                            porProducto[l.producto_id][l.variante_id] = (porProducto[l.producto_id][l.variante_id] || 0) + Number(l.cantidad);
+                        });
+
+                        const enVenta = (varianteId) => {
+                            const linea = (this.estado?.lineas || []).find((x) => x.varianteId === varianteId);
+
+                            return linea ? Number(linea.cantidad) : 0;
+                        };
+
+                        const lotes = Object.entries(porProducto).map(([productId, cantidades]) => ({
+                            productId: Number(productId),
+                            nombre: (this.dictadoValidas.find((l) => l.producto_id === Number(productId)) || {}).nombre,
+                            cantidades: Object.fromEntries(Object.entries(cantidades).map(([vid, c]) => [vid, c + enVenta(Number(vid))])),
+                        }));
+
+                        const resultados = [];
+
+                        this.dictado.agregando = true;
+                        this.dictado.resultado = null;
+
+                        lotes
+                            .reduce((cadena, lote) => cadena.then(() => this.aplicarCantidadesProducto(lote.productId, lote.cantidades, { sincronizar: false })
+                                .then((r) => { resultados.push({ nombre: lote.nombre, ...r }); })), Promise.resolve())
+                            .then(() => {
+                                const fallidos = resultados.filter((r) => ! r.ok);
+
+                                if (! fallidos.length) {
+                                    this.$emitter.emit('add-flash', { type: 'success', message: 'Pedido dictado agregado a la venta.' });
+                                    this.dictadoLimpiar();
+
+                                    return;
+                                }
+
+                                this.dictado.resultado = {
+                                    guardados: resultados.filter((r) => r.ok).map((r) => r.nombre),
+                                    pendientes: fallidos.map((r) => ({ nombre: r.nombre, mensaje: r.mensaje })),
+                                };
+                            })
+                            .finally(() => { this.dictado.agregando = false; });
+                    },
+
                     /** D10 V1: saldo a favor del cliente. Sin permiso responde visible:false (o es refusado) y simplemente no se ofrece. */
                     cargarCreditoCliente(customerId) {
                         this.creditoCliente = null;

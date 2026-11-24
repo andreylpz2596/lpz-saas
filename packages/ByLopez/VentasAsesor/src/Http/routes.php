@@ -174,6 +174,8 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
             Route::post('iniciar', [NuevaVentaController::class, 'iniciar'])->name('iniciar');
             Route::post('iniciar-con-tallas', [NuevaVentaController::class, 'iniciarConTallas'])->name('iniciar_con_tallas');
             Route::post('iniciar-cliente-nuevo', [NuevaVentaController::class, 'iniciarConClienteNuevo'])->name('iniciar_cliente_nuevo');
+            // Doc. 34: pedido por voz (interpreta y valida el texto dictado; no toca la venta).
+            Route::post('dictado/interpretar', [NuevaVentaController::class, 'interpretarDictado'])->name('dictado.interpretar');
             Route::get('lineas/{clave}/colores', [NuevaVentaController::class, 'colores'])->name('lineas.colores');
             Route::get('productos/{producto}/matriz', [NuevaVentaController::class, 'matriz'])->name('productos.matriz');
             Route::get('matrices', [NuevaVentaController::class, 'matrices'])->name('matrices');
