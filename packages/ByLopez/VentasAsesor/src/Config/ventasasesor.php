@@ -234,4 +234,18 @@ return [
         // Texto de la talla en el NOMBRE de la variante.
         'tallas_nombre' => ['T-Unica' => 'Única'],
     ],
+
+    /*
+     * Doc. 34: pedido por voz en Nueva venta. El navegador pasa la voz a texto; el servidor lo interpreta con reglas propias
+     * (InterpreteDictado) y valida contra el catalogo con el codigo unico (ResolutorDictado). Sin servicios externos.
+     */
+    'dictado' => [
+        'activo' => (bool) env('VENTASASESOR_DICTADO_ACTIVO', true),
+        // Palabras que el catalogo no tiene tal cual. Un destino = color exacto; varios = ambiguo (se pide elegir).
+        // Una palabra que solo aparece en UN color ya lo identifica sola («turquesa», «vino», «militar»).
+        'alias_colores' => [
+            'rosa' => ['Rosado', 'Palo de Rosa'],
+            'cafe' => ['Café'],
+        ],
+    ],
 ];

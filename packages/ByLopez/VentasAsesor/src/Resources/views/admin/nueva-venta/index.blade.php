@@ -28,6 +28,31 @@
             .nv-cot-badge--vencida, .nv-cot-badge--reemplazada { background: #f3f4f6; color: #4b5563; }
             .nv-cot-badge--convertida { background: #dbeafe; color: #1e40af; }
             .nv-cot-error { margin-top: 6px; color: #b91c1c; font-size: 12px; }
+
+            /* Doc. 34: dictar pedido. */
+            .nv-dic-fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+            .nv-dic-ayuda { margin-top: 8px; color: #6b7280; font-size: 12px; }
+            .nv-dic-texto { margin-top: 8px; width: 100%; border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 10px; font-size: 14px; background: transparent; }
+            .nv-dic-acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+            .nv-dic-error { margin-top: 8px; color: #b91c1c; font-size: 13px; }
+            .nv-dic-lista { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+            .nv-dic-linea { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+            .nv-dic-linea--ok { border-color: #86efac; background: #f0fdf4; }
+            .nv-dic-linea--aviso { border-color: #fcd34d; background: #fffbeb; }
+            .nv-dic-linea--error { border-color: #fca5a5; background: #fef2f2; }
+            .nv-dic-producto { flex: 1 1 200px; font-weight: 600; color: #111827; }
+            .nv-dic-sku { color: #6b7280; font-weight: 400; font-size: 12px; }
+            .nv-dic-dato { font-weight: 600; color: #111827; white-space: nowrap; }
+            .nv-dic-dijo { margin-top: 2px; color: #6b7280; font-size: 12px; }
+            .nv-dic-mensaje { margin-top: 2px; color: #92400e; font-size: 12px; }
+            .nv-dic-linea--error .nv-dic-mensaje { color: #b91c1c; }
+            .nv-dic-linea--omitida { border-color: #e5e7eb; background: #f9fafb; opacity: .7; }
+            .nv-dic-acciones--linea { margin-top: 6px; }
+            .nv-dic-acciones--linea button { padding: 4px 10px; font-size: 12px; }
+            .nv-dic-editor { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #d1d5db; }
+            .nv-dic-editor .nv-dic-acciones, .nv-dic-editor .nv-dic-error { grid-column: 1 / -1; margin-top: 0; }
+            .nv-dic-campo { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: #4b5563; }
+            .nv-dic-campo select, .nv-dic-campo input { border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 8px; font-size: 14px; background: #fff; color: #111827; min-height: 38px; }
             .nv-cot-aviso { margin-top: 6px; border-radius: 6px; background: #fffbeb; color: #92400e; padding: 4px 8px; font-size: 12px; }
             html.dark .nv-cot { border-color: #374151; }
             html.dark .nv-cot-meta { color: #9ca3af; }
@@ -450,6 +475,137 @@
                         <template v-if="borradorId || clienteActual">
                             <!-- Productos y Colores -->
                             <div class="flex flex-col gap-4">
+                                @if ($rutaNv('dictado.interpretar') !== '#' && config('ventasasesor.dictado.activo', true))
+                                    <!-- Doc. 34: pedido por voz. El navegador transcribe; el servidor interpreta y valida; se agrega con «aplicar tallas». -->
+                                    <div class="box-shadow rounded bg-white p-4 dark:bg-gray-900" data-venta="dictado">
+                                        <div class="nv-dic-fila">
+                                            <p class="text-base font-semibold text-gray-800 dark:text-white">Dictar pedido</p>
+                                            <button type="button" class="secondary-button" data-venta="dictado-abrir" @click="dictado.abierto = ! dictado.abierto">
+                                                @{{ dictado.abierto ? 'Cerrar' : 'Dictar' }}
+                                            </button>
+                                        </div>
+
+                                        <template v-if="dictado.abierto">
+                                            <p class="nv-dic-ayuda">
+                                                Di color, dama/caballero/niño, talla y cantidad. Ej.: «roja 2-4, 2 unidades; azul rey talla S de dama, 15 unidades».
+                                            </p>
+
+                                            <textarea
+                                                v-model="dictado.texto"
+                                                rows="3"
+                                                class="nv-dic-texto"
+                                                data-venta="dictado-texto"
+                                                placeholder="Toca «Hablar» o escribe / dicta con el teclado…"
+                                            ></textarea>
+
+                                            <div class="nv-dic-acciones">
+                                                <button type="button" :class="dictado.escuchando ? 'primary-button' : 'secondary-button'" data-venta="dictado-hablar" @click="dictadoEscuchar">
+                                                    @{{ dictado.escuchando ? '■ Detener' : '🎤 Hablar' }}
+                                                </button>
+                                                <button type="button" class="primary-button" data-venta="dictado-interpretar" :disabled="dictado.cargando || ! dictado.texto.trim()" @click="dictadoInterpretar">
+                                                    @{{ dictado.cargando ? 'Interpretando…' : 'Interpretar' }}
+                                                </button>
+                                                <button type="button" class="transparent-button" @click="dictadoLimpiar">Limpiar</button>
+                                            </div>
+
+                                            <p v-if="dictado.error" class="nv-dic-error" data-venta="dictado-error">@{{ dictado.error }}</p>
+
+                                            <div v-if="dictado.lineas.length" class="nv-dic-lista" data-venta="dictado-lineas">
+                                                <div
+                                                    v-for="(l, i) in dictado.lineas"
+                                                    :key="i"
+                                                    class="nv-dic-linea"
+                                                    :class="l.omitida ? 'nv-dic-linea--omitida' : 'nv-dic-linea--' + l.estado"
+                                                    :data-dictado-linea="i"
+                                                >
+                                                    <div class="nv-dic-fila">
+                                                        <span class="nv-dic-estado">@{{ l.omitida ? '⏭️' : (l.estado === 'ok' ? '✅' : (l.estado === 'aviso' ? '⚠️' : '❌')) }}</span>
+                                                        <span class="nv-dic-producto">
+                                                            <template v-if="l.nombre">@{{ l.nombre }} <span class="nv-dic-sku">@{{ l.sku }}</span></template>
+                                                            <template v-else>@{{ l.color || 'Sin color' }}</template>
+                                                        </span>
+                                                        <span class="nv-dic-dato">Talla @{{ l.talla_etiqueta || '—' }}</span>
+                                                        <span class="nv-dic-dato">× @{{ l.cantidad ?? '—' }}</span>
+                                                    </div>
+                                                    <p v-if="l.texto" class="nv-dic-dijo">Dijo: «@{{ l.texto }}»<template v-if="l.corregida"> · corregida</template></p>
+                                                    <p v-if="l.omitida" class="nv-dic-mensaje">Omitida: no se agrega.</p>
+                                                    <p v-else-if="l.mensaje" class="nv-dic-mensaje">@{{ l.mensaje }}</p>
+
+                                                    <!-- Corregir con selectores: color, tipo, talla y cantidad; se valida otra vez contra el catalogo. -->
+                                                    <div v-if="l.editando" class="nv-dic-editor" data-venta="dictado-editor">
+                                                        <label class="nv-dic-campo">
+                                                            <span>Color</span>
+                                                            <select v-model="l.form.color" data-venta="dictado-color">
+                                                                <option value="">Elige…</option>
+                                                                <optgroup v-if="l.candidatos && l.candidatos.length" label="Lo que dijiste">
+                                                                    <option v-for="c in l.candidatos" :key="'c' + c" :value="c">@{{ c }}</option>
+                                                                </optgroup>
+                                                                <optgroup label="Todos los colores">
+                                                                    <option v-for="c in dictado.colores" :key="c" :value="c">@{{ c }}</option>
+                                                                </optgroup>
+                                                            </select>
+                                                        </label>
+                                                        <label class="nv-dic-campo">
+                                                            <span>Tipo</span>
+                                                            <select v-model="l.form.tipo" data-venta="dictado-tipo" @change="dictadoAjustarTalla(l)">
+                                                                <option value="D">Dama</option>
+                                                                <option value="H">Caballero</option>
+                                                                <option value="N">Niño</option>
+                                                                <option value="TP">Crop top</option>
+                                                            </select>
+                                                        </label>
+                                                        <label class="nv-dic-campo">
+                                                            <span>Talla</span>
+                                                            <select v-model="l.form.talla" data-venta="dictado-talla">
+                                                                <option value="">Elige…</option>
+                                                                <option v-for="t in dictadoTallasDe(l.form.tipo)" :key="t" :value="t">@{{ dictado.tallas[t] || t }}</option>
+                                                            </select>
+                                                        </label>
+                                                        <label class="nv-dic-campo nv-dic-campo--cantidad">
+                                                            <span>Cantidad</span>
+                                                            <input v-model.number="l.form.cantidad" type="number" min="1" max="9999" inputmode="numeric" data-venta="dictado-cantidad">
+                                                        </label>
+                                                        <p v-if="l.errorEdicion" class="nv-dic-error">@{{ l.errorEdicion }}</p>
+                                                        <div class="nv-dic-acciones">
+                                                            <button type="button" class="primary-button" data-venta="dictado-validar" :disabled="l.validando" @click="dictadoValidarCorreccion(i)">
+                                                                @{{ l.validando ? 'Validando…' : 'Validar' }}
+                                                            </button>
+                                                            <button type="button" class="transparent-button" @click="l.editando = false">Cancelar</button>
+                                                        </div>
+                                                    </div>
+
+                                                    <div v-else class="nv-dic-acciones nv-dic-acciones--linea">
+                                                        <button v-if="! l.omitida" type="button" class="secondary-button" data-venta="dictado-corregir" @click="dictadoEditar(l)">Corregir</button>
+                                                        <button type="button" class="transparent-button" data-venta="dictado-omitir" @click="l.omitida = ! l.omitida">
+                                                            @{{ l.omitida ? 'Incluir de nuevo' : 'Omitir' }}
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <p v-if="dictadoPendientes" class="nv-dic-error" data-venta="dictado-pendientes">
+                                                    @{{ dictadoPendientes === 1 ? 'Hay 1 línea con ❌' : 'Hay ' + dictadoPendientes + ' líneas con ❌' }}: corrígela(s) u omítela(s) para poder agregar.
+                                                </p>
+
+                                                <div v-if="dictado.resultado" class="nv-dic-error">
+                                                    <p v-if="dictado.resultado.guardados.length">Agregados: @{{ dictado.resultado.guardados.join(', ') }}.</p>
+                                                    <p v-for="p in dictado.resultado.pendientes">No se agregó @{{ p.nombre }}: @{{ p.mensaje }}</p>
+                                                </div>
+
+                                                <button
+                                                    v-if="dictadoValidas.length"
+                                                    type="button"
+                                                    class="primary-button"
+                                                    data-venta="dictado-agregar"
+                                                    :disabled="dictado.agregando || dictadoPendientes > 0 || dictado.lineas.some((x) => x.editando)"
+                                                    @click="dictadoAgregar"
+                                                >
+                                                    @{{ dictado.agregando ? 'Agregando…' : 'Agregar ' + dictadoValidas.length + (dictadoValidas.length === 1 ? ' línea' : ' líneas') + ' a la venta' }}
+                                                </button>
+                                            </div>
+                                        </template>
+                                    </div>
+                                @endif
+
                                 <div
                                     id="seccion-productos"
                                     class="box-shadow rounded bg-white p-4 dark:bg-gray-900"
@@ -798,7 +954,7 @@
                                                     :class="celda.variante.stockVendible === 0 ? 'bg-red-50 text-gray-400 dark:bg-red-950/40 dark:text-gray-500' : cantidadDe(tarjeta.productId, celda.variante.productId) > celda.variante.stockVendible ? 'bg-red-50 dark:bg-red-950' : ''"
                                                 >
                                                     <td class="py-2 text-base font-bold text-gray-900 dark:text-white">
-                                                        @{{ celda.variante.opciones.size ? celda.variante.opciones.size.etiqueta : celda.variante.sku }}
+                                                        @{{ tallaDe(celda.variante) }}
                                                     </td>
 
                                                     <td
@@ -1141,6 +1297,14 @@
                                                 <span class="block font-medium text-gray-800 dark:text-white">@{{ dir.nombre }} @{{ dir.apellido }}</span>
                                                 <span class="block text-xs text-gray-500 dark:text-gray-400">@{{ dir.direccion }} · @{{ dir.ciudad }}, @{{ nombreDepartamento(dir.departamento) }}</span>
                                             </span>
+                                            <button
+                                                type="button"
+                                                class="ml-auto shrink-0 text-xs font-semibold text-blue-600 hover:underline disabled:opacity-50 dark:text-blue-300"
+                                                :disabled="ocupado || ! ventaEditable"
+                                                @click.prevent.stop="abrirFormDireccion('facturacion', dir)"
+                                            >
+                                                Editar
+                                            </button>
                                         </label>
                                     </div>
 
@@ -1213,6 +1377,15 @@
                                             <span class="block text-gray-600 dark:text-gray-300">@{{ dir.direccion }}</span>
                                             <span class="block text-gray-600 dark:text-gray-300">@{{ dir.ciudad }}, @{{ nombreDepartamento(dir.departamento) }}</span>
                                         </span>
+
+                                        <button
+                                            type="button"
+                                            class="ml-auto shrink-0 rounded-md border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50 dark:border-blue-900 dark:text-blue-300 dark:hover:bg-blue-950"
+                                            :disabled="ocupado || ! ventaEditable"
+                                            @click.prevent.stop="abrirFormDireccion('envio', dir)"
+                                        >
+                                            Editar
+                                        </button>
                                     </label>
                                 </div>
 
@@ -1782,7 +1955,9 @@
                 <x-admin::modal ref="modalDireccion">
                     <x-slot:header>
                         <p class="text-lg font-bold text-gray-800 dark:text-white">
-                            @{{ formDireccion.para === 'facturacion' ? 'Agregar dirección de facturación' : 'Agregar dirección' }}
+                            @{{ formDireccion.editarId
+                                ? (formDireccion.para === 'facturacion' ? 'Editar dirección de facturación' : 'Editar dirección')
+                                : (formDireccion.para === 'facturacion' ? 'Agregar dirección de facturación' : 'Agregar dirección') }}
                         </p>
                     </x-slot>
 
@@ -1880,7 +2055,11 @@
                                 <input class="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900" inputmode="numeric" autocomplete="postal-code" v-model="formDireccion.datos.codigo_postal" />
                             </div>
 
-                            <label class="flex items-start gap-2 text-sm text-gray-700 sm:col-span-2 dark:text-gray-200">
+                            <p v-if="formDireccion.editarId" class="text-xs text-gray-500 sm:col-span-2 dark:text-gray-400">
+                                Se corrige la dirección guardada del cliente. Los pedidos ya creados conservan la dirección con la que se hicieron.
+                            </p>
+
+                            <label v-else class="flex items-start gap-2 text-sm text-gray-700 sm:col-span-2 dark:text-gray-200">
                                 <input type="checkbox" class="mt-0.5 h-4 w-4 accent-blue-600" v-model="formDireccion.guardar" />
                                 <span>
                                     Guardar en las direcciones del cliente
@@ -1896,7 +2075,7 @@
                         <div class="flex w-full flex-wrap justify-end gap-2">
                             <button type="button" class="transparent-button" @click="cerrarFormDireccion">Cancelar</button>
                             <button type="button" class="primary-button" :disabled="cargando.guardarDireccion" @click="guardarDireccionNueva">
-                                @{{ cargando.guardarDireccion ? 'Guardando…' : 'Guardar dirección' }}
+                                @{{ cargando.guardarDireccion ? 'Guardando…' : (formDireccion.editarId ? 'Guardar cambios' : 'Guardar dirección') }}
                             </button>
                         </div>
                     </x-slot:footer>
@@ -2398,6 +2577,8 @@
                             para: 'envio',
                             guardar: true,
                             error: null,
+                            // id de la direccion guardada que se esta corrigiendo (null = agregar una nueva).
+                            editarId: null,
                             // ubicacion: opcion elegida del autocomplete {municipio_codigo, municipio, departamento, etiqueta}.
                             // ciudad/departamento son solo para MOSTRAR la direccion puntual; el backend resuelve ambos del codigo.
                             datos: { nombre: '', apellido: '', telefono: '', linea: '', ciudad: '', departamento: '', codigo_postal: '', municipio_codigo: null, ubicacion: null },
@@ -2478,6 +2659,9 @@
                         creditoCliente: null,
                         creditoAplicar: { monto: '', enviando: false, error: null, hecho: null, claves: {} },
 
+                        // Doc. 34: pedido por voz (el navegador transcribe; el servidor interpreta y valida contra el catalogo).
+                        dictado: { abierto: false, texto: '', escuchando: false, cargando: false, agregando: false, lineas: [], colores: [], tallas: {}, error: null, resultado: null },
+
                         cargando: {
                             cliente: false, colores: false, matrices: false, tallas: false, direccion: false,
                             entrega: false, pago: false, confirmar: false, domiciliario: false, crearCliente: false, enCurso: false,
@@ -2504,6 +2688,16 @@
                 },
 
                 computed: {
+                    /** Doc. 34: lineas dictadas que ya tienen una variante exacta (ok o aviso). */
+                    dictadoValidas() {
+                        return this.dictado.lineas.filter((l) => ! l.omitida && l.variante_id && l.estado !== 'error');
+                    },
+
+                    /** Lineas con ❌ que aun no se corrigen ni se omiten: mientras haya, no se agrega nada. */
+                    dictadoPendientes() {
+                        return this.dictado.lineas.filter((l) => ! l.omitida && (! l.variante_id || l.estado === 'error')).length;
+                    },
+
                     /** D10 V1: tope aplicable = menor entre el saldo a favor y lo que debe el pedido recien creado. */
                     creditoMaximoAplicable() {
                         const disponible = Number(this.creditoCliente?.total_disponible ?? 0);
@@ -2909,6 +3103,221 @@
                 },
 
                 methods: {
+                    /**
+                     * Doc. 34: dictar con el reconocimiento de voz del navegador (Chrome, Edge, Android; Safari en iPhone con el
+                     * dictado activado). Sin soporte se explica que se use el microfono del teclado sobre el mismo cuadro.
+                     */
+                    dictadoEscuchar() {
+                        const Reconocimiento = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+                        if (this.dictado.escuchando) {
+                            this._reconocimiento && this._reconocimiento.stop();
+
+                            return;
+                        }
+
+                        if (! Reconocimiento) {
+                            this.dictado.error = 'Este navegador no reconoce la voz. Toca el cuadro de texto y usa el micrófono del teclado del celular.';
+
+                            return;
+                        }
+
+                        const r = new Reconocimiento();
+                        const base = this.dictado.texto.trim() ? this.dictado.texto.trim() + ', ' : '';
+
+                        r.lang = 'es-CO';
+                        r.continuous = true;
+                        r.interimResults = true;
+                        r.onresult = (evento) => {
+                            let finales = '';
+                            let parcial = '';
+
+                            for (let i = 0; i < evento.results.length; i++) {
+                                const trozo = evento.results[i][0].transcript.trim();
+
+                                if (evento.results[i].isFinal) {
+                                    finales += trozo + ', ';
+                                } else {
+                                    parcial += trozo + ' ';
+                                }
+                            }
+
+                            this.dictado.texto = (base + finales + parcial).trim();
+                        };
+                        r.onerror = (evento) => {
+                            this.dictado.error = evento.error === 'not-allowed' || evento.error === 'service-not-allowed'
+                                ? 'Permite el uso del micrófono para este sitio en el navegador.'
+                                : (evento.error === 'no-speech' ? 'No se escuchó nada. Intenta de nuevo.' : 'No se pudo escuchar (' + evento.error + ').');
+                        };
+                        r.onend = () => { this.dictado.escuchando = false; };
+
+                        this._reconocimiento = r;
+                        this.dictado.error = null;
+                        this.dictado.escuchando = true;
+                        r.start();
+                    },
+
+                    dictadoInterpretar() {
+                        if (this.dictado.escuchando && this._reconocimiento) {
+                            this._reconocimiento.stop();
+                        }
+
+                        this.dictado.cargando = true;
+                        this.dictado.error = null;
+                        this.dictado.resultado = null;
+
+                        this.$axios.post("{{ $rutaNv('dictado.interpretar') }}", { texto: this.dictado.texto })
+                            .then((response) => {
+                                this.dictado.colores = response.data.colores || [];
+                                this.dictado.tallas = response.data.tallas || {};
+                                this.dictado.lineas = (response.data.lineas || []).map((l) => this.dictadoPreparar(l));
+
+                                // Lo que no se pudo resolver abre de una vez los selectores para corregirlo (o se omite).
+                                this.dictado.lineas.filter((l) => l.estado === 'error').forEach((l) => this.dictadoEditar(l));
+
+                                if (! this.dictado.lineas.length) {
+                                    this.dictado.error = 'No se entendió ninguna prenda. Ejemplo: «roja talla M de dama, 10 unidades».';
+                                }
+                            })
+                            .catch((error) => {
+                                this.dictado.error = error.response?.data?.message || error.response?.data?.mensaje || 'No se pudo interpretar el pedido.';
+                            })
+                            .finally(() => { this.dictado.cargando = false; });
+                    },
+
+                    /** Campos de pantalla de una linea dictada (omitir / corregir con selectores). */
+                    dictadoPreparar(l, anterior = null) {
+                        return {
+                            ...l,
+                            texto: l.texto || anterior?.texto || '',
+                            omitida: false,
+                            editando: false,
+                            validando: false,
+                            errorEdicion: null,
+                            form: anterior?.form || { color: '', tipo: 'D', talla: '', cantidad: null },
+                        };
+                    },
+
+                    /** Tallas que ofrece el selector segun el tipo (codigo del SKU; la etiqueta viene del servidor). */
+                    dictadoTallasDe(tipo) {
+                        return { D: ['S', 'M', 'L', 'XL'], H: ['S', 'M', 'L', 'XL'], N: ['2', '6', '10', '14'], TP: ['U'] }[tipo] || [];
+                    },
+
+                    dictadoAjustarTalla(l) {
+                        const tallas = this.dictadoTallasDe(l.form.tipo);
+
+                        if (! tallas.includes(l.form.talla)) {
+                            l.form.talla = tallas.length === 1 ? tallas[0] : '';
+                        }
+                    },
+
+                    /** Abre los selectores con lo que se entendio (el color unico, o vacio si fue ambiguo). */
+                    dictadoEditar(l) {
+                        const tipo = l.linea === 'TP' ? 'TP' : (l.genero || (l.talla && /^\d+$/.test(l.talla) ? 'N' : 'D'));
+
+                        l.form = { color: l.color || '', tipo, talla: l.talla || '', cantidad: l.cantidad ?? null };
+                        this.dictadoAjustarTalla(l);
+                        l.errorEdicion = null;
+                        l.editando = true;
+                    },
+
+                    /** Valida la linea corregida contra el catalogo (mismo resolutor del dictado) y la reemplaza. */
+                    dictadoValidarCorreccion(i) {
+                        const l = this.dictado.lineas[i];
+                        const f = l.form;
+
+                        if (! f.color || ! f.talla || ! (Number(f.cantidad) >= 1)) {
+                            l.errorEdicion = 'Elige color, talla y una cantidad mayor que cero.';
+
+                            return;
+                        }
+
+                        l.validando = true;
+                        l.errorEdicion = null;
+
+                        this.$axios.post("{{ $rutaNv('dictado.corregir') }}", {
+                            texto: l.texto,
+                            color: f.color,
+                            genero: f.tipo === 'TP' ? null : f.tipo,
+                            linea: f.tipo === 'TP' ? 'TP' : 'DZ',
+                            talla: f.talla,
+                            cantidad: Number(f.cantidad),
+                        })
+                            .then((response) => {
+                                const nueva = this.dictadoPreparar(response.data.linea, l);
+
+                                // Si la combinacion no existe se deja abierta para seguir corrigiendo, con el motivo.
+                                if (nueva.estado === 'error') {
+                                    nueva.editando = true;
+                                    nueva.errorEdicion = nueva.mensaje;
+                                }
+
+                                this.dictado.lineas.splice(i, 1, nueva);
+                            })
+                            .catch((error) => {
+                                l.errorEdicion = error.response?.data?.message || error.response?.data?.mensaje || 'No se pudo validar la línea.';
+                            })
+                            .finally(() => { l.validando = false; });
+                    },
+
+                    dictadoLimpiar() {
+                        this.dictado.texto = '';
+                        this.dictado.lineas = [];
+                        this.dictado.error = null;
+                        this.dictado.resultado = null;
+                    },
+
+                    /**
+                     * Agrega las lineas validas con el MISMO «aplicar tallas» de la matriz: un lote por producto (linea x color), en
+                     * secuencia (el primero crea la venta si aun no existe). aplicarTallas recibe la cantidad FINAL por talla: se suma lo
+                     * que la venta ya tenia de esa talla + lo dictado (y lo repetido en el dictado).
+                     */
+                    dictadoAgregar() {
+                        const porProducto = {};
+
+                        this.dictadoValidas.forEach((l) => {
+                            porProducto[l.producto_id] = porProducto[l.producto_id] || {};
+                            porProducto[l.producto_id][l.variante_id] = (porProducto[l.producto_id][l.variante_id] || 0) + Number(l.cantidad);
+                        });
+
+                        const enVenta = (varianteId) => {
+                            const linea = (this.estado?.lineas || []).find((x) => x.varianteId === varianteId);
+
+                            return linea ? Number(linea.cantidad) : 0;
+                        };
+
+                        const lotes = Object.entries(porProducto).map(([productId, cantidades]) => ({
+                            productId: Number(productId),
+                            nombre: (this.dictadoValidas.find((l) => l.producto_id === Number(productId)) || {}).nombre,
+                            cantidades: Object.fromEntries(Object.entries(cantidades).map(([vid, c]) => [vid, c + enVenta(Number(vid))])),
+                        }));
+
+                        const resultados = [];
+
+                        this.dictado.agregando = true;
+                        this.dictado.resultado = null;
+
+                        lotes
+                            .reduce((cadena, lote) => cadena.then(() => this.aplicarCantidadesProducto(lote.productId, lote.cantidades, { sincronizar: false })
+                                .then((r) => { resultados.push({ nombre: lote.nombre, ...r }); })), Promise.resolve())
+                            .then(() => {
+                                const fallidos = resultados.filter((r) => ! r.ok);
+
+                                if (! fallidos.length) {
+                                    this.$emitter.emit('add-flash', { type: 'success', message: 'Pedido dictado agregado a la venta. Para cambiar una cantidad, toca el lápiz del producto en el resumen.' });
+                                    this.dictadoLimpiar();
+
+                                    return;
+                                }
+
+                                this.dictado.resultado = {
+                                    guardados: resultados.filter((r) => r.ok).map((r) => r.nombre),
+                                    pendientes: fallidos.map((r) => ({ nombre: r.nombre, mensaje: r.mensaje })),
+                                };
+                            })
+                            .finally(() => { this.dictado.agregando = false; });
+                    },
+
                     /** D10 V1: saldo a favor del cliente. Sin permiso responde visible:false (o es refusado) y simplemente no se ofrece. */
                     cargarCreditoCliente(customerId) {
                         this.creditoCliente = null;
@@ -3151,7 +3560,8 @@
                         this.aplicarRecogida();
                     },
 
-                    abrirFormDireccion(para) {
+                    /** Sin `dir` agrega una direccion; con `dir` (guardada del cliente) la abre precargada para corregirla. */
+                    abrirFormDireccion(para, dir = null) {
                         const c = this.clienteActual || {};
 
                         this.formDireccion = {
@@ -3159,7 +3569,12 @@
                             para,
                             guardar: true,
                             error: null,
-                            datos: {
+                            editarId: dir ? dir.id : null,
+                            datos: dir ? {
+                                nombre: dir.nombre || '', apellido: dir.apellido || '', telefono: dir.telefono || '',
+                                linea: String(dir.direccion || '').replace(/\s*\n\s*/g, ', '),
+                                ciudad: '', departamento: '', codigo_postal: dir.codigo_postal || '', municipio_codigo: null, ubicacion: null,
+                            } : {
                                 nombre: c.nombre || '', apellido: c.apellido || '',
                                 telefono: c.telefono_principal || c.telefonoPrincipal || '',
                                 linea: '', ciudad: '', departamento: '', codigo_postal: '', municipio_codigo: null, ubicacion: null,
@@ -3167,6 +3582,18 @@
                         };
 
                         this.reiniciarUbicacion();
+
+                        // Municipio guardado que coincide con el catalogo: queda elegido. Si no (texto libre historico),
+                        // el campo queda vacio y hay que elegirlo de la lista, como al agregar.
+                        if (dir && dir.municipio_codigo) {
+                            const departamento = this.nombreDepartamento(dir.departamento);
+
+                            this.elegirUbicacion({
+                                municipio_codigo: dir.municipio_codigo, municipio: dir.ciudad, departamento,
+                                etiqueta: departamento + ' — ' + dir.ciudad,
+                            });
+                        }
+
                         this.$refs.modalDireccion.open();
                     },
 
@@ -3321,7 +3748,14 @@
 
                         this.cargando.guardarDireccion = true;
 
-                        this.$axios.post("{{ url($rutaNv('direcciones.agregar', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
+                        // Editar = corregir la guardada (misma validacion). Al terminar se selecciona como al agregar: elegirla
+                        // vuelve a copiarla al carrito, asi la venta queda con los datos corregidos.
+                        const urlDireccion = this.formDireccion.editarId
+                            // 987654321 = marcador numerico (la ruta exige numero en {direccion}); se reemplaza por el id real.
+                            ? "{{ url($rutaNv('direcciones.editar', ['borrador' => '__ID__', 'direccion' => 987654321])) }}".replace('__ID__', this.borradorId).replace('987654321', this.formDireccion.editarId)
+                            : "{{ url($rutaNv('direcciones.agregar', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId);
+
+                        this.$axios.post(urlDireccion, {
                             nombre: d.nombre, apellido: d.apellido, telefono: d.telefono, lineas: [d.linea],
                             municipio_codigo: d.municipio_codigo, codigo_postal: d.codigo_postal,
                         })

@@ -174,6 +174,9 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
             Route::post('iniciar', [NuevaVentaController::class, 'iniciar'])->name('iniciar');
             Route::post('iniciar-con-tallas', [NuevaVentaController::class, 'iniciarConTallas'])->name('iniciar_con_tallas');
             Route::post('iniciar-cliente-nuevo', [NuevaVentaController::class, 'iniciarConClienteNuevo'])->name('iniciar_cliente_nuevo');
+            // Doc. 34: pedido por voz (interpreta y valida el texto dictado; no toca la venta).
+            Route::post('dictado/interpretar', [NuevaVentaController::class, 'interpretarDictado'])->name('dictado.interpretar');
+            Route::post('dictado/corregir', [NuevaVentaController::class, 'corregirDictado'])->name('dictado.corregir');
             Route::get('lineas/{clave}/colores', [NuevaVentaController::class, 'colores'])->name('lineas.colores');
             Route::get('productos/{producto}/matriz', [NuevaVentaController::class, 'matriz'])->name('productos.matriz');
             Route::get('matrices', [NuevaVentaController::class, 'matrices'])->name('matrices');
@@ -192,6 +195,7 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
             Route::post('{borrador}/confirmar', [NuevaVentaController::class, 'confirmar'])->name('confirmar');
             Route::post('{borrador}/eliminar', [NuevaVentaController::class, 'eliminar'])->name('eliminar');
             Route::post('{borrador}/direcciones', [NuevaVentaController::class, 'agregarDireccion'])->name('direcciones.agregar');
+            Route::post('{borrador}/direcciones/{direccion}', [NuevaVentaController::class, 'editarDireccion'])->whereNumber('direccion')->name('direcciones.editar');
             // GRP-01: grupo comercial TEMPORAL de la venta (nunca modifica al cliente).
             Route::post('{borrador}/grupo', [NuevaVentaController::class, 'cambiarGrupo'])->name('grupo.cambiar');
             Route::post('{borrador}/grupo/restaurar', [NuevaVentaController::class, 'restaurarGrupo'])->name('grupo.restaurar');

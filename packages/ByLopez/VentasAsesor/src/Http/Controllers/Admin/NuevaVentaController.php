@@ -25,12 +25,14 @@ use ByLopez\VentasAsesor\Services\Clientes\CrearClienteComercialService;
 use ByLopez\VentasAsesor\Services\Comisiones\TipoOperacionPedidoService;
 use ByLopez\VentasAsesor\Services\Venta\BorradorVentaService;
 use ByLopez\VentasAsesor\Services\Venta\CatalogoVentaService;
+use ByLopez\VentasAsesor\Services\Venta\Dictado\ResolutorDictado;
 use ByLopez\VentasAsesor\Services\Venta\GrupoVentaService;
 use ByLopez\VentasAsesor\Services\Venta\NuevaVentaService;
 use ByLopez\VentasAsesor\Models\BorradorVenta;
 use ByLopez\VentasAsesor\Services\Rentabilidad\RentabilidadVentaService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Http\RespuestaErrorNuevaVenta as Respuesta;
+use ByLopez\VentasAsesor\Support\Logistica\MunicipioDesdeCatalogo;
 use ByLopez\VentasAsesor\Support\Venta\VenderPara;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -165,6 +167,9 @@ class NuevaVentaController extends Controller
                 'pais' => $d->country,
                 'telefono' => $d->phone,
                 'predeterminada' => (bool) $d->default_address,
+                // Para «Editar»: datos tal como estan guardados; el municipio solo si coincide exacto con el catalogo DIVIPOLA.
+                'codigo_postal' => $d->postcode,
+                'municipio_codigo' => app(MunicipioDesdeCatalogo::class)->municipioDeDireccion($d->city, $d->state, $d->country),
             ])
             ->values()
             ->all();
@@ -183,6 +188,19 @@ class NuevaVentaController extends Controller
             return [
                 'direccion_id' => (int) $nueva->id,
                 'direcciones' => $this->listaDirecciones((int) $nueva->customer_id),
+            ];
+        });
+    }
+
+    /** Editar una direccion guardada del cliente del borrador (misma validacion y propiedad que agregar). */
+    public function editarDireccion(int $borrador, int $direccion, AgregarDireccionNuevaVentaRequest $request): JsonResponse
+    {
+        return Respuesta::envolver(function () use ($borrador, $direccion, $request) {
+            $editada = $this->nuevaVenta->editarDireccionCliente($borrador, $direccion, $request->aDireccion(), $this->actor());
+
+            return [
+                'direccion_id' => (int) $editada->id,
+                'direcciones' => $this->listaDirecciones((int) $editada->customer_id),
             ];
         });
     }
@@ -245,6 +263,45 @@ class NuevaVentaController extends Controller
             (string) $request->string('canal'),
             $request->string('referencia_externa')->trim()->value() ?: null,
         )->toArray());
+    }
+
+    /**
+     * Doc. 34: pedido por voz. Interpreta el texto dictado y valida cada linea contra el catalogo (solo lectura: no toca la
+     * venta). La pantalla agrega lo resuelto con «aplicar tallas», igual que la matriz.
+     */
+    public function interpretarDictado(Request $request): JsonResponse
+    {
+        abort_unless((bool) config('ventasasesor.dictado.activo', true), 404);
+        $datos = $request->validate(['texto' => ['required', 'string', 'max:3000']]);
+
+        $resolutor = app(ResolutorDictado::class);
+
+        return Respuesta::envolver(fn () => [
+            'lineas' => $resolutor->interpretar((string) $datos['texto']),
+            'colores' => array_keys($resolutor->colores()),
+            'tallas' => ResolutorDictado::TALLAS,
+        ]);
+    }
+
+    /** Doc. 34: una linea dictada corregida con los selectores; se valida igual contra el catalogo. No toca la venta. */
+    public function corregirDictado(Request $request): JsonResponse
+    {
+        abort_unless((bool) config('ventasasesor.dictado.activo', true), 404);
+        $resolutor = app(ResolutorDictado::class);
+
+        $datos = $request->validate([
+            'texto' => ['nullable', 'string', 'max:500'],
+            'color' => ['required', 'string', \Illuminate\Validation\Rule::in(array_keys($resolutor->colores()))],
+            'genero' => ['nullable', 'in:D,H,N', 'required_unless:linea,TP'],
+            'linea' => ['required', 'in:DZ,TP'],
+            'talla' => ['required', 'string', \Illuminate\Validation\Rule::in(array_map('strval', array_keys(ResolutorDictado::TALLAS)))],
+            'cantidad' => ['required', 'integer', 'min:1', 'max:9999'],
+        ], [
+            'color.in' => 'Elige un color del catálogo.',
+            'genero.required_unless' => 'Elige dama, caballero o niño.',
+        ]);
+
+        return Respuesta::envolver(fn () => ['linea' => $resolutor->corregir($datos)]);
     }
 
     /** E. Colores de un acceso rapido (linea x color), resuelto por config, nunca por id. */
