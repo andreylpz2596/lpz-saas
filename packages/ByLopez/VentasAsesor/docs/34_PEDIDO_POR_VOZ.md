@@ -14,7 +14,12 @@ todo con reglas propias. La imagen pegada queda para una fase 2.
    - ✅ variante exacta;
    - ⚠️ resuelta asumiendo el género, porque el color y la talla solo existen en una línea;
    - ❌ con el motivo.
-5. **«Agregar N líneas a la venta»** usa el mismo «aplicar tallas» de la matriz: un lote por producto, y la cantidad final es lo que ya había más lo dictado. Precio, stock y permisos son los de siempre. Si aún no hay venta, la primera prenda la crea, igual que con la matriz.
+5. Cada línea se puede **corregir** con selectores (color, tipo Dama/Caballero/Niño/Crop top, talla del tipo, cantidad) que se
+   validan otra vez contra el catálogo (`POST nueva-venta/dictado/corregir`), u **omitir**. Las líneas ❌ abren los selectores
+   solas. Mientras quede una ❌ sin corregir ni omitir, no se puede agregar.
+6. Después de agregar, la cantidad de cualquier talla se cambia con el lápiz ✏️ del producto en el resumen (modal solo de ese
+   producto).
+7. **«Agregar N líneas a la venta»** usa el mismo «aplicar tallas» de la matriz: un lote por producto, y la cantidad final es lo que ya había más lo dictado. Precio, stock y permisos son los de siempre. Si aún no hay venta, la primera prenda la crea, igual que con la matriz.
 
 ## 2. Qué entiende (InterpreteDictado)
 
@@ -61,5 +66,6 @@ Mensajes:
   - En iPhone (Safari), el dictado de Siri debe estar activo.
   - Con internet lento, el reconocimiento se corta: se puede seguir con el teclado.
 - Solo productos del patrón del código único (camisetas Piel Durazno y Crop Top). Lo demás se agrega con la matriz.
-- Las líneas ❌ se corrigen editando el texto y volviendo a interpretar. Unos selectores para corregir sin reescribir son una mejora posible.
+- El selector de talla ofrece las tallas del tipo (S–XL, 2-4…14-16, Única), no solo las que existen en ese color: si no existe,
+  «Validar» lo dice.
 - Fase 2, sin hacer: pegar una imagen o captura del pedido. Sin API haría falta reconocimiento de texto local (Tesseract, como en los comprobantes), con menos exactitud en fotos.
