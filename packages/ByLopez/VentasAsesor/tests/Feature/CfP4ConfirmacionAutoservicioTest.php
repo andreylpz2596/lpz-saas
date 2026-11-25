@@ -189,3 +189,10 @@ test('P4 entrega: direccion ajena, envio gratuito y limite de direcciones se rec
     $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.direcciones.agregar', ['borrador' => $id]), cf4_dir())->assertForbidden();
     expect(CustomerAddress::query()->where('customer_id', $this->cliente->id)->count())->toBe(1);
 });
+
+test('P4 la pantalla manda facturacion null con domicilio: no es una direccion ajena', function () {
+    $id = cf4_venta($this);
+    $dir = CustomerAddress::query()->where('customer_id', $this->cliente->id)->value('id');
+
+    $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.entrega', ['borrador' => $id]), ['envio' => ['tipo' => 'guardada', 'address_id' => $dir], 'facturacion' => null, 'metodo' => null])->assertOk();
+});
