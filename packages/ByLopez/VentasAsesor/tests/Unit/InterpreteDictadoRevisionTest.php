@@ -158,3 +158,14 @@ test('cada campo conserva las palabras que lo sustentan', function () {
     expect($l['fuentes'])->toBe(['color' => 'roja', 'genero' => 'nino', 'talla' => '68', 'cantidad' => '10'])
         ->and($l['texto'])->toBe('roja 68 nino 10');
 });
+
+test('lo que escribe el navegador: «ese/eme/ele» por S/M/L y «de» intermedio en el color (prueba en iPhone 2026-11-25)', function () {
+    expect(rev('rojo ese hombre 20 u'))->toBe([ok('H', 'Rojo', 'S', 20)])
+        ->and(rev('negro eme dama 5'))->toBe([ok('D', 'Negro', 'M', 5)])
+        ->and(rev('caballero blanco ele 3'))->toBe([ok('H', 'Blanco', 'L', 3)])
+        ->and(rev('verde de petróleo XL de dama 10 u'))->toBe([ok('D', 'Verde Petróleo', 'XL', 10)])
+        ->and(rev('palo de rosa M dama 2'))->toBe([ok('D', 'Palo de Rosa', 'M', 2)])
+        // «ese» que no es talla: antes de un color, o sin color ni tipo en la linea.
+        ->and(rev('ese rojo talla M de dama 4'))->toBe([ok('D', 'Rojo', 'M', 4)])
+        ->and(rev('negro dama M 2, ese blanco L de caballero 3'))->toBe([ok('D', 'Negro', 'M', 2), ok('H', 'Blanco', 'L', 3)]);
+});

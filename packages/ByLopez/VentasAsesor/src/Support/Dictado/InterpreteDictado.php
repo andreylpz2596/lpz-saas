@@ -499,6 +499,16 @@ final class InterpreteDictado
             return [['talla', $letra[0]], $letra[1]];
         }
 
+        // El navegador escribe «ese», «eme», «ele» por S, M, L. Sin «talla» delante solo cuentan cuando la linea ya tiene color o
+        // tipo y aun no tiene talla, y no van antes de un color («ese rojo», «ese color» no son tallas).
+        if (in_array($tok, ['ese', 'eme', 'ele'], true)
+            && ($actual['talla'] === null || isset($actual['heredado']['talla']))
+            && (($actual['color'] !== null || $actual['candidatos'] !== []) && ! isset($actual['heredado']['color'])
+                || ($actual['genero_explicito'] && ! isset($actual['heredado']['genero'])))
+            && $sig !== 'color' && ($sig === null || $this->colorEn($t, $i + 1) === null)) {
+            return [['talla', self::TALLAS_DELETREADAS[$tok]], 1];
+        }
+
         if ($tok === 'unica') {
             return [['talla', 'U'], 1];
         }
@@ -615,12 +625,15 @@ final class InterpreteDictado
     /** @return ?array{0: list<string>, 1: int} colores y tokens: la frase mas larga del catalogo que empiece aqui (forma base: «roja» = «rojo») */
     private function colorEn(array $t, int $i): ?array
     {
-        for ($largo = min($this->maxPalabrasColor, count($t) - $i); $largo >= 1; $largo--) {
+        // «de»/«del» intermedios no cuentan: «verde de petróleo» = «Verde Petróleo» (el navegador los agrega).
+        $relleno = ['de', 'del'];
+
+        for ($largo = min($this->maxPalabrasColor + 2, count($t) - $i); $largo >= 1; $largo--) {
             $trozo = array_slice($t, $i, $largo);
-            if (in_array('|', $trozo, true)) {
+            if (in_array('|', $trozo, true) || in_array($trozo[0], $relleno, true) || in_array(end($trozo), $relleno, true)) {
                 continue;
             }
-            $clave = implode(' ', array_map(fn ($p) => $this->base($p), $trozo));
+            $clave = implode(' ', array_map(fn ($p) => $this->base($p), array_values(array_diff($trozo, $relleno))));
             if (isset($this->frases[$clave])) {
                 return [$this->frases[$clave], $largo];
             }
@@ -813,6 +826,12 @@ final class InterpreteDictado
 
     private function agregarFrase(array $palabras, string $color): void
     {
+        if ($palabras === []) {
+            return;
+        }
+
+        // Clave sin «de»/«del» («palo rosa»), igual que se compara lo dictado.
+        $palabras = array_values(array_diff($palabras, ['de', 'del']));
         if ($palabras === []) {
             return;
         }
