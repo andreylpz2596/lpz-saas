@@ -149,7 +149,7 @@ class NuevaVentaController extends Controller
         });
     }
 
-    protected function listaDirecciones(int $cliente): array
+    public function listaDirecciones(int $cliente): array
     {
         return CustomerAddress::query()
             ->where('customer_id', $cliente)
