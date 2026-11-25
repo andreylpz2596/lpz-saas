@@ -39,7 +39,11 @@ use ByLopez\VentasAsesor\Support\Telefono\NormalizadorTelefonoBasico;
 use ByLopez\VentasAsesor\Support\Venta\ConfirmacionEnCurso;
 use Illuminate\Console\Scheduling\Schedule;
 use ByLopez\VentasAsesor\Http\Middleware\RestringirUsuarioAutoservicio;
+use ByLopez\VentasAsesor\Exceptions\PaginaPanelExpiradaException;
+use ByLopez\VentasAsesor\Http\Middleware\BouncerConInicioPorPermiso;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Routing\Events\RouteMatched;
+use Illuminate\Session\TokenMismatchException;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -139,6 +143,36 @@ class VentasAsesorServiceProvider extends ServiceProvider
         $this->app->bind(ShopCustomerListener::class, CustomerConDestinatarioVerificado::class);
     }
 
+    /**
+     * Ingreso al panel sin el ciclo «500 → 401» (asesoras y roles sin permiso «dashboard»):
+     * - /admin/dashboard lleva a la primera pantalla accesible en vez de 401 (alias `admin` de Bagisto extendido;
+     *   se registra en booted porque UserServiceProvider arranca despues y pone su alias);
+     * - token CSRF vencido en un formulario del panel → volver con aviso, no «500»;
+     * - el login bloquea el doble envio y recarga la pagina vencida o restaurada con «atras».
+     */
+    private function ingresoSinErroresRepetidos(): void
+    {
+        $this->app->booted(function () {
+            $this->app['router']->aliasMiddleware('admin', BouncerConInicioPorPermiso::class);
+        });
+
+        // Webkul enlaza el Handler con bind (instancia nueva en cada resolucion): por eso extend y no map sobre una instancia.
+        $this->app->extend(ExceptionHandler::class, function ($handler) {
+            if (method_exists($handler, 'map')) {
+                $handler->map(
+                    TokenMismatchException::class,
+                    fn (TokenMismatchException $e) => PaginaPanelExpiradaException::aplica(request())
+                        ? new PaginaPanelExpiradaException($e->getMessage(), 0, $e)
+                        : $e
+                );
+            }
+
+            return $handler;
+        });
+
+        Event::listen('bagisto.admin.layout.body.after', fn ($manager) => $manager->addTemplate('ventasasesor::admin.sesion.guardia-login'));
+    }
+
     private function comandos(): void
     {
         if ($this->app->runningInConsole()) {
@@ -158,6 +192,8 @@ class VentasAsesorServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Route::middleware(['web', PreventRequestsDuringMaintenance::class])->group(__DIR__.'/../Http/routes.php');
+
+        $this->ingresoSinErroresRepetidos();
 
         // Doc. 33: deny-by-default para el usuario de autoservicio en TODA ruta del panel (Bagisto deja rutas sin ACL).
         Event::listen(RouteMatched::class, function (RouteMatched $evento) {
