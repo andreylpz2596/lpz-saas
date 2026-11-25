@@ -272,14 +272,19 @@ class NuevaVentaController extends Controller
     public function interpretarDictado(Request $request): JsonResponse
     {
         abort_unless((bool) config('ventasasesor.dictado.activo', true), 404);
-        $datos = $request->validate(['texto' => ['required', 'string', 'max:3000']]);
+        $datos = $request->validate([
+            'texto' => ['required', 'string', 'max:3000'],
+            // E: tipo elegido por la asesora para lo que no se diga (vacio = preguntar).
+            'tipo_defecto' => ['nullable', 'in:D,H,N'],
+        ]);
 
         $resolutor = app(ResolutorDictado::class);
 
         return Respuesta::envolver(fn () => [
-            'lineas' => $resolutor->interpretar((string) $datos['texto']),
+            'lineas' => $resolutor->interpretar((string) $datos['texto'], $datos['tipo_defecto'] ?? null),
             'colores' => array_keys($resolutor->colores()),
             'tallas' => ResolutorDictado::TALLAS,
+            'catalogo' => $resolutor->catalogo(),
         ]);
     }
 

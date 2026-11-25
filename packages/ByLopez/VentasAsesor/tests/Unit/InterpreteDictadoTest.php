@@ -40,7 +40,8 @@ test('sinonimos de genero, tallas deletreadas, femeninos y plurales del color', 
         ->and(dic('mujer turquesa talla eme veinticinco unidades'))->toBe([['Azul Turquesa', 'D', 'DZ', 'M', 25]])
         ->and(dic('negras talla L 20 señora, una blanca talla M'))->toBe([['Negro', 'D', 'DZ', 'L', 20], ['Blanco', 'D', 'DZ', 'M', 1]])
         ->and(dic('10 unidades azul rey M de caballero'))->toBe([['Azul Rey', 'H', 'DZ', 'M', 10]])
-        ->and(dic('una camiseta roja talla M de hombre 5 unidades'))->toBe([['Rojo', 'H', 'DZ', 'M', 5]])
+        // Decision A (2026-11-24): «una camiseta» expresa 1; con «5 unidades» son cantidades contradictorias → se pide revisar.
+        ->and(dic('una camiseta roja talla M de hombre 5 unidades'))->toBe([['Rojo', 'H', 'DZ', 'M', null]])
         ->and(dic('niña verde botella talla 10 cuatro unidades'))->toBe([['Verde Botella', 'N', 'DZ', '10-12', 4]]);
 });
 

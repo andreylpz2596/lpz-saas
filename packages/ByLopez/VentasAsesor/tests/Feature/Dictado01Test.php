@@ -81,8 +81,9 @@ test('DIC01-3 lo que no existe o no se entiende queda en error con el motivo', f
     [$linea] = $resolutor->interpretar('roja talla M de caballero 3');
     [$ambiguo] = $resolutor->interpretar('azul talla S de dama 3');
 
-    expect($talla['estado'])->toBe('error')->and($talla['mensaje'])->toBe('Azul Rey Dama no tiene talla XL.')
-        ->and($linea['mensaje'])->toBe('No hay Rojo en Caballero.')
+    expect($talla['estado'])->toBe('error')->and($talla['mensaje'])->toBe('La variante no existe: Azul Rey Dama no tiene talla XL.')->and($talla['tipo_error'])->toBe('catalogo')
+        ->and([$talla['color'], $talla['genero'], $talla['talla_etiqueta'], $talla['cantidad']])->toBe(['Azul Rey', 'D', 'XL', 3])
+        ->and($linea['mensaje'])->toBe('Ese color no existe para Caballero: no hay Rojo.')
         ->and($ambiguo['mensaje'])->toContain('¿Cuál color?')->and($ambiguo['mensaje'])->toContain('Azul Rey');
 });
 
@@ -129,7 +130,7 @@ test('DIC01-6 corregir una linea con los selectores la valida otra vez contra el
     // Una combinacion que no existe sigue en error con el motivo.
     $this->actingAs($admin, 'admin')
         ->postJson($url, ['color' => 'Azul Rey', 'genero' => 'D', 'linea' => 'DZ', 'talla' => 'XL', 'cantidad' => 2])
-        ->assertOk()->assertJsonPath('linea.estado', 'error')->assertJsonPath('linea.mensaje', 'Azul Rey Dama no tiene talla XL.');
+        ->assertOk()->assertJsonPath('linea.estado', 'error')->assertJsonPath('linea.mensaje', 'La variante no existe: Azul Rey Dama no tiene talla XL.');
 
     // Datos fuera de lo que ofrecen los selectores: 422.
     $this->actingAs($admin, 'admin')->postJson($url, ['color' => 'Morado Inventado', 'genero' => 'D', 'linea' => 'DZ', 'talla' => 'M', 'cantidad' => 2])
@@ -159,4 +160,77 @@ test('DIC01-7 interpretar devuelve los colores y tallas para los selectores; la 
         ->assertSee('data-venta="dictado-corregir"', false)
         ->assertSee('data-venta="dictado-omitir"', false)
         ->assertSee(route('admin.ventas_asesor.nueva_venta.dictado.corregir'), false);
+});
+
+test('DIC01-8 prioridad: «roja 68 niño 10 y negro dama M 2» da dos lineas exactas, sin numeros de otra linea', function () {
+    $lineas = app(ResolutorDictado::class)->interpretar('roja 68 niño 10 y negro dama M 2');
+
+    expect($lineas)->toHaveCount(2)
+        ->and(array_map(fn ($l) => [$l['estado'], $l['sku'], $l['variante_id'], $l['genero'], $l['color'], $l['talla_etiqueta'], $l['cantidad'], $l['problemas'], $l['sin_asignar']], $lineas))
+        ->toBe([
+            ['ok', '910N-DZ-6', $this->rojoNino['6'], 'N', 'Rojo', '6-8', 10, [], []],
+            ['ok', '906D-DZ-M', $this->negroDama['M'], 'D', 'Negro', 'M', 2, [], []],
+        ])
+        ->and($lineas[0]['fuentes']['talla'])->toBe('68');
+});
+
+test('DIC01-9 C/D: la duda talla-o-cantidad se pregunta; XXL se conserva aunque la variante no exista', function () {
+    $resolutor = app(ResolutorDictado::class);
+
+    [$duda] = $resolutor->interpretar('niño roja 68');
+    [$xxl] = $resolutor->interpretar('caballero negro doble equis ele 3');
+
+    expect($duda['estado'])->toBe('error')->and($duda['tipo_error'])->toBe('interpretacion')->and($duda['variante_id'])->toBeNull()
+        ->and($duda['mensaje'])->toBe('¿«68» es talla 6-8 o 68 unidades?')
+        ->and($xxl['talla'])->toBe('XXL')->and($xxl['tipo_error'])->toBe('catalogo')->and($xxl['variante_id'])->toBeNull()
+        ->and($xxl['mensaje'])->toBe('La variante no existe: Negro Caballero no tiene talla XXL.');
+});
+
+test('DIC01-10 el catalogo de los selectores sale de los SKU reales (Crop top M, Caballero XXL) y se valida al corregir', function () {
+    $xxl = dic01_producto('907H-DZ', ['XXL'], 'Camiseta Piel Durazno Azul Oscuro Hombre');
+    $top = dic01_producto('907D-TP', ['M', 'U'], 'Crop Top Azul Oscuro');
+
+    $resolutor = app(ResolutorDictado::class);
+    $catalogo = $resolutor->catalogo();
+
+    expect($catalogo['Azul Oscuro'])->toBe(['H' => ['XXL'], 'TP' => ['M', 'U']])->and($catalogo['Negro'])->toBe(['D' => ['M'], 'H' => ['M']])
+        ->and($catalogo['Rojo'])->toBe(['N' => ['2', '6']]);
+
+    [$dicho] = $resolutor->interpretar('caballero azul oscuro 2XL 3');
+    [$topM] = $resolutor->interpretar('crop top azul oscuro talla M 2');
+    [$topSinTalla] = $resolutor->interpretar('crop top azul oscuro 2');
+
+    expect([$dicho['estado'], $dicho['sku'], $dicho['variante_id']])->toBe(['ok', '907H-DZ-XXL', $xxl['XXL']])
+        ->and([$topM['estado'], $topM['sku'], $topM['variante_id']])->toBe(['ok', '907D-TP-M', $top['M']])
+        ->and([$topSinTalla['estado'], $topSinTalla['sku']])->toBe(['aviso', '907D-TP-U'])
+        ->and($topSinTalla['mensaje'])->toContain('talla Única');
+
+    $this->actingAs(f03b_admin(), 'admin')
+        ->postJson(route('admin.ventas_asesor.nueva_venta.dictado.corregir'), ['color' => 'Azul Oscuro', 'linea' => 'TP', 'talla' => 'M', 'cantidad' => 2])
+        ->assertOk()->assertJsonPath('linea.estado', 'ok')->assertJsonPath('linea.sku', '907D-TP-M');
+});
+
+test('DIC01-11 E: el tipo elegido completa solo lo que no se dijo; sin elegir se pregunta', function () {
+    $resolutor = app(ResolutorDictado::class);
+
+    [$sinElegir] = $resolutor->interpretar('negro M 4');
+    [$elegido] = $resolutor->interpretar('negro M 4', 'H');
+    [$dicho] = $resolutor->interpretar('negro dama M 4', 'H');
+
+    expect($sinElegir['estado'])->toBe('error')->and($sinElegir['mensaje'])->toContain('dama o caballero')
+        ->and([$elegido['estado'], $elegido['sku'], $elegido['tipo_por_contexto']])->toBe(['ok', '906H-DZ-M', true])
+        ->and($elegido['nota'])->toContain('Caballero')
+        ->and([$dicho['sku'], $dicho['tipo_por_contexto']])->toBe(['906D-DZ-M', false]);
+
+    $this->actingAs(f03b_admin(), 'admin')
+        ->postJson(route('admin.ventas_asesor.nueva_venta.dictado.interpretar'), ['texto' => 'negro M 4', 'tipo_defecto' => 'H'])
+        ->assertOk()->assertJsonPath('lineas.0.sku', '906H-DZ-M')->assertJsonPath('catalogo.Negro.H', ['M']);
+});
+
+test('DIC01-12 la disponibilidad se informa por linea para orientar (stock y si se gestiona)', function () {
+    f03b_stock(\Webkul\Product\Models\Product::find($this->negroDama['M']), 7);
+
+    [$l] = app(ResolutorDictado::class)->interpretar('negro dama M 9');
+
+    expect([$l['estado'], $l['cantidad'], $l['stock'], $l['gestiona_stock']])->toBe(['ok', 9, 7, true]);
 });
