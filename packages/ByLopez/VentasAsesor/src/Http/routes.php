@@ -8,6 +8,7 @@ use ByLopez\VentasAsesor\Http\Controllers\Admin\ComisionesController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\ControlCostosController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CotizacionController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CreditoClienteController;
+use ByLopez\VentasAsesor\Http\Controllers\Admin\FacturaPedidoController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\GuiaPedidoController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\InicioController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\MensajesCarteraController;
@@ -31,6 +32,10 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
         Route::get('pedidos', [PedidosAsesorController::class, 'index'])->name('admin.ventas_asesor.pedidos.index');
 
         // Despacho V1: el asesor ve / descarga la guia (PDF) de SUS pedidos. La autorizacion real la hace Logistica.
+        // El asesor abre la factura PAGADA de SUS pedidos en otra pestaña (mismo PDF que la factura de Bagisto, solo lectura).
+        Route::get('pedidos/{pedido}/factura', [FacturaPedidoController::class, 'ver'])
+            ->whereNumber('pedido')->name('admin.ventas_asesor.pedidos.factura');
+
         Route::get('pedidos/{pedido}/guias/{guia}/{modo}', [GuiaPedidoController::class, 'archivo'])
             ->whereNumber(['pedido', 'guia'])->where('modo', 'ver|descargar')
             ->name('admin.ventas_asesor.pedidos.guia');

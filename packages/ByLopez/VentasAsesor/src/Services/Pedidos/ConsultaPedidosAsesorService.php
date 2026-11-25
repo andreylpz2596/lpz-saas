@@ -131,12 +131,15 @@ class ConsultaPedidosAsesorService
         $carteras = $this->cartera->saldosDePedidos($ids);
         // Despacho V1: transportadora, numero de guia, tracking y si hay PDF. Sin flete ni recaudo (no son del asesor).
         $guias = $this->guias->deOrdenes($ids);
+        $facturas = $this->facturasDelPedido($ids);
 
-        $paginador->setCollection($paginador->getCollection()->map(function ($fila) use ($pagos, $despachos, $carteras, $guias) {
+        $paginador->setCollection($paginador->getCollection()->map(function ($fila) use ($pagos, $despachos, $carteras, $guias, $facturas) {
             $fila->guias = $guias[(int) $fila->id] ?? [];
             [$estadoPago, $saldoPedido, $cartera] = $this->estadoYSaldo((string) $fila->status, (float) $fila->base_grand_total, $pagos[(int) $fila->id] ?? [], $carteras[(int) $fila->id] ?? null);
 
             $fila->estado_pago = $estadoPago;
+            // La factura se ofrece solo con el pedido PAGADO y una factura emitida (mismo criterio en listado, detalle y ruta).
+            $fila->factura = $estadoPago === ConfirmacionVenta::PAGO_PAGADO ? ($facturas[(int) $fila->id] ?? null) : null;
             $fila->saldo = $saldoPedido;
             $fila->pago_sin_revisar = (float) ($cartera?->sinRevisar ?? 0);
             $fila->pago_verificado = (float) ($cartera?->verificado ?? 0);
@@ -228,6 +231,7 @@ class ConsultaPedidosAsesorService
             'productos' => $this->productosAgrupados($items),
             'envio' => $envio,
             'guias' => $this->guias->deOrdenes([$orderId])[$orderId] ?? [],
+            'factura' => $estadoPago === ConfirmacionVenta::PAGO_PAGADO ? ($this->facturasDelPedido([$orderId])[$orderId] ?? null) : null,
             'estado_pago' => $estadoPago,
             'estado_despacho' => $this->estadoDespacho((string) $pedido->status, $this->despachosEnLote([$orderId])[$orderId] ?? null),
         ];
@@ -394,6 +398,27 @@ class ConsultaPedidosAsesorService
                 default => $consulta->where('atr.advisor_id', (int) $filtros['asesor']),
             };
         }
+    }
+
+    /**
+     * Primera factura (no anulada) de cada pedido: id y numero para «Ver factura». Una consulta.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, array{id: int, numero: string}>
+     */
+    public function facturasDelPedido(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        $porPedido = [];
+
+        foreach (DB::table('invoices')->whereIn('order_id', $ids)->orderBy('id')->get(['id', 'order_id', 'increment_id']) as $f) {
+            $porPedido[(int) $f->order_id] ??= ['id' => (int) $f->id, 'numero' => (string) ($f->increment_id ?: $f->id)];
+        }
+
+        return $porPedido;
     }
 
     /**
