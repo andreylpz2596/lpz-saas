@@ -172,6 +172,9 @@ class VentasAsesorServiceProvider extends ServiceProvider
         $this->loadTranslationsFrom(__DIR__.'/../Resources/lang', 'ventasasesor');
         $this->loadViewsFrom(__DIR__.'/../Resources/views', 'ventasasesor');
 
+        // Factura PDF: misma vista de Bagisto (shop::customers.account.orders.pdf) con el pie de pagina configurado (sin tocar packages/Webkul).
+        $this->callAfterResolving('view', fn ($view) => $view->prependNamespace('shop', __DIR__.'/../Resources/views/overrides/shop'));
+
         $this->comandos();
 
         // Menu «Administracion» (2026-11-22): solo el administrador autorizado lo ve. Bagisto filtra el menu por la clave de cada
