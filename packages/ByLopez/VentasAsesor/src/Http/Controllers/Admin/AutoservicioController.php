@@ -8,6 +8,7 @@ use ByLopez\VentasAsesor\Exceptions\AutoservicioInvalidoException;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\AgregarDireccionNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\AplicarTallasNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\ColoresNuevaVentaRequest;
+use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\EntregaNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\IniciarConTallasAutoservicioRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\MatricesAutoservicioRequest;
 use ByLopez\VentasAsesor\Services\Autoservicio\ClienteActualService;
@@ -35,6 +36,9 @@ use Webkul\User\Contracts\Admin;
  */
 class AutoservicioController extends Controller
 {
+    /** Solo el envio gratuito queda fuera del cliente (el equipo lo concede). Mismo criterio visual que la pantalla del asesor. */
+    protected const PATRON_ENVIO_GRATIS = '/free|gratu|gratis/i';
+
     public function __construct(
         protected ClienteActualService $clientes,
         protected NuevaVentaService $nuevaVenta,
@@ -176,36 +180,100 @@ class AutoservicioController extends Controller
      * P4: aplica los valores por defecto del autoservicio (RECOGIDA EN TIENDA y TRANSFERENCIA como metodo, sin dinero recibido)
      * y devuelve el resumen con el total que se va a confirmar. Es idempotente. El cliente no elige entrega, domiciliario ni pago.
      */
-    public function preparar(int $borrador): JsonResponse
+    public function preparar(int $borrador, Request $request): JsonResponse
     {
-        return $this->responder(function () use ($borrador) {
+        return $this->responder(function () use ($borrador, $request) {
             $this->propio($borrador);
 
-            return $this->aplicarPorDefecto($borrador)->toArray();
+            return $this->aplicarPorDefecto($borrador, ! $request->boolean('solo_pago'))->toArray();
         });
     }
 
+    /** Direcciones del cliente vinculado (nunca las de otro). */
+    public function direcciones(): JsonResponse
+    {
+        return $this->responder(fn () => app(NuevaVentaController::class)->listaDirecciones((int) $this->clientes->de($this->actor())->id));
+    }
+
     /**
-     * El cliente SIN ninguna direccion registrada (p. ej. nacio en la tienda web) crea UNA el mismo, sin intervencion del
-     * administrador. Si ya tiene alguna, no: corregirlas o sumar mas sigue siendo del equipo. El cliente sale del vinculo; la
-     * direccion queda en SU ficha (RT-04) y, como es la unica, predeterminada. Luego se reaplican recogida y pago por defecto.
+     * El cliente agrega una direccion a SU ficha (RT-04, mismo servicio y validacion que el asesor), hasta un maximo. Corregir o
+     * borrar las existentes sigue siendo del equipo. Devuelve la nueva y la lista, como la pantalla del asesor.
      */
-    public function guardarDireccion(int $borrador, AgregarDireccionNuevaVentaRequest $request): JsonResponse
+    public function agregarDireccion(int $borrador, AgregarDireccionNuevaVentaRequest $request): JsonResponse
     {
         return $this->responder(function () use ($borrador, $request) {
             $this->propio($borrador);
             $cliente = $this->clientes->de($this->actor());
 
-            if (CustomerAddress::query()->where('customer_id', $cliente->id)->where('address_type', 'customer')->exists()) {
-                return response()->json(['codigo' => 'direccion_ya_registrada', 'mensaje' => ''], 403);
+            if ($this->direccionesDelCliente((int) $cliente->id)->count() >= (int) config('ventasasesor.autoservicio.max_direcciones', 5)) {
+                return response()->json(['codigo' => 'limite_direcciones', 'mensaje' => ''], 403);
             }
 
-            $this->nuevaVenta->agregarDireccionCliente($borrador, $request->aDireccion(), $this->actor());
+            $nueva = $this->nuevaVenta->agregarDireccionCliente($borrador, $request->aDireccion(), $this->actor());
 
-            return $this->aplicarPorDefecto($borrador)->toArray();
+            return [
+                'direccion_id' => (int) $nueva->id,
+                'direcciones' => app(NuevaVentaController::class)->listaDirecciones((int) $cliente->id),
+            ];
         });
     }
 
+    /**
+     * Entrega del cliente: RECOGIDA en tienda o DOMICILIO a una direccion SUYA, con el metodo de envio que elija. Reglas del servidor
+     * (la pantalla solo las refleja): las direcciones deben ser del cliente; el envio gratuito no se ofrece; quien entrega un domicilio
+     * local no lo elige el cliente (se aplica el sugerido por Logistica o el primero con tarifa); el pago lo resuelve `preparar`.
+     */
+    public function entrega(int $borrador, EntregaNuevaVentaRequest $request): JsonResponse
+    {
+        return $this->responder(function () use ($borrador, $request) {
+            $this->propio($borrador);
+            $cliente = (int) $this->clientes->de($this->actor())->id;
+            $propias = $this->direccionesDelCliente($cliente)->pluck('id')->map(fn ($i) => (int) $i)->all();
+
+            $tipoEnvio = (string) $request->input('envio.tipo');
+            $envio = match ($tipoEnvio) {
+                OrigenDireccion::PUNTO_RECOGIDA => OrigenDireccion::puntoRecogida(),
+                OrigenDireccion::GUARDADA => OrigenDireccion::guardada((int) $request->input('envio.address_id')),
+                default => null,
+            };
+
+            $facturacionId = $request->input('facturacion.tipo') === OrigenDireccion::GUARDADA ? (int) $request->input('facturacion.address_id') : null;
+
+            if ($envio === null
+                || ($tipoEnvio === OrigenDireccion::GUARDADA && ! in_array((int) $request->input('envio.address_id'), $propias, true))
+                || ($request->has('facturacion') && ($facturacionId === null || ! in_array($facturacionId, $propias, true)))) {
+                return response()->json(['codigo' => 'entrega_no_permitida', 'mensaje' => ''], 403);
+            }
+
+            $metodo = $request->string('metodo')->trim()->value() ?: null;
+
+            if ($metodo !== null && preg_match(self::PATRON_ENVIO_GRATIS, $metodo)) {
+                return response()->json(['codigo' => 'metodo_no_permitido', 'mensaje' => ''], 403);
+            }
+
+            $estado = $this->nuevaVenta->entregaRapida(
+                $borrador, $this->actor(), $envio, $metodo, $facturacionId === null ? null : OrigenDireccion::guardada($facturacionId),
+            );
+
+            // Domicilio local: el domiciliario es obligatorio para confirmar y el cliente no lo elige.
+            $dom = $estado->entrega->domiciliario;
+
+            if ($dom && ($dom['requerido'] ?? false) && empty($dom['elegido_id'])) {
+                $id = $dom['sugerido_id'] ?? collect($dom['opciones'] ?? [])->first(fn ($o) => ($o['tarifa'] ?? null) !== null)['id'] ?? null;
+
+                if ($id !== null) {
+                    $estado = $this->nuevaVenta->elegirDomiciliario($borrador, (int) $id, $this->actor());
+                }
+            }
+
+            return $estado->toArray();
+        });
+    }
+
+    protected function direccionesDelCliente(int $cliente)
+    {
+        return CustomerAddress::query()->where('customer_id', $cliente)->where('address_type', 'customer')->get(['id']);
+    }
     /** P4: confirma con el total que el cliente vio. Doble clic / reintento = el mismo pedido (yaExistia), nunca dos. */
     public function confirmar(int $borrador, Request $request): JsonResponse
     {
@@ -222,13 +290,16 @@ class AutoservicioController extends Controller
 
             $c = $this->nuevaVenta->confirmar($borrador, $actor, $datos['total_esperado'], seleccion: SeleccionPropiedadComercial::ventaDeEmpresa());
 
+            $metodo = (string) \Webkul\Sales\Models\Order::query()->whereKey($c->orderId)->value('shipping_method');
+            $entrega = $metodo !== '' && ! str_contains($metodo, 'pickup') ? 'Envío a domicilio' : 'Recogida en tienda';
+
             // Solo lo que el cliente necesita: nada de atribucion, factura interna ni datos de pago.
             return [
                 'order_id' => $c->orderId,
                 'numero' => $c->incrementId,
                 'total' => $c->total,
                 'moneda' => $c->moneda,
-                'entrega' => 'Recogida en tienda',
+                'entrega' => $entrega,
                 'pago' => 'Transferencia bancaria (pendiente de confirmar)',
                 'estado_pago' => $c->estadoPago,
                 'ya_existia' => $c->yaExistia,
@@ -236,21 +307,26 @@ class AutoservicioController extends Controller
         });
     }
 
-    protected function aplicarPorDefecto(int $borrador)
+    /**
+     * Pago por defecto (transferencia, sin dinero recibido). La entrega solo se pone por defecto (RECOGIDA) cuando el cliente aun no
+     * eligio ninguna, o si la recogida quedo incompleta; un domicilio elegido por el cliente nunca se pisa.
+     */
+    protected function aplicarPorDefecto(int $borrador, bool $conEntregaPorDefecto = true)
     {
         $actor = $this->actor();
         $metodoEntrega = (string) config('ventasasesor.autoservicio.metodo_entrega', 'pickup');
         $metodoPago = (string) config('ventasasesor.autoservicio.metodo_pago', 'moneytransfer');
 
         $estado = $this->nuevaVenta->estado($borrador);
+        $envio = $estado->entrega->envio;
+        $esRecogida = $envio !== null && $envio->origen === 'punto_recogida';
 
-        if ($estado->entrega->metodoSeleccionado?->codigo !== $metodoEntrega || ! $estado->entrega->entregaCompleta) {
+        if ($conEntregaPorDefecto && ($envio === null || ($esRecogida && (! $estado->entrega->entregaCompleta || $estado->entrega->metodoSeleccionado?->codigo !== $metodoEntrega)))) {
             $this->nuevaVenta->entregaRapida($borrador, $actor, OrigenDireccion::puntoRecogida(), $metodoEntrega, null);
         }
 
         return $this->nuevaVenta->seleccionarPago($borrador, $metodoPago, $actor);
     }
-
     public function enCurso(): JsonResponse
     {
         return $this->responder(function () {
@@ -306,7 +382,7 @@ class AutoservicioController extends Controller
             return response()->json(['codigo' => 'error', 'mensaje' => 'No pudimos completar la operación. Inténtalo de nuevo.'], 500);
         }
 
-        $datos = LimiteInventarioCliente::sanear($respuesta->getData(true));
+        $datos = $this->paraCliente(LimiteInventarioCliente::sanear($respuesta->getData(true)));
 
         if ($respuesta->getStatusCode() >= 400) {
             $datos['mensaje'] = $this->mensajeNeutro((string) ($datos['codigo'] ?? ''), (string) ($datos['causa'] ?? ''));
@@ -314,6 +390,23 @@ class AutoservicioController extends Controller
         }
 
         return response()->json($datos, $respuesta->getStatusCode());
+    }
+
+    /** Lo que el cliente NO ve de la entrega: el envio gratuito y las opciones/tarifas internas del domiciliario. */
+    protected function paraCliente(array $datos): array
+    {
+        if (isset($datos['entrega']['metodos_disponibles']) && is_array($datos['entrega']['metodos_disponibles'])) {
+            $datos['entrega']['metodos_disponibles'] = array_values(array_filter(
+                $datos['entrega']['metodos_disponibles'],
+                fn ($m) => ! preg_match(self::PATRON_ENVIO_GRATIS, (string) ($m['codigo'] ?? '').' '.(string) ($m['titulo'] ?? '')),
+            ));
+        }
+
+        if (isset($datos['entrega']['domiciliario']) && is_array($datos['entrega']['domiciliario'])) {
+            unset($datos['entrega']['domiciliario']['opciones'], $datos['entrega']['domiciliario']['sugerido_id']);
+        }
+
+        return $datos;
     }
 
     protected function mensajeNeutro(string $codigo, string $causa): string
@@ -326,8 +419,9 @@ class AutoservicioController extends Controller
             in_array($clave, ['no_es_propietario', 'borrador_inexistente', 'cliente_no_coincide'], true) => 'No encontramos esa venta.',
             in_array($clave, ['borrador_no_editable'], true) => 'Esta venta ya no se puede modificar.',
             in_array($clave, ['rentabilidad_insuficiente', 'pedido_rechazado_por_cerco', 'cliente_no_confirmable', 'propiedad_comercial_invalida', 'tipo_operacion_sin_permiso'], true) => 'No podemos confirmar este pedido en línea. Comunícate con nuestro equipo para ayudarte.',
-            $clave === 'direccion_facturacion_requerida' => 'Necesitamos una dirección para tu pedido. Agrégala con «Agregar mi dirección».',
-            $clave === 'direccion_ya_registrada' => 'Ya tienes una dirección registrada. Para cambiarla, comunícate con nuestro equipo.',
+            $clave === 'direccion_facturacion_requerida' => 'Necesitamos una dirección para tu pedido. Agrégala en la sección de entrega.',
+            $clave === 'limite_direcciones' => 'Ya tienes el máximo de direcciones guardadas. Comunícate con nuestro equipo para cambiarlas.',
+            in_array($clave, ['entrega_no_permitida', 'metodo_no_permitido'], true) => 'Esa opción de entrega no está disponible. Elige otra.',
             $clave === 'datos_cliente_invalidos' => 'Revisa los datos de la dirección (nombre, teléfono, dirección y ciudad) e inténtalo de nuevo.',
             $clave === 'totales_cambiaron' => 'El total de tu pedido cambió. Revisa el resumen y confirma de nuevo.',
             $clave === 'carrito_vacio' => 'Agrega al menos un producto para confirmar tu pedido.',

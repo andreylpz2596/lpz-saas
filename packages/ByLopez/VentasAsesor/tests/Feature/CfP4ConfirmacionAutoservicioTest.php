@@ -112,7 +112,7 @@ test('P4 cliente sin direccion registrada: mensaje comercial y ningun pedido', f
     $r = $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.confirmar', ['borrador' => $id]), ['total_esperado' => 100]);
 
     expect($r->getStatusCode())->toBeGreaterThanOrEqual(400)
-        ->and($r->json('mensaje'))->toBe('Necesitamos una dirección para tu pedido. Agrégala con «Agregar mi dirección».')
+        ->and($r->json('mensaje'))->toBe('Necesitamos una dirección para tu pedido. Agrégala en la sección de entrega.')
         ->and(Order::query()->count())->toBe($antes);
 });
 
@@ -128,30 +128,64 @@ test('P4 un cliente no confirma la venta de otro', function () {
     expect(Order::query()->count())->toBe($antes);
 });
 
-test('P4 cliente sin direccion crea UNA el mismo (sin administrador) y el pedido queda confirmable', function () {
+function cf4_dir(array $extra = []): array
+{
+    return $extra + ['nombre' => 'Ana', 'apellido' => 'Compra', 'telefono' => '3001234567', 'lineas' => ['Calle 5 # 6-7'], 'municipio_codigo' => '15542', 'codigo_postal' => '152210'];
+}
+
+test('P4 cliente sin direccion: agrega la suya, elige recogida y el pedido queda confirmable', function () {
     CustomerAddress::query()->where('customer_id', $this->cliente->id)->delete();
     $id = cf4_venta($this);
-    $datos = ['nombre' => 'Ana', 'apellido' => 'Compra', 'telefono' => '3001234567', 'lineas' => ['Calle 5 # 6-7'], 'municipio_codigo' => '15542', 'codigo_postal' => '152210'];
 
-    $estado = $this->actingAs($this->user, "admin")->postJson(route("admin.autoservicio.direccion", ["borrador" => $id]), $datos)->assertOk()->json();
+    $r = $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.direcciones.agregar', ['borrador' => $id]), cf4_dir())->assertOk()->json();
+    expect($r['direcciones'])->toHaveCount(1)->and($r['direcciones'][0]['predeterminada'])->toBeTrue();
 
-    $guardada = CustomerAddress::query()->where('customer_id', $this->cliente->id)->where('address_type', 'customer')->get();
+    $this->actingAs($this->user, 'admin')->getJson(route('admin.autoservicio.direcciones'))->assertOk()->assertJsonCount(1);
 
-    expect($guardada)->toHaveCount(1)
-        ->and((int) $guardada->first()->default_address)->toBe(1)
-        ->and($estado['confirmable'])->toBeTrue();
+    $e = $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.entrega', ['borrador' => $id]), ['envio' => ['tipo' => 'punto_recogida'], 'metodo' => 'pickup'])->assertOk()->json();
+    $p = $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.preparar', ['borrador' => $id]), ['solo_pago' => true])->assertOk()->json();
 
-    // UNA sola: con una direccion ya registrada, otra se rechaza y no se guarda.
-    $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.direccion', ['borrador' => $id]), $datos)->assertForbidden();
-    expect(CustomerAddress::query()->where('customer_id', $this->cliente->id)->where('address_type', 'customer')->count())->toBe(1);
+    expect($e['entrega']['entrega_completa'])->toBeTrue()->and($p['confirmable'])->toBeTrue();
 });
 
-test('P4 la direccion del cliente: sin municipio se rechaza y la venta ajena no se toca', function () {
-    CustomerAddress::query()->where('customer_id', $this->cliente->id)->delete();
+test('P4 domicilio a una direccion PROPIA: sin envio gratuito, sin elegir pago, y el pedido sale con envio', function () {
     $id = cf4_venta($this);
+    $dir = CustomerAddress::query()->where('customer_id', $this->cliente->id)->value('id');
 
-    $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.direccion', ['borrador' => $id]), ['nombre' => 'Ana'])->assertStatus(422);
-    $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.direccion', ['borrador' => 999999]), ['municipio_codigo' => '15542'])->assertStatus(404);
+    $e = $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.entrega', ['borrador' => $id]), ['envio' => ['tipo' => 'guardada', 'address_id' => $dir]])->assertOk()->json();
+    $metodos = collect($e['entrega']['metodos_disponibles']);
 
-    expect(CustomerAddress::query()->where('customer_id', $this->cliente->id)->count())->toBe(0);
+    expect($metodos->contains(fn ($m) => preg_match('/free|gratu|gratis/i', $m['codigo'].' '.$m['titulo'])))->toBeFalse();
+
+    if ($metodos->isEmpty()) {
+        $this->markTestSkipped('La base de pruebas no ofrece metodos de envio con tarifa.');
+    }
+
+    $codigo = $metodos->first()['codigo'];
+    $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.entrega', ['borrador' => $id]), ['envio' => ['tipo' => 'guardada', 'address_id' => $dir], 'metodo' => $codigo])->assertOk();
+    $p = $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.preparar', ['borrador' => $id]), ['solo_pago' => true])->assertOk()->json();
+
+    expect($p['confirmable'])->toBeTrue();
+
+    $c = $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.confirmar', ['borrador' => $id]), ['total_esperado' => $p['total_esperado']])->assertOk()->json();
+
+    expect($c['entrega'])->toBe('Envío a domicilio')
+        ->and(Order::query()->find($c['order_id'])->shipping_method)->not->toContain('pickup');
+});
+
+test('P4 entrega: direccion ajena, envio gratuito y limite de direcciones se rechazan en el servidor', function () {
+    $id = cf4_venta($this);
+    $otro = f03b_cliente(f03b_grupo('G2'), ['email' => 'o.'.uniqid().'@example.test']);
+    $ajena = CustomerAddress::factory()->create(['customer_id' => $otro->id, 'address_type' => 'customer', 'default_address' => 1]);
+    $propia = CustomerAddress::query()->where('customer_id', $this->cliente->id)->value('id');
+    $ruta = route('admin.autoservicio.entrega', ['borrador' => $id]);
+
+    $this->actingAs($this->user, 'admin')->postJson($ruta, ['envio' => ['tipo' => 'guardada', 'address_id' => $ajena->id]])->assertForbidden();
+    $this->actingAs($this->user, 'admin')->postJson($ruta, ['envio' => ['tipo' => 'guardada', 'address_id' => $propia], 'facturacion' => ['tipo' => 'guardada', 'address_id' => $ajena->id]])->assertForbidden();
+    $this->actingAs($this->user, 'admin')->postJson($ruta, ['envio' => ['tipo' => 'guardada', 'address_id' => $propia], 'metodo' => 'free_free'])->assertForbidden();
+    $this->actingAs($this->user, 'admin')->postJson($ruta, ['envio' => ['tipo' => 'puntual', 'direccion' => cf4_dir(['pais' => 'CO'])]])->assertForbidden();
+
+    config(['ventasasesor.autoservicio.max_direcciones' => 1]);
+    $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.direcciones.agregar', ['borrador' => $id]), cf4_dir())->assertForbidden();
+    expect(CustomerAddress::query()->where('customer_id', $this->cliente->id)->count())->toBe(1);
 });

@@ -1183,7 +1183,7 @@
                                  Cada opcion es un radio grande al estilo del checkout de Bagisto. La recogida aplica
                                  SOLA el carrier real `pickup` sobre la bodega real (D-41): no se vuelve a preguntar. -->
                             <div
-                                v-if="estado && estado.lineas.length && ! modoCliente"
+                                v-if="estado && estado.lineas.length"
                                 id="seccion-entrega"
                                 class="box-shadow rounded bg-white p-4 dark:bg-gray-900"
                             >
@@ -1269,7 +1269,7 @@
 
                                         <span class="min-w-0 flex-1">
                                             <span class="block font-semibold text-gray-800 dark:text-white">Envío a domicilio</span>
-                                            <span class="block text-xs text-gray-500 dark:text-gray-400">Se entrega en una dirección del cliente. Después eliges el método de envío.</span>
+                                            <span class="block text-xs text-gray-500 dark:text-gray-400">@{{ modoCliente ? 'Te lo enviamos a tu dirección. Después eliges el método de envío.' : 'Se entrega en una dirección del cliente. Después eliges el método de envío.' }}</span>
                                         </span>
                                     </label>
                                 </div>
@@ -1300,6 +1300,7 @@
                                             <button
                                                 type="button"
                                                 class="ml-auto shrink-0 text-xs font-semibold text-blue-600 hover:underline disabled:opacity-50 dark:text-blue-300"
+                                                v-if="! modoCliente"
                                                 :disabled="ocupado || ! ventaEditable"
                                                 @click.prevent.stop="abrirFormDireccion('facturacion', dir)"
                                             >
@@ -1345,7 +1346,7 @@
                                     v-else-if="direccionesCargadas && ! direccionesCliente.length"
                                     class="rounded-lg border border-dashed border-gray-300 p-4 text-center dark:border-gray-700"
                                 >
-                                    <p class="text-sm font-medium text-gray-700 dark:text-gray-200">Este cliente no tiene una dirección de entrega.</p>
+                                    <p class="text-sm font-medium text-gray-700 dark:text-gray-200">@{{ modoCliente ? 'Aún no tienes una dirección de entrega.' : 'Este cliente no tiene una dirección de entrega.' }}</p>
                                     <button type="button" class="primary-button mx-auto mt-2" @click="abrirFormDireccion('envio')">+ Agregar dirección</button>
                                 </div>
 
@@ -1381,6 +1382,7 @@
                                         <button
                                             type="button"
                                             class="ml-auto shrink-0 rounded-md border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50 dark:border-blue-900 dark:text-blue-300 dark:hover:bg-blue-950"
+                                            v-if="! modoCliente"
                                             :disabled="ocupado || ! ventaEditable"
                                             @click.prevent.stop="abrirFormDireccion('envio', dir)"
                                         >
@@ -1409,7 +1411,7 @@
                                 <div v-if="tipoAplicado === 'domicilio'" class="mt-4">
                                     <!-- Entrega LOCAL (zona configurada): quien entrega es obligatorio y fija el valor del domicilio. -->
                                     <div
-                                        v-if="estado.entrega.domiciliario"
+                                        v-if="estado.entrega.domiciliario && ! modoCliente"
                                         class="mb-4 rounded-lg border p-3 dark:border-gray-800"
                                         data-venta="domiciliario"
                                     >
@@ -1513,7 +1515,7 @@
 
                             <!-- ---------- PAGO (aparece cuando la entrega esta completa y coincide con lo elegido) ---------- -->
                             <div
-                                v-if="estado && entregaLista"
+                                v-if="estado && entregaLista && ! modoCliente"
                                 id="seccion-pago"
                                 class="box-shadow rounded bg-white p-4 dark:bg-gray-900"
                             >
@@ -1809,16 +1811,6 @@
                                 >
                                     <p class="mb-1 font-semibold text-amber-700 dark:text-amber-300">⚠ Falta completar</p>
 
-                                    {{-- Cliente sin direccion registrada: crea UNA el mismo (sin pedirle nada al administrador). --}}
-                                    <button
-                                        v-if="modoCliente && estado.requiere_direccion_facturacion"
-                                        type="button"
-                                        class="primary-button mb-2"
-                                        data-agregar-mi-direccion
-                                        @click="abrirFormDireccion('facturacion')"
-                                    >
-                                        Agregar mi dirección
-                                    </button>
 
                                     <ul class="grid gap-0.5">
                                         <li
@@ -1902,7 +1894,7 @@
                                 <button
                                     type="button"
                                     class="primary-button mt-4 w-full justify-center py-2.5 text-base"
-                                    :disabled="! estado.confirmable || (! modoCliente && ! entregaLista) || ! ventaEditable || ocupado"
+                                    :disabled="! estado.confirmable || ! entregaLista || ! ventaEditable || ocupado"
                                     @click="confirmar"
                                 >
                                     <span
@@ -3488,7 +3480,7 @@
                         this.direccionesCargadas = false;
                         this.cargando.direccion = true;
 
-                        return this.$axios.get("{{ url($rutaNv('clientes.direcciones', ['cliente' => '__ID__'])) }}".replace('__ID__', customerId))
+                        return this.$axios.get("{{ ($modoCliente ?? false) ? route('admin.autoservicio.direcciones') : url($rutaNv('clientes.direcciones', ['cliente' => '__ID__'])) }}".replace('__ID__', customerId))
                             .then((response) => {
                                 this.direccionesCliente = response.data;
 
@@ -3727,39 +3719,6 @@
                         // Texto parcial («Pes» sin elegir) no es una ubicacion: no se guarda ni se usa en la venta.
                         if (! d.municipio_codigo) {
                             this.formDireccion.error = 'Selecciona una ciudad o municipio de la lista.';
-
-                            return;
-                        }
-
-                        // Cliente (autoservicio): crea UNA direccion en su ficha y la venta queda lista; nunca "puntual".
-                        if (this.modoCliente) {
-                            const faltan = ['nombre', 'apellido', 'telefono', 'linea'].filter((k) => ! String(d[k] || '').trim());
-
-                            if (faltan.length) {
-                                this.formDireccion.error = 'Completa los campos obligatorios (*).';
-
-                                return;
-                            }
-
-                            this.cargando.guardarDireccion = true;
-
-                            this.$axios.post("{{ url($rutaNv('direccion', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
-                                nombre: d.nombre, apellido: d.apellido, telefono: d.telefono, lineas: [d.linea],
-                                municipio_codigo: d.municipio_codigo, codigo_postal: d.codigo_postal,
-                            })
-                                .then((response) => {
-                                    this.estado = response.data;
-                                    this.errorGeneral = null;
-                                    this.cerrarFormDireccion();
-                                })
-                                .catch((error) => {
-                                    const datos = error?.response?.data || {};
-
-                                    this.formDireccion.error = datos.errores
-                                        ? this.mensajeDireccionInvalida(error)
-                                        : (datos.mensaje || 'No pudimos guardar tu dirección. Inténtalo de nuevo.');
-                                })
-                                .finally(() => { this.cargando.guardarDireccion = false; });
 
                             return;
                         }
@@ -4103,7 +4062,7 @@
                         const dom = estado.entrega ? estado.entrega.domiciliario : null;
                         const claveAuto = dom ? estado.borrador.id + ':' + dom.zona.id : null;
 
-                        if (dom && ! dom.elegido_id && dom.sugerido_id && this.ventaEditable && this._domiciliarioAuto !== claveAuto) {
+                        if (! this.modoCliente && dom && ! dom.elegido_id && dom.sugerido_id && this.ventaEditable && this._domiciliarioAuto !== claveAuto) {
                             this._domiciliarioAuto = claveAuto;
                             this.$nextTick(() => this.elegirDomiciliario(String(dom.sugerido_id)));
                         }
@@ -4112,7 +4071,9 @@
 
                         if (this.modoCliente) {
                             this.prepararCliente(estado);
-                        } else if (customerId && this._direccionesCargadasPara !== customerId) {
+                        }
+
+                        if (customerId && this._direccionesCargadasPara !== customerId) {
                             this._direccionesCargadasPara = customerId;
                             this.cargarDireccionesCliente(customerId);
                         }
@@ -5253,13 +5214,13 @@
 
                     /** P4: aplica recogida + transferencia por defecto en el servidor para que el total y el boton queden listos. */
                     prepararCliente(estado) {
-                        if (this._preparando || ! (estado.lineas || []).length || estado.confirmable || estado.borrador.estado !== 'activo') {
+                        if (this._preparando || ! (estado.lineas || []).length || estado.confirmable || estado.borrador.estado !== 'activo' || ! (estado.entrega && estado.entrega.entrega_completa)) {
                             return;
                         }
 
                         this._preparando = true;
 
-                        this.$axios.post("{{ url($rutaNv('preparar', ['borrador' => '__ID__'])) }}".replace('__ID__', estado.borrador.id))
+                        this.$axios.post("{{ url($rutaNv('preparar', ['borrador' => '__ID__'])) }}".replace('__ID__', estado.borrador.id), { solo_pago: true })
                             .then((response) => { this.estado = response.data; })
                             .catch((error) => { this.errorGeneral = error?.response?.data?.mensaje || 'No pudimos preparar tu pedido. Inténtalo de nuevo.'; })
                             .finally(() => { this._preparando = false; });
