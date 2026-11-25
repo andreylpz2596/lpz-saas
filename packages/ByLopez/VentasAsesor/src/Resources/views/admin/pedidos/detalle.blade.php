@@ -96,7 +96,7 @@
             @php
                 $envioGuia = (object) [
                     'id' => $pedido->id, 'increment_id' => $pedido->increment_id, 'status' => $pedido->status, 'estado_despacho' => $estado_despacho,
-                    'shipping_method' => $pedido->shipping_method, 'guias' => $guias,
+                    'shipping_method' => $pedido->shipping_method, 'guias' => $guias, 'factura' => $factura ?? null,
                 ];
             @endphp
 

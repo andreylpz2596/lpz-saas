@@ -33,6 +33,14 @@
         </button>
     @endif
 
+    @if (! empty($pedido->factura))
+        <a href="{{ route('admin.ventas_asesor.pedidos.factura', ['pedido' => $pedido->id]) }}" target="_blank" rel="noopener noreferrer"
+           class="secondary-button inline-flex items-center gap-1"
+           data-accion="ver_factura" title="Ver factura {{ $pedido->factura['numero'] }}" aria-label="Ver factura {{ $pedido->factura['numero'] }}">
+            <span class="icon-printer text-xl"></span> Ver factura
+        </a>
+    @endif
+
     @if ($conPdf)
         <a href="{{ route('admin.ventas_asesor.pedidos.guia', ['pedido' => $pedido->id, 'guia' => $conPdf['id'], 'modo' => 'ver']) }}" target="_blank" rel="noopener noreferrer"
            class="secondary-button inline-flex items-center gap-1"
