@@ -472,6 +472,8 @@ return [
             'admin.autoservicio.tallas',
             'admin.autoservicio.eliminar',
             'admin.autoservicio.preparar',
+            'admin.autoservicio.direccion',
+            'admin.autoservicio.ubicaciones',
             'admin.autoservicio.confirmar',
             'admin.autoservicio.pedidos.data',
             'admin.autoservicio.pedidos.show',

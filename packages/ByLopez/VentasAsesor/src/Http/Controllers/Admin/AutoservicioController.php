@@ -5,6 +5,7 @@ namespace ByLopez\VentasAsesor\Http\Controllers\Admin;
 use ByLopez\VentasAsesor\DataObjects\OrigenDireccion;
 use ByLopez\VentasAsesor\DataObjects\SeleccionPropiedadComercial;
 use ByLopez\VentasAsesor\Exceptions\AutoservicioInvalidoException;
+use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\AgregarDireccionNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\AplicarTallasNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\ColoresNuevaVentaRequest;
 use ByLopez\VentasAsesor\Http\Requests\NuevaVenta\IniciarConTallasAutoservicioRequest;
@@ -22,6 +23,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Throwable;
+use Webkul\Customer\Models\CustomerAddress;
 use Webkul\User\Contracts\Admin;
 
 /**
@@ -183,6 +185,27 @@ class AutoservicioController extends Controller
         });
     }
 
+    /**
+     * El cliente SIN ninguna direccion registrada (p. ej. nacio en la tienda web) crea UNA el mismo, sin intervencion del
+     * administrador. Si ya tiene alguna, no: corregirlas o sumar mas sigue siendo del equipo. El cliente sale del vinculo; la
+     * direccion queda en SU ficha (RT-04) y, como es la unica, predeterminada. Luego se reaplican recogida y pago por defecto.
+     */
+    public function guardarDireccion(int $borrador, AgregarDireccionNuevaVentaRequest $request): JsonResponse
+    {
+        return $this->responder(function () use ($borrador, $request) {
+            $this->propio($borrador);
+            $cliente = $this->clientes->de($this->actor());
+
+            if (CustomerAddress::query()->where('customer_id', $cliente->id)->where('address_type', 'customer')->exists()) {
+                return response()->json(['codigo' => 'direccion_ya_registrada', 'mensaje' => ''], 403);
+            }
+
+            $this->nuevaVenta->agregarDireccionCliente($borrador, $request->aDireccion(), $this->actor());
+
+            return $this->aplicarPorDefecto($borrador)->toArray();
+        });
+    }
+
     /** P4: confirma con el total que el cliente vio. Doble clic / reintento = el mismo pedido (yaExistia), nunca dos. */
     public function confirmar(int $borrador, Request $request): JsonResponse
     {
@@ -303,7 +326,9 @@ class AutoservicioController extends Controller
             in_array($clave, ['no_es_propietario', 'borrador_inexistente', 'cliente_no_coincide'], true) => 'No encontramos esa venta.',
             in_array($clave, ['borrador_no_editable'], true) => 'Esta venta ya no se puede modificar.',
             in_array($clave, ['rentabilidad_insuficiente', 'pedido_rechazado_por_cerco', 'cliente_no_confirmable', 'propiedad_comercial_invalida', 'tipo_operacion_sin_permiso'], true) => 'No podemos confirmar este pedido en línea. Comunícate con nuestro equipo para ayudarte.',
-            $clave === 'direccion_facturacion_requerida' => 'Necesitamos una dirección registrada para tu pedido. Comunícate con nuestro equipo para ayudarte.',
+            $clave === 'direccion_facturacion_requerida' => 'Necesitamos una dirección para tu pedido. Agrégala con «Agregar mi dirección».',
+            $clave === 'direccion_ya_registrada' => 'Ya tienes una dirección registrada. Para cambiarla, comunícate con nuestro equipo.',
+            $clave === 'datos_cliente_invalidos' => 'Revisa los datos de la dirección (nombre, teléfono, dirección y ciudad) e inténtalo de nuevo.',
             $clave === 'totales_cambiaron' => 'El total de tu pedido cambió. Revisa el resumen y confirma de nuevo.',
             $clave === 'carrito_vacio' => 'Agrega al menos un producto para confirmar tu pedido.',
             default => 'No pudimos completar la operación. Si continúa, comunícate con nuestro equipo.',

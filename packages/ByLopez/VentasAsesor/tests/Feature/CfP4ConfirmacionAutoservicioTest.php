@@ -112,7 +112,7 @@ test('P4 cliente sin direccion registrada: mensaje comercial y ningun pedido', f
     $r = $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.confirmar', ['borrador' => $id]), ['total_esperado' => 100]);
 
     expect($r->getStatusCode())->toBeGreaterThanOrEqual(400)
-        ->and($r->json('mensaje'))->toBe('Necesitamos una dirección registrada para tu pedido. Comunícate con nuestro equipo para ayudarte.')
+        ->and($r->json('mensaje'))->toBe('Necesitamos una dirección para tu pedido. Agrégala con «Agregar mi dirección».')
         ->and(Order::query()->count())->toBe($antes);
 });
 
@@ -126,4 +126,32 @@ test('P4 un cliente no confirma la venta de otro', function () {
     $this->actingAs($userOtro, 'admin')->postJson(route('admin.autoservicio.preparar', ['borrador' => $id]))->assertStatus(409);
 
     expect(Order::query()->count())->toBe($antes);
+});
+
+test('P4 cliente sin direccion crea UNA el mismo (sin administrador) y el pedido queda confirmable', function () {
+    CustomerAddress::query()->where('customer_id', $this->cliente->id)->delete();
+    $id = cf4_venta($this);
+    $datos = ['nombre' => 'Ana', 'apellido' => 'Compra', 'telefono' => '3001234567', 'lineas' => ['Calle 5 # 6-7'], 'municipio_codigo' => '15542', 'codigo_postal' => '152210'];
+
+    $estado = $this->actingAs($this->user, "admin")->postJson(route("admin.autoservicio.direccion", ["borrador" => $id]), $datos)->assertOk()->json();
+
+    $guardada = CustomerAddress::query()->where('customer_id', $this->cliente->id)->where('address_type', 'customer')->get();
+
+    expect($guardada)->toHaveCount(1)
+        ->and((int) $guardada->first()->default_address)->toBe(1)
+        ->and($estado['confirmable'])->toBeTrue();
+
+    // UNA sola: con una direccion ya registrada, otra se rechaza y no se guarda.
+    $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.direccion', ['borrador' => $id]), $datos)->assertForbidden();
+    expect(CustomerAddress::query()->where('customer_id', $this->cliente->id)->where('address_type', 'customer')->count())->toBe(1);
+});
+
+test('P4 la direccion del cliente: sin municipio se rechaza y la venta ajena no se toca', function () {
+    CustomerAddress::query()->where('customer_id', $this->cliente->id)->delete();
+    $id = cf4_venta($this);
+
+    $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.direccion', ['borrador' => $id]), ['nombre' => 'Ana'])->assertStatus(422);
+    $this->actingAs($this->user, 'admin')->postJson(route('admin.autoservicio.direccion', ['borrador' => 999999]), ['municipio_codigo' => '15542'])->assertStatus(404);
+
+    expect(CustomerAddress::query()->where('customer_id', $this->cliente->id)->count())->toBe(0);
 });

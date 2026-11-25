@@ -1636,6 +1636,17 @@
                                 >
                                     <p class="mb-1 font-semibold text-amber-700 dark:text-amber-300">⚠ Falta completar</p>
 
+                                    {{-- Cliente sin direccion registrada: crea UNA el mismo (sin pedirle nada al administrador). --}}
+                                    <button
+                                        v-if="modoCliente && estado.requiere_direccion_facturacion"
+                                        type="button"
+                                        class="primary-button mb-2"
+                                        data-agregar-mi-direccion
+                                        @click="abrirFormDireccion('facturacion')"
+                                    >
+                                        Agregar mi dirección
+                                    </button>
+
                                     <ul class="grid gap-0.5">
                                         <li
                                             v-for="m in motivosPendientes"
@@ -1880,7 +1891,7 @@
                                 <input class="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900" inputmode="numeric" autocomplete="postal-code" v-model="formDireccion.datos.codigo_postal" />
                             </div>
 
-                            <label class="flex items-start gap-2 text-sm text-gray-700 sm:col-span-2 dark:text-gray-200">
+                            <label v-if="! modoCliente" class="flex items-start gap-2 text-sm text-gray-700 sm:col-span-2 dark:text-gray-200">
                                 <input type="checkbox" class="mt-0.5 h-4 w-4 accent-blue-600" v-model="formDireccion.guardar" />
                                 <span>
                                     Guardar en las direcciones del cliente
@@ -3208,7 +3219,7 @@
                     buscarUbicaciones(texto) {
                         const token = this._tokenUbicacion = (this._tokenUbicacion || 0) + 1;
 
-                        this.$axios.get("{{ route('admin.ventas_asesor.ubicaciones.buscar') }}", { params: { q: texto } })
+                        this.$axios.get("{{ ($modoCliente ?? false) ? route('admin.autoservicio.ubicaciones') : route('admin.ventas_asesor.ubicaciones.buscar') }}", { params: { q: texto } })
                             .then((response) => {
                                 if (token !== this._tokenUbicacion) {
                                     return;   // llego una respuesta vieja: ya se escribio otra cosa
@@ -3289,6 +3300,39 @@
                         // Texto parcial («Pes» sin elegir) no es una ubicacion: no se guarda ni se usa en la venta.
                         if (! d.municipio_codigo) {
                             this.formDireccion.error = 'Selecciona una ciudad o municipio de la lista.';
+
+                            return;
+                        }
+
+                        // Cliente (autoservicio): crea UNA direccion en su ficha y la venta queda lista; nunca "puntual".
+                        if (this.modoCliente) {
+                            const faltan = ['nombre', 'apellido', 'telefono', 'linea'].filter((k) => ! String(d[k] || '').trim());
+
+                            if (faltan.length) {
+                                this.formDireccion.error = 'Completa los campos obligatorios (*).';
+
+                                return;
+                            }
+
+                            this.cargando.guardarDireccion = true;
+
+                            this.$axios.post("{{ url($rutaNv('direccion', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), {
+                                nombre: d.nombre, apellido: d.apellido, telefono: d.telefono, lineas: [d.linea],
+                                municipio_codigo: d.municipio_codigo, codigo_postal: d.codigo_postal,
+                            })
+                                .then((response) => {
+                                    this.estado = response.data;
+                                    this.errorGeneral = null;
+                                    this.cerrarFormDireccion();
+                                })
+                                .catch((error) => {
+                                    const datos = error?.response?.data || {};
+
+                                    this.formDireccion.error = datos.errores
+                                        ? this.mensajeDireccionInvalida(error)
+                                        : (datos.mensaje || 'No pudimos guardar tu dirección. Inténtalo de nuevo.');
+                                })
+                                .finally(() => { this.cargando.guardarDireccion = false; });
 
                             return;
                         }
