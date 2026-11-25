@@ -179,3 +179,11 @@ test('prueba en iPhone 2026-11-25: «ese» antes del color, «una» seguido de �
     ])->and(rev('una azul rey 68, una lila M dama'))->toBe([ok('N', 'Azul Rey', '6-8', 1), ok('D', 'Lila', 'M', 1)])
         ->and(rev('20 beige claro en caballero talla L'))->toBe([ok('H', 'Beige Claro', 'L', 20)]);
 });
+
+test('listado de Camilo 2026-11-25: S/M/L/XL sin decir «talla», con cantidad al principio o al final', function () {
+    expect(rev('blanco S caballero, 20 unidades. Verde pistacho XL de dama, 15 unidades. 208 talla M de hombre, blancas.'))->toBe([
+        ok('H', 'Blanco', 'S', 20),
+        ok('D', 'Verde Pistacho', 'XL', 15),
+        ok('H', 'Blanco', 'M', 208),
+    ]);
+});
