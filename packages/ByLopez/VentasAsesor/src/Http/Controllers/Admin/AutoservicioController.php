@@ -241,7 +241,7 @@ class AutoservicioController extends Controller
 
             if ($envio === null
                 || ($tipoEnvio === OrigenDireccion::GUARDADA && ! in_array((int) $request->input('envio.address_id'), $propias, true))
-                || ($request->has('facturacion') && ($facturacionId === null || ! in_array($facturacionId, $propias, true)))) {
+                || (is_array($request->input('facturacion')) && ($facturacionId === null || ! in_array($facturacionId, $propias, true)))) {
                 return response()->json(['codigo' => 'entrega_no_permitida', 'mensaje' => ''], 403);
             }
 
