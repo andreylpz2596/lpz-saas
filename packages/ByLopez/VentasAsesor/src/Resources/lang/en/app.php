@@ -944,4 +944,9 @@ return [
             'aviso' => 'Highlighted notice',
         ],
     ],
+
+    'sesion' => [
+        'pagina-expirada' => 'The page had expired. Please try again.',
+        'ingresando' => 'Signing in…',
+    ],
 ];

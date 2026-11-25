@@ -945,4 +945,9 @@ return [
             'aviso' => 'Aviso destacado',
         ],
     ],
+
+    'sesion' => [
+        'pagina-expirada' => 'La página había expirado. Vuelve a intentarlo.',
+        'ingresando' => 'Ingresando…',
+    ],
 ];
