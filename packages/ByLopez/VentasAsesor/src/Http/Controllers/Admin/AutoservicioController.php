@@ -74,7 +74,7 @@ class AutoservicioController extends Controller
 
     public function pedidosData(Request $request): JsonResponse
     {
-        return $this->responder(fn () => $this->pedidos->listar($this->clientes->de($this->actor(), AutorizacionVentasAsesor::PERMISO_AUTOSERVICIO_PEDIDOS), max(1, (int) $request->query('pagina', 1))));
+        return $this->responder(fn () => $this->pedidos->listar($this->clientes->de($this->actor(), AutorizacionVentasAsesor::PERMISO_AUTOSERVICIO_PEDIDOS), max(1, (int) $request->query('pagina', 1)), $request->query('q') !== null ? mb_substr((string) $request->query('q'), 0, 40) : null));
     }
 
     public function pedidoDetalle(int $pedido): JsonResponse

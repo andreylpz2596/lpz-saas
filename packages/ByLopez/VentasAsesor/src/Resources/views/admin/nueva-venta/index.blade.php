@@ -1904,6 +1904,62 @@
                 </x-admin::modal>
 
                 <!-- ==================== MODAL: CREAR CLIENTE ==================== -->
+                <!-- Cliente: pedido recien confirmado, en modal (el mismo detalle que «Mis pedidos»). -->
+                <x-admin::modal ref="modalPedidoConfirmado">
+                    <x-slot:header>
+                        <p class="text-lg font-bold text-green-700 dark:text-green-300" data-modal-pedido-confirmado>
+                            ¡Pedido #@{{ pedidoConfirmado ? pedidoConfirmado.numero : (confirmacionCliente ? confirmacionCliente.numero : '') }} confirmado!
+                        </p>
+                    </x-slot>
+
+                    <x-slot:content>
+                        <div v-if="pedidoConfirmado" class="grid gap-3 text-sm">
+                            <div class="grid gap-2 sm:grid-cols-2">
+                                <div class="rounded-lg border p-2.5 dark:border-gray-800">
+                                    <p class="text-[11px] font-semibold uppercase text-gray-500">Entrega</p>
+                                    <p class="font-semibold text-gray-800 dark:text-white">@{{ pedidoConfirmado.entrega }}</p>
+                                </div>
+                                <div class="rounded-lg border p-2.5 dark:border-gray-800">
+                                    <p class="text-[11px] font-semibold uppercase text-gray-500">Pago</p>
+                                    <p class="font-semibold text-gray-800 dark:text-white">@{{ pedidoConfirmado.estado_pago }} · Transferencia</p>
+                                </div>
+                                <div v-if="pedidoConfirmado.metodo_envio" class="rounded-lg border p-2.5 dark:border-gray-800">
+                                    <p class="text-[11px] font-semibold uppercase text-gray-500">Método de envío</p>
+                                    <p class="font-semibold text-gray-800 dark:text-white">@{{ pedidoConfirmado.metodo_envio }}</p>
+                                </div>
+                                <div v-if="pedidoConfirmado.destino" class="rounded-lg border p-2.5 dark:border-gray-800">
+                                    <p class="text-[11px] font-semibold uppercase text-gray-500">Dirección de entrega</p>
+                                    <p class="font-semibold text-gray-800 dark:text-white">@{{ pedidoConfirmado.destino }}</p>
+                                </div>
+                            </div>
+
+                            <div class="max-h-56 overflow-y-auto rounded-lg border dark:border-gray-800">
+                                <div v-for="(l, i) in pedidoConfirmado.prendas" :key="i" class="flex items-center justify-between gap-2 border-b px-3 py-1.5 last:border-b-0 dark:border-gray-800">
+                                    <span class="min-w-0">@{{ l.nombre }} · @{{ l.color }} · @{{ l.talla }} × @{{ l.cantidad }}</span>
+                                    <span class="whitespace-nowrap font-semibold">@{{ precio(l.total) }}</span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between text-base font-extrabold text-gray-900 dark:text-white">
+                                <span>Total</span><span>@{{ precio(pedidoConfirmado.total) }}</span>
+                            </div>
+
+                            <p class="rounded-lg bg-amber-50 p-2.5 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                                Te avisaremos cuando esté listo. El pago se confirma cuando recibamos tu transferencia.
+                            </p>
+                        </div>
+                        <p v-else class="text-sm text-gray-600 dark:text-gray-300">
+                            Total @{{ confirmacionCliente ? precio(confirmacionCliente.total) : '' }}. Te avisaremos cuando esté listo.
+                        </p>
+                    </x-slot:content>
+
+                    <x-slot:footer>
+                        <div class="flex w-full flex-wrap justify-end gap-2">
+                            <button type="button" class="secondary-button" @click="otroPedido">Hacer otro pedido</button>
+                            <a href="{{ route('admin.autoservicio.pedidos.index') }}" class="primary-button">Ver mis pedidos</a>
+                        </div>
+                    </x-slot:footer>
+                </x-admin::modal>
                 <x-admin::modal ref="modalCrearCliente">
                     <x-slot:header>
                         <p class="text-lg font-bold text-gray-800 dark:text-white">+ Crear cliente</p>
@@ -2420,6 +2476,7 @@
                         modoCliente: @json($modoCliente ?? false),
                         nombreCliente: null,
                         confirmacionCliente: null,
+                        pedidoConfirmado: null,
 
                         borradorId: null,
                         estado: null,
@@ -4773,6 +4830,11 @@
                     },
 
                     otroPedido() {
+                        if (this.$refs.modalPedidoConfirmado) {
+                            this.$refs.modalPedidoConfirmado.close();
+                        }
+
+                        this.pedidoConfirmado = null;
                         this.reiniciar();
                     },
 
@@ -4797,9 +4859,14 @@
                         this.$axios.post("{{ url($rutaNv('confirmar', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), { total_esperado: this.estado.total_esperado })
                             .then((response) => {
                                 this.confirmacionCliente = response.data;
-                                // Bloquea la pantalla (ventaEditable) y lleva al cliente a «Mis pedidos», que abre el pedido recien creado.
+                                // Bloquea la pantalla (ventaEditable) y abre el pedido recien creado en un modal (mismo detalle de «Mis pedidos»).
                                 this.confirmacion = { cliente: true };
-                                window.location.href = "{{ route('admin.autoservicio.pedidos.index') }}?confirmado=" + encodeURIComponent(response.data.order_id);
+                                this.pedidoConfirmado = null;
+                                this.$refs.modalPedidoConfirmado.open();
+
+                                this.$axios.get("{{ route('admin.autoservicio.pedidos.show', ['pedido' => '__ID__']) }}".replace('__ID__', response.data.order_id))
+                                    .then((detalle) => { this.pedidoConfirmado = detalle.data; })
+                                    .catch(() => {});
                             })
                             .catch((error) => {
                                 this.errorGeneral = error?.response?.data?.mensaje || 'No pudimos confirmar tu pedido. Inténtalo de nuevo.';
