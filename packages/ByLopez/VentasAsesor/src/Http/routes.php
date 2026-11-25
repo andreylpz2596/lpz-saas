@@ -35,10 +35,13 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
         Route::get('matrices', [AutoservicioController::class, 'matrices'])->name('matrices');
         Route::get('productos/{producto}/matriz', [AutoservicioController::class, 'matriz'])->whereNumber('producto')->name('productos.matriz');
         Route::get('en-curso', [AutoservicioController::class, 'enCurso'])->name('en_curso');
+        // Cliente SIN direccion registrada: puede crear UNA (autocomplete de municipios + guardado sobre el vinculo).
+        Route::get('ubicaciones', [UbicacionesController::class, 'buscar'])->name('ubicaciones');
         Route::post('iniciar-con-tallas', [AutoservicioController::class, 'iniciarConTallas'])->name('iniciar_con_tallas');
         Route::get('{borrador}', [AutoservicioController::class, 'estado'])->whereNumber('borrador')->name('estado');
         Route::post('{borrador}/tallas', [AutoservicioController::class, 'aplicarTallas'])->whereNumber('borrador')->name('tallas');
         Route::post('{borrador}/eliminar', [AutoservicioController::class, 'eliminar'])->whereNumber('borrador')->name('eliminar');
+        Route::post('{borrador}/direccion', [AutoservicioController::class, 'guardarDireccion'])->whereNumber('borrador')->name('direccion');
         Route::post('{borrador}/preparar', [AutoservicioController::class, 'preparar'])->whereNumber('borrador')->name('preparar');
         Route::post('{borrador}/confirmar', [AutoservicioController::class, 'confirmar'])->whereNumber('borrador')->name('confirmar');
     });
