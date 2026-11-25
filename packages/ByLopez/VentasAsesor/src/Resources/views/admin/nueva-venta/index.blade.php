@@ -4797,8 +4797,9 @@
                         this.$axios.post("{{ url($rutaNv('confirmar', ['borrador' => '__ID__'])) }}".replace('__ID__', this.borradorId), { total_esperado: this.estado.total_esperado })
                             .then((response) => {
                                 this.confirmacionCliente = response.data;
-                                // Bloquea la pantalla (ventaEditable) mientras se muestra el aviso.
+                                // Bloquea la pantalla (ventaEditable) y lleva al cliente a «Mis pedidos», que abre el pedido recien creado.
                                 this.confirmacion = { cliente: true };
+                                window.location.href = "{{ route('admin.autoservicio.pedidos.index') }}?confirmado=" + encodeURIComponent(response.data.order_id);
                             })
                             .catch((error) => {
                                 this.errorGeneral = error?.response?.data?.mensaje || 'No pudimos confirmar tu pedido. Inténtalo de nuevo.';

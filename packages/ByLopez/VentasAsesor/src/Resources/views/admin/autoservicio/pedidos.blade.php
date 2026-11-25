@@ -7,6 +7,11 @@
         <a href="{{ route('admin.autoservicio.pantalla') }}" class="primary-button">Hacer un pedido</a>
     </div>
 
+    <div class="mt-4 hidden rounded-lg border border-green-300 bg-green-50 p-4 text-green-900 dark:bg-green-950 dark:text-green-100" data-confirmado role="status">
+        <p class="text-base font-bold" data-confirmado-titulo></p>
+        <p class="mt-1 text-sm">Te avisaremos cuando esté listo. El pago se confirma cuando recibamos tu transferencia.</p>
+    </div>
+
     <div class="mt-4 rounded bg-white p-4 shadow dark:bg-gray-900" data-mis-pedidos>
         <p class="text-sm text-gray-500" data-estado>Cargando…</p>
         <div class="overflow-x-auto"><table class="hidden w-full text-left text-sm" data-tabla>
@@ -80,6 +85,19 @@
                 raiz.querySelector('[data-sig]').addEventListener('click', () => { if (pagina * porPagina < total) { pagina++; cargar(); } });
                 modal.querySelector('[data-det-cerrar]').addEventListener('click', () => modal.close());
                 cargar();
+
+                // Venta recien confirmada: aviso + detalle abierto. El parametro se quita para que recargar no lo repita.
+                const confirmado = parseInt(new URLSearchParams(window.location.search).get('confirmado') || '', 10);
+
+                if (confirmado > 0) {
+                    history.replaceState(null, '', window.location.pathname);
+                    pedir(detalleUrl.replace('__ID__', confirmado)).then((p) => {
+                        const aviso = document.querySelector('[data-confirmado]');
+                        aviso.querySelector('[data-confirmado-titulo]').textContent = '¡Pedido #' + p.numero + ' confirmado!';
+                        aviso.classList.remove('hidden');
+                        ver(confirmado);
+                    }).catch(() => {});
+                }
             })();
         </script>
     @endPushOnce
