@@ -160,6 +160,9 @@ class VentasAsesorServiceProvider extends ServiceProvider
         $this->loadTranslationsFrom(__DIR__.'/../Resources/lang', 'ventasasesor');
         $this->loadViewsFrom(__DIR__.'/../Resources/views', 'ventasasesor');
 
+        // Factura PDF: misma vista de Bagisto (shop::customers.account.orders.pdf) con el pie de pagina configurado (sin tocar packages/Webkul).
+        $this->callAfterResolving('view', fn ($view) => $view->prependNamespace('shop', __DIR__.'/../Resources/views/overrides/shop'));
+
         $this->comandos();
 
         // Doc. 32: UNA sola entrada «Costos y precios» que aparece con costos O con precios por grupo. Bagisto filtra el menu

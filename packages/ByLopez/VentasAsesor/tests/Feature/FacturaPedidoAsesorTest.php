@@ -47,9 +47,11 @@ function fpa_pedido(Admin $asesor, bool $pagado): array
     $factura = rt04b1a_facturar($pedido->fresh(), $e['item']);
 
     if ($pagado) {
-        DB::table('invoices')->where('id', $factura->id)->update(['state' => 'paid']);
+        // Factura y cobro por el TOTAL del pedido (la factura de la fabrica trae solo 1 unidad: sin esto el estado seria parcial al azar).
+        $total = (float) $pedido->fresh()->base_grand_total;
+        DB::table('invoices')->where('id', $factura->id)->update(['state' => 'paid', 'base_grand_total' => $total, 'grand_total' => $total]);
         DB::table('order_transactions')->insert([
-            'transaction_id' => 'fpa-'.uniqid(), 'payment_method' => 'moneytransfer', 'amount' => (float) $factura->base_grand_total,
+            'transaction_id' => 'fpa-'.uniqid(), 'payment_method' => 'moneytransfer', 'amount' => $total,
             'invoice_id' => $factura->id, 'order_id' => $pedido->id, 'created_at' => now(), 'updated_at' => now(),
         ]);
     }
@@ -98,4 +100,16 @@ test('sin sesion no se llega a la factura', function () {
     $p = fpa_pedido($a, true);
 
     $this->get(route('admin.ventas_asesor.pedidos.factura', $p['pedido']->id))->assertRedirect();
+});
+
+test('el PDF de la factura trae el pie con «no responsable de IVA» (sin pie configurado: aviso por defecto)', function () {
+    $a = fpa_asesor('Asesora Pie');
+    $p = fpa_pedido($a, true);
+    $invoice = app(\Webkul\Sales\Repositories\InvoiceRepository::class)->findOrFail($p['factura']->id);
+
+    $html = fn () => view('shop::customers.account.orders.pdf', ['invoice' => $invoice, 'orderCurrencyCode' => 'COP'])->render();
+
+    \Webkul\Core\Models\CoreConfig::query()->where('code', 'sales.invoice_settings.pdf_print_outs.footer_text')->delete();
+    expect($html())->toContain('no responsable de IVA');
+
 });
