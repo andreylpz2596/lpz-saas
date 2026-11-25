@@ -93,12 +93,16 @@ final class InterpreteDictado
 
     private int $maxPalabrasColor = 1;
 
+    /** @var array<int, string> numero del codigo unico → nombre de color («124» → «Blanco»): permite dictar el SKU entero */
+    private array $codigos = [];
+
     /**
      * @param  list<string>  $colores  nombres de color del catalogo («Azul Rey», «Curuba/Salmon»)
      * @param  array<string, string|list<string>>  $alias  alias extra: «turquesa» => «Azul Turquesa»; «rosa» => [«Rosado», «Palo de Rosa»]
      */
-    public function __construct(array $colores, array $alias = [])
+    public function __construct(array $colores, array $alias = [], array $codigos = [])
     {
+        $this->codigos = $codigos;
         $porPalabra = [];
 
         foreach (array_unique($colores) as $color) {
@@ -195,6 +199,35 @@ final class InterpreteDictado
                 $lineas[] = $actual;
                 $actual = $this->heredar($actual, $heredar);
             };
+
+            if ($tipo === 'sku') {
+                // El SKU trae el producto completo: cierra la linea anterior y arranca una propia (sin heredar nada).
+                if ($this->tieneDatos($actual)) {
+                    $cerrar([]);
+                }
+                $actual = $this->nueva();
+                $actual['palabras'][] = $frag;
+                $actual['ancla'] = $i;
+                $actual['color'] = $valor['color'];
+                $actual['color_dicho'] = $frag;
+                $actual['genero'] = $valor['genero'];
+                $actual['genero_explicito'] = true;
+                $actual['genero_dicho'] = $frag;
+                $actual['linea'] = $valor['linea'];
+                if ($valor['talla'] !== null) {
+                    $actual['talla'] = $valor['talla'];
+                    $actual['talla_fuente'] = $frag;
+                } elseif ($valor['linea'] === 'TP') {
+                    $actual['talla'] = 'U';
+                    $actual['talla_fuente'] = $frag;
+                    $actual['heredado']['talla'] = true;
+                }
+                if ($valor['genero'] !== 'N') {
+                    $contextoAdulto = $valor['genero'];
+                }
+
+                continue;
+            }
 
             if ($tipo === 'talla_invalida') {
                 $actual['palabras'][] = $frag;
@@ -459,6 +492,11 @@ final class InterpreteDictado
             return [null, 1];
         }
 
+        // SKU dictado («124H-DZ-M», «124h dz m»): color + tipo + linea + talla de un solo golpe.
+        if (($sku = $this->skuEn($t, $i)) !== null) {
+            return [['sku', $sku[0]], $sku[1]];
+        }
+
         // «talla …»: el marcador manda (talla 6 = 6-8, talla 68 = 6-8, talla 6 8, talla 6.8, talla S, talla ese, talla doble equis ele).
         if ($tok === 'talla' && $sig !== null) {
             if (($despues = $this->tallaTrasMarcador($t, $i + 1)) !== null) {
@@ -538,6 +576,51 @@ final class InterpreteDictado
     }
 
     /** @return ?array{0: string, 1: int} talla y tokens que ocupa despues de «talla» */
+    /**
+     * @return array{0: array{color: string, genero: string, linea: string, talla: ?string}, 1: int}|null  valor y tokens consumidos
+     */
+    private function skuEn(array $t, int $i): ?array
+    {
+        if ($this->codigos === []) {
+            return null;
+        }
+
+        $tok = $t[$i];
+        $consumidos = 1;
+        $talla = null;
+
+        if (preg_match('/^(\d{3})([dhn])-(dz|tp)(?:-([a-z0-9]{1,3}))?$/', $tok, $m)) {
+            $talla = isset($m[4]) && $m[4] !== '' ? $this->tallaDeSku($m[4]) : null;
+            if (isset($m[4]) && $m[4] !== '' && $talla === null) {
+                return null;
+            }
+        } elseif (preg_match('/^(\d{3})([dhn])$/', $tok, $m) && in_array($t[$i + 1] ?? null, ['dz', 'tp'], true)) {
+            $m[3] = $t[$i + 1];
+            $consumidos = 2;
+            if (($cand = $t[$i + 2] ?? null) !== null && ($tc = $this->tallaDeSku($cand)) !== null) {
+                $talla = $tc;
+                $consumidos = 3;
+            }
+        } else {
+            return null;
+        }
+
+        $color = $this->codigos[(int) $m[1]] ?? null;
+
+        return $color === null ? null
+            : [['color' => $color, 'genero' => strtoupper($m[2]), 'linea' => strtoupper($m[3]), 'talla' => $talla], $consumidos];
+    }
+
+    /** Codigo de talla del SKU en minuscula («m», «xl», «6», «u») → codigo oficial, o null si no es una talla del catalogo. */
+    private function tallaDeSku(string $x): ?string
+    {
+        if (in_array($x, ['2', '6', '10', '14'], true)) {
+            return $x;
+        }
+
+        return $x === 'u' ? 'U' : (in_array($x, ['s', 'm', 'l', 'xl', 'xxl'], true) ? strtoupper($x) : null);
+    }
+
     private function tallaTrasMarcador(array $t, int $i): ?array
     {
         $tok = $t[$i];

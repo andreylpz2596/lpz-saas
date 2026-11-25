@@ -187,3 +187,15 @@ test('listado de Camilo 2026-11-25: S/M/L/XL sin decir «talla», con cantidad a
         ok('H', 'Blanco', 'M', 208),
     ]);
 });
+
+test('SKU dictado: «124H-DZ-M 20» y mezclado con lenguaje natural', function () {
+    $sku = fn (string $texto) => array_map(fn ($l) => [$l['linea'] === 'TP' ? 'TP' : $l['genero'], $l['color'], $l['talla_etiqueta'], $l['cantidad'], $l['problemas']],
+        (new I(['Blanco', 'Negro', 'Rojo', 'Verde Pistacho'], [], [124 => 'Blanco', 106 => 'Negro', 110 => 'Rojo', 119 => 'Verde Pistacho']))->interpretar($texto));
+
+    expect($sku('124H-DZ-M 20'))->toBe([['H', 'Blanco', 'M', 20, []]])
+        ->and($sku('124h-dz-m cantidad 20, 106d-dz-s 3'))->toBe([['H', 'Blanco', 'M', 20, []], ['D', 'Negro', 'S', 3, []]])
+        ->and($sku('110N-DZ-6 10 y negro dama M 2'))->toBe([['N', 'Rojo', '6-8', 10, []], ['D', 'Negro', 'M', 2, []]])
+        ->and($sku('124h dz m 20'))->toBe([['H', 'Blanco', 'M', 20, []]])
+        ->and($sku('106D-TP-U 4'))->toBe([['TP', 'Negro', 'Única', 4, []]])
+        ->and($sku('999H-DZ-M 5')[0][1])->toBeNull();
+});
