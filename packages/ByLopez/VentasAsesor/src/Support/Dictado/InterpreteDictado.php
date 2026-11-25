@@ -225,7 +225,7 @@ final class InterpreteDictado
 
             if ($tipo === 'uno') {
                 // «una camiseta roja talla M»: 1 expresado (decision A). Tras una linea completa empieza una nueva.
-                if ($this->completa($actual)) {
+                if ($this->completa($actual) || $actual['uno'] !== null || $actual['cantidad'] !== null) {
                     $cerrar(['genero', 'linea']);
                 }
                 $actual['palabras'][] = $frag;
@@ -240,7 +240,8 @@ final class InterpreteDictado
             $propio = $this->tiene($actual, $campo) && (! isset($actual['heredado'][$campo]) || $this->completa($actual));
 
             if ($tipo === 'genero') {
-                if ($propio && $actual['genero_explicito'] && $this->completa($actual)) {
+                // Si el tipo de la linea completa era heredado (no lo dijo ella), un tipo nuevo se lo corrige a ELLA («marfil, caballero»).
+                if ($propio && $actual['genero_explicito'] && $this->completa($actual) && ! isset($actual['heredado']['genero'])) {
                     $cerrar(['color']);
                 }
                 $actual['palabras'][] = $frag;
@@ -499,13 +500,12 @@ final class InterpreteDictado
             return [['talla', $letra[0]], $letra[1]];
         }
 
-        // El navegador escribe «ese», «eme», «ele» por S, M, L. Sin «talla» delante solo cuentan cuando la linea ya tiene color o
-        // tipo y aun no tiene talla, y no van antes de un color («ese rojo», «ese color» no son tallas).
+        // El navegador escribe «ese», «eme», «ele» por S, M, L. Sin «talla» delante cuentan si la linea aun no tiene talla y no
+        // viene una «talla …» explicita enseguida («ese rojo talla M»: ahi «ese» es la palabra). La pantalla lo marca con aviso.
         if (in_array($tok, ['ese', 'eme', 'ele'], true)
             && ($actual['talla'] === null || isset($actual['heredado']['talla']))
-            && (($actual['color'] !== null || $actual['candidatos'] !== []) && ! isset($actual['heredado']['color'])
-                || ($actual['genero_explicito'] && ! isset($actual['heredado']['genero'])))
-            && $sig !== 'color' && ($sig === null || $this->colorEn($t, $i + 1) === null)) {
+            && ! in_array('talla', array_slice($t, $i + 1, 4), true)
+            && ($sig === null || $sig !== 'color')) {
             return [['talla', self::TALLAS_DELETREADAS[$tok]], 1];
         }
 
@@ -514,7 +514,8 @@ final class InterpreteDictado
         }
 
         if (in_array($tok, ['un', 'una', 'uno'], true) && $sig !== null
-            && (in_array($sig, self::UNO_CON, true) || $this->colorEn($t, $i + 1) !== null)) {
+            && (in_array($sig, self::UNO_CON, true) || $this->colorEn($t, $i + 1) !== null
+                || ($sig === 'de' && isset($t[$i + 2]) && (in_array($t[$i + 2], ['ese', 'eme', 'ele'], true) || $this->colorEn($t, $i + 2) !== null)))) {
             return [['uno', 1], 1];
         }
 

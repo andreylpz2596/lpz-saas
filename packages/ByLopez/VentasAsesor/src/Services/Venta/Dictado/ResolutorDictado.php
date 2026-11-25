@@ -168,8 +168,10 @@ class ResolutorDictado
         $generoAsumido = $l['linea'] !== 'TP' && $l['genero'] === null;
         $unicaAsumida = $l['linea'] === 'TP' && $l['talla'] === 'U' && ! preg_match('/unica|\bu\b/', (string) ($l['fuentes']['talla'] ?? ''))
             && empty($l['corregida']);
+        $porLetra = in_array((string) ($l['fuentes']['talla'] ?? ''), ['ese', 'eme', 'ele'], true);
         $aviso = $generoAsumido ? 'Se tomó '.self::GENEROS[$genero].': es la única línea con ese color y talla.'
-            : ($unicaAsumida ? 'Se tomó talla Única: no se dijo la talla del crop top.' : null);
+            : ($unicaAsumida ? 'Se tomó talla Única: no se dijo la talla del crop top.'
+                : ($porLetra ? 'Se entendió «'.$l['fuentes']['talla'].'» como talla '.$l['talla_etiqueta'].': confírmalo.' : null));
 
         $variante = ProductProxy::modelClass()::query()->find((int) $v->id);
 

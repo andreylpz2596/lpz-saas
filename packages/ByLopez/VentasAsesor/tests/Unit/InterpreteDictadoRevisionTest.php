@@ -169,3 +169,13 @@ test('lo que escribe el navegador: «ese/eme/ele» por S/M/L y «de» intermedio
         ->and(rev('ese rojo talla M de dama 4'))->toBe([ok('D', 'Rojo', 'M', 4)])
         ->and(rev('negro dama M 2, ese blanco L de caballero 3'))->toBe([ok('D', 'Negro', 'M', 2), ok('H', 'Blanco', 'L', 3)]);
 });
+
+test('prueba en iPhone 2026-11-25: «ese» antes del color, «una» seguido de «de», tipo dicho despues y cantidad antes del producto', function () {
+    expect(rev('Listos una azul rey 68 una lila M dama una de ese marfil, Caballero, 20 beige claro, En caballero talla L,'))->toBe([
+        ok('N', 'Azul Rey', '6-8', 1),
+        ok('D', 'Lila', 'M', 1),
+        ok('H', 'Marfil', 'S', 1),
+        ok('H', 'Beige Claro', 'L', 20),
+    ])->and(rev('una azul rey 68, una lila M dama'))->toBe([ok('N', 'Azul Rey', '6-8', 1), ok('D', 'Lila', 'M', 1)])
+        ->and(rev('20 beige claro en caballero talla L'))->toBe([ok('H', 'Beige Claro', 'L', 20)]);
+});
