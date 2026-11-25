@@ -946,15 +946,16 @@
 
                                         <tbody>
                                             <template
-                                                v-for="celda in matricesPorProducto[tarjeta.productId].celdas"
+                                                v-for="(celda, indiceCelda) in matricesPorProducto[tarjeta.productId].celdas"
                                                 :key="celda.variante.productId"
                                             >
                                                 <tr
                                                     class="border-b dark:border-gray-800"
-                                                    :class="celda.variante.stockVendible === 0 ? 'bg-red-50 text-gray-400 dark:bg-red-950/40 dark:text-gray-500' : cantidadDe(tarjeta.productId, celda.variante.productId) > celda.variante.stockVendible ? 'bg-red-50 dark:bg-red-950' : ''"
+                                                    :class="[precioCambia(matricesPorProducto[tarjeta.productId].celdas, indiceCelda) ? 'border-t-4 border-t-amber-300 dark:border-t-amber-700' : '', celda.variante.stockVendible === 0 ? 'bg-red-50 text-gray-400 dark:bg-red-950/40 dark:text-gray-500' : cantidadDe(tarjeta.productId, celda.variante.productId) > celda.variante.stockVendible ? 'bg-red-50 dark:bg-red-950' : '']"
                                                 >
                                                     <td class="py-2 text-base font-bold text-gray-900 dark:text-white">
                                                         @{{ tallaDe(celda.variante) }}
+                                                        <span v-if="precioCambia(matricesPorProducto[tarjeta.productId].celdas, indiceCelda)" class="block text-[10px] font-semibold uppercase text-amber-600 dark:text-amber-400">Otro precio</span>
                                                     </td>
 
                                                     <td
@@ -992,7 +993,10 @@
                                                         </button>
                                                     </td>
 
-                                                    <td class="py-2 text-gray-600 dark:text-gray-300">
+                                                    <td
+                                                        class="py-2"
+                                                        :class="precioCambia(matricesPorProducto[tarjeta.productId].celdas, indiceCelda) ? 'font-bold text-amber-700 dark:text-amber-300' : 'text-gray-600 dark:text-gray-300'"
+                                                    >
                                                         @{{ celda.variante.precioUnitario !== null ? precio(celda.variante.precioUnitario) : '—' }}
                                                     </td>
 
@@ -4455,6 +4459,18 @@
                             || (colorOptionId ? colores.find((c) => c.colorOptionId === colorOptionId && c.colorSwatch) : null);
 
                         return color ? color.colorSwatch : null;
+                    },
+
+                    /** True si el precio de esta talla difiere del de la fila anterior (p. ej. XXL): se separa visualmente para no confundir. */
+                    precioCambia(celdas, indice) {
+                        if (indice < 1) {
+                            return false;
+                        }
+
+                        const anterior = celdas[indice - 1].variante.precioUnitario;
+                        const actual = celdas[indice].variante.precioUnitario;
+
+                        return anterior !== null && actual !== null && Number(anterior) !== Number(actual);
                     },
 
                     /** Talla (u otra opcion que no sea el color) de una linea del carrito; si no hay, el SKU. */
