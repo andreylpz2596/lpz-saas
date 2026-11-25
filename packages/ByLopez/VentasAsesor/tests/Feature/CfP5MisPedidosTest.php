@@ -98,3 +98,24 @@ test('P5 la pantalla Mis pedidos carga para el cliente y no para un usuario sin 
     DB::table('bylopez_va_clientes_acceso')->where('admin_id', $this->userA->id)->update(['estado' => 'desvinculado']);
     $this->actingAs($this->userA, 'admin')->getJson(route('admin.autoservicio.pedidos.data'))->assertStatus(403);
 });
+
+test('P5 el listado trae el tipo de entrega, se busca por numero y el detalle trae subtotal, envio y destino', function () {
+    $id = cf5_pedido($this, $this->userA);
+    $numero = DB::table('orders')->where('id', $id)->value('increment_id');
+    $ruta = route('admin.autoservicio.pedidos.data');
+
+    $fila = $this->actingAs($this->userA, 'admin')->getJson($ruta)->assertOk()->json('data.0');
+    expect($fila['tipo_entrega'])->toBe('Recogida en tienda');
+
+    expect($this->actingAs($this->userA, 'admin')->getJson($ruta.'?q='.urlencode(substr($numero, 0, 6)))->json('total'))->toBe(1)
+        ->and($this->actingAs($this->userA, 'admin')->getJson($ruta.'?q=ZZZ-NO-EXISTE')->json('total'))->toBe(0)
+        ->and($this->actingAs($this->userA, 'admin')->getJson($ruta.'?q=%25')->json('total'))->toBe(1);
+
+    // El de otro cliente no sale ni buscando su numero exacto.
+    $deB = cf5_pedido($this, $this->userB);
+    $numeroB = DB::table('orders')->where('id', $deB)->value('increment_id');
+    expect($this->actingAs($this->userA, 'admin')->getJson($ruta.'?q='.urlencode($numeroB))->json('total'))->toBe(0);
+
+    $d = $this->actingAs($this->userA, 'admin')->getJson(route('admin.autoservicio.pedidos.show', ['pedido' => $id]))->assertOk()->json();
+    expect($d['subtotal'])->toBeGreaterThan(0)->and((float) $d['envio'])->toBe(0.0)->and($d['destino'])->toBeNull()->and($d['metodo_envio'])->toBeNull();
+});
