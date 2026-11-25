@@ -137,7 +137,7 @@
 
     @pushOnce('scripts')
         <script>
-            (function () {
+            function iniciarMisPedidos() {
                 const raiz = document.querySelector('[data-mis-pedidos]');
                 const datosUrl = @json(route('admin.autoservicio.pedidos.data'));
                 const detalleUrl = @json(route('admin.autoservicio.pedidos.show', ['pedido' => '__ID__']));
@@ -254,7 +254,10 @@
                 modal.querySelector('[data-det-cerrar]').addEventListener('click', () => modal.close());
                 modal.addEventListener('click', (e) => { if (e.target === modal) { modal.close(); } });
                 cargar();
-            })();
+            }
+            // Bagisto monta Vue al terminar de cargar y reconstruye el DOM: hay que enganchar DESPUES, o los nodos quedan huerfanos.
+            const arrancar = () => setTimeout(iniciarMisPedidos, 150);
+            if (document.readyState === "complete") { arrancar(); } else { window.addEventListener("load", arrancar); }
         </script>
     @endPushOnce
 </x-admin::layouts>
