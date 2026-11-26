@@ -274,8 +274,8 @@ class NuevaVentaController extends Controller
         abort_unless((bool) config('ventasasesor.dictado.activo', true), 404);
         $datos = $request->validate([
             'texto' => ['required', 'string', 'max:3000'],
-            // E: tipo elegido por la asesora para lo que no se diga (vacio = preguntar).
-            'tipo_defecto' => ['nullable', 'in:D,H,N'],
+            // E: tipo elegido por la asesora para lo que no se diga (vacio = preguntar). Crop top tambien se acepta.
+            'tipo_defecto' => ['nullable', \Illuminate\Validation\Rule::in(ResolutorDictado::TIPOS_DEFECTO)],
         ]);
 
         $resolutor = app(ResolutorDictado::class);
@@ -307,6 +307,69 @@ class NuevaVentaController extends Controller
         ]);
 
         return Respuesta::envolver(fn () => ['linea' => $resolutor->corregir($datos)]);
+    }
+
+    /**
+     * Doc. 34: agrega el dictado revisado a la venta. Cada linea se resuelve OTRA VEZ contra el catalogo con sus atributos
+     * visibles (color, tipo, talla, cantidad): nunca se confia en un SKU o id que mande la pantalla. Todo el dictado es UNA
+     * operacion atomica e idempotente (NuevaVentaService::agregarDictado): o se agrega completo o no se agrega nada, y un
+     * reintento con la misma `operacion` no vuelve a sumar.
+     */
+    public function agregarDictado(Request $request): JsonResponse
+    {
+        abort_unless((bool) config('ventasasesor.dictado.activo', true), 404);
+        $resolutor = app(ResolutorDictado::class);
+
+        $datos = $request->validate([
+            'operacion' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]{8,64}$/'],
+            'borrador_id' => ['nullable', 'integer', 'min:1'],
+            'customer_id' => ['required_without:borrador_id', 'nullable', 'integer', 'min:1'],
+            'canal' => ['required_without:borrador_id', 'nullable', 'string', 'max:30'],
+            'referencia' => ['required_without:borrador_id', 'nullable', 'string', 'max:120'],
+            'lineas' => ['required', 'array', 'min:1', 'max:100'],
+            'lineas.*.color' => ['required', 'string', \Illuminate\Validation\Rule::in(array_keys($resolutor->colores()))],
+            'lineas.*.linea' => ['required', 'in:DZ,TP'],
+            'lineas.*.genero' => ['nullable', 'in:D,H,N', 'required_unless:lineas.*.linea,TP'],
+            'lineas.*.talla' => ['required', 'string', \Illuminate\Validation\Rule::in(array_map('strval', array_keys(ResolutorDictado::TALLAS)))],
+            'lineas.*.cantidad' => ['required', 'integer', 'min:1', 'max:9999'],
+        ], [
+            'lineas.*.genero.required_unless' => 'Cada línea necesita su tipo (dama, caballero o niño).',
+        ]);
+
+        return Respuesta::envolver(function () use ($datos, $resolutor) {
+            $resueltas = [];
+            $errores = [];
+
+            foreach ($datos['lineas'] as $k => $l) {
+                $r = $resolutor->corregir(['texto' => null, 'color' => $l['color'], 'genero' => $l['genero'] ?? null, 'linea' => $l['linea'],
+                    'talla' => (string) $l['talla'], 'cantidad' => (int) $l['cantidad']]);
+
+                if (! in_array($r['estado'], ['ok', 'aviso'], true) || $r['variante_id'] === null) {
+                    $errores[] = ['indice' => $k, 'mensaje' => $r['mensaje'], 'tipo_error' => $r['tipo_error']];
+
+                    continue;
+                }
+                $resueltas[] = ['producto_id' => (int) $r['producto_id'], 'variante_id' => (int) $r['variante_id'], 'cantidad' => (int) $l['cantidad'], 'sku' => $r['sku']];
+            }
+
+            if ($errores !== []) {
+                return response()->json([
+                    'codigo' => 'dictado_invalido',
+                    'mensaje' => 'Hay líneas que ya no coinciden con el catálogo: no se agregó nada.',
+                    'errores' => $errores,
+                ], 422);
+            }
+
+            return $this->nuevaVenta->agregarDictado(
+                isset($datos['borrador_id']) ? (int) $datos['borrador_id'] : null,
+                (int) ($datos['customer_id'] ?? 0),
+                (string) ($datos['canal'] ?? ''),
+                (string) ($datos['referencia'] ?? ''),
+                (string) $datos['operacion'],
+                $resueltas,
+                $this->actor(),
+            );
+        });
     }
 
     /** E. Colores de un acceso rapido (linea x color), resuelto por config, nunca por id. */

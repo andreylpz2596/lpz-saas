@@ -190,6 +190,8 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
             // Doc. 34: pedido por voz (interpreta y valida el texto dictado; no toca la venta).
             Route::post('dictado/interpretar', [NuevaVentaController::class, 'interpretarDictado'])->name('dictado.interpretar');
             Route::post('dictado/corregir', [NuevaVentaController::class, 'corregirDictado'])->name('dictado.corregir');
+            // Doc. 34: agregar el dictado revisado (una operacion atomica e idempotente).
+            Route::post('dictado/agregar', [NuevaVentaController::class, 'agregarDictado'])->name('dictado.agregar');
             Route::get('lineas/{clave}/colores', [NuevaVentaController::class, 'colores'])->name('lineas.colores');
             Route::get('productos/{producto}/matriz', [NuevaVentaController::class, 'matriz'])->name('productos.matriz');
             Route::get('matrices', [NuevaVentaController::class, 'matrices'])->name('matrices');

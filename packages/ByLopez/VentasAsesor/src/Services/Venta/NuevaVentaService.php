@@ -222,6 +222,155 @@ class NuevaVentaService
     }
 
     /**
+     * Doc. 34 · Agregar un dictado COMPLETO como UNA operacion atomica e idempotente (jornada 2026-11-26).
+     *
+     *  - La pantalla manda cantidades A SUMAR por variante (ya resueltas y revalidadas por el controlador contra el catalogo) y
+     *    un identificador de operacion. El servidor lee lo que hay en la venta DENTRO de la transaccion, con el borrador y el
+     *    carrito bloqueados, y fija «actual + dictado»: nunca calcula desde un carrito viejo de la pantalla ni pisa cambios
+     *    hechos despues.
+     *  - Todo o nada para TODO el dictado (no solo por producto): si una variante falla (stock, producto, precio, permiso),
+     *    se revierte el lote entero y se informa cual fallo y por que. No hay guardado parcial.
+     *  - La operacion se registra en la misma transaccion (UNIQUE admin + operacion): un reintento, una respuesta perdida o
+     *    un doble clic simultaneo devuelven lo que ya se aplico, sin sumar otra vez. Otra operacion SI vuelve a sumar el mismo
+     *    SKU (es otra solicitud intencional).
+     *  - Sin borrador todavia: la venta nace con este dictado (P7), con la misma referencia que usa la matriz.
+     *
+     * @param  list<array{producto_id: int, variante_id: int, cantidad: int, sku?: string}>  $lineas
+     * @return array{estado: array<string, mixed>, resumen: list<array<string, mixed>>, repetida: bool, borrador_id: int}
+     */
+    public function agregarDictado(?int $borradorId, int $customerId, CanalVenta|string $canal, string $referencia, string $operacion, array $lineas, Admin $actor, int $intento = 0): array
+    {
+        // Cantidades a sumar por variante (dos lineas del mismo SKU se suman: 3 en la venta + 2 + 1 = 6).
+        $porProducto = [];
+        $skus = [];
+        foreach ($lineas as $l) {
+            $cantidad = (int) $l['cantidad'];
+            if ($cantidad < 1 || $cantidad > CantidadVenta::MAXIMA) {
+                throw new Invalida(Invalida::LOTE_RECHAZADO, (int) $l['variante_id'], VarianteInvalidaException::CANTIDAD_INVALIDA);
+            }
+            $porProducto[(int) $l['producto_id']][(int) $l['variante_id']] = ($porProducto[(int) $l['producto_id']][(int) $l['variante_id']] ?? 0) + $cantidad;
+            $skus[(int) $l['variante_id']] = $l['sku'] ?? null;
+        }
+        if ($porProducto === []) {
+            throw new Invalida(Invalida::LOTE_VACIO);
+        }
+
+        if (($hecha = $this->operacionDictadoAplicada($actor, $operacion)) !== null) {
+            return $this->resultadoRepetido($hecha);
+        }
+
+        $canalVenta = $borradorId === null ? $this->canalPermitido($canal) : null;
+
+        try {
+            [$borrador, $resumen, $revision] = DB::transaction(function () use ($borradorId, $customerId, $canalVenta, $referencia, $operacion, $porProducto, $skus, $actor) {
+                // 1. La operacion se registra PRIMERO: el UNIQUE detiene aqui a un duplicado simultaneo hasta que esta termine.
+                $operacionId = DB::table('bylopez_va_dictado_operaciones')->insertGetId([
+                    'admin_id' => (int) $actor->id, 'operacion' => $operacion, 'estado' => 'aplicando', 'created_at' => now(), 'updated_at' => now(),
+                ]);
+
+                // 2. El borrador de la pantalla, o la venta que nace con este dictado (misma referencia que la matriz, P7).
+                $borrador = $borradorId ?? (int) $this->borradores->crear($customerId, $actor, $canalVenta, MecanismoCreacion::VENTAS_ASESOR, 'nv:'.(int) $actor->id.':'.$referencia)->id;
+
+                // 3. El bloqueo del borrador es la PRIMERA lectura de la transaccion (solo hubo el INSERT de la operacion). Con
+                //    REPEATABLE READ la foto de lectura se toma en la primera lectura NORMAL: si se tomara antes de esperar el
+                //    bloqueo, un dictado simultaneo ya confirmado no se veria y su suma se perderia (DIC03-2 lo demostro:
+                //    3 + 2 + 4 quedaba en 7). Despues, borrador y carrito con las validaciones de siempre (mismo orden).
+                BorradorVenta::query()->whereKey($borrador)->lockForUpdate()->value('id');
+                [$fila] = $this->borradores->bloquearParaEditar($borrador, $actor);
+                $cartId = $fila->cart_id === null ? null : (int) $fila->cart_id;
+                $metodoPrevio = $cartId === null ? null : CartProxy::modelClass()::query()->whereKey($cartId)->value('shipping_method');
+                $lote = new LoteCatalogo;
+                $resumen = [];
+
+                foreach ($porProducto as $productoId => $sumas) {
+                    $objetivos = [];
+                    foreach ($sumas as $varianteId => $suma) {
+                        // «Lo que hay» con lectura bloqueante: siempre lo ultimo confirmado, nunca una foto vieja.
+                        $antes = $this->cantidadEnCarritoBloqueada($cartId, $varianteId);
+                        $objetivos[$varianteId] = $antes + $suma;
+                        $resumen[] = ['variante_id' => $varianteId, 'producto_id' => $productoId, 'sku' => $skus[$varianteId],
+                            'antes' => $antes, 'agregado' => $suma, 'despues' => $antes + $suma];
+                    }
+
+                    foreach ($this->objetivosValidados($productoId, $objetivos) as $varianteId => $cantidad) {
+                        try {
+                            $this->llevarVarianteA($borrador, $productoId, $varianteId, $cantidad, $actor, $lote);
+                        } catch (Throwable $e) {
+                            throw new Invalida(Invalida::LOTE_RECHAZADO, $varianteId, $this->causa($e), $e);
+                        }
+                    }
+                }
+
+                $revision = $this->reaplicarEntrega($borrador, $metodoPrevio, $actor);
+
+                // 4. Lo aplicado queda con la operacion: es lo que recibe un reintento.
+                DB::table('bylopez_va_dictado_operaciones')->where('id', $operacionId)->update([
+                    'borrador_id' => $borrador, 'estado' => 'aplicada', 'resumen' => json_encode($resumen), 'updated_at' => now(),
+                ]);
+
+                return [$borrador, $resumen, $revision];
+            });
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            // Otra peticion con la misma operacion gano (doble clic o reintento simultaneo): se devuelve lo que ella aplico.
+            if (($hecha = $this->operacionDictadoAplicada($actor, $operacion)) !== null) {
+                return $this->resultadoRepetido($hecha);
+            }
+
+            // Venta nueva creada a la vez por otra peticion con la misma referencia (p. ej. la matriz): un solo reintento,
+            // con una lectura nueva, la encuentra y suma sobre ella.
+            if ($borradorId === null && $intento === 0) {
+                return $this->agregarDictado(null, $customerId, $canal, $referencia, $operacion, $lineas, $actor, 1);
+            }
+
+            throw $e;
+        }
+
+        return [
+            'estado' => $this->estado($borrador, requiereRevisionEntrega: $revision)->toArray(),
+            'resumen' => $resumen,
+            'repetida' => false,
+            'borrador_id' => $borrador,
+        ];
+    }
+
+    /** Cantidad de la variante en el carrito leida con FOR UPDATE (misma regla que LineasBorradorService::cantidadEnCarrito). */
+    protected function cantidadEnCarritoBloqueada(?int $cartId, int $varianteId): int
+    {
+        if ($cartId === null) {
+            return 0;
+        }
+
+        return (int) \Webkul\Checkout\Models\CartItemProxy::modelClass()::query()
+            ->where('cart_id', $cartId)
+            ->whereNull('parent_id')
+            ->where(fn ($q) => $q
+                ->where(fn ($simple) => $simple->where('product_id', $varianteId)->where('type', '!=', 'configurable'))
+                ->orWhereHas('children', fn ($hijo) => $hijo->where('product_id', $varianteId)))
+            ->lockForUpdate()
+            ->get(['quantity'])
+            ->sum('quantity');
+    }
+
+    /** La operacion de dictado ya aplicada por este actor (solo las suyas), o null. */
+    protected function operacionDictadoAplicada(Admin $actor, string $operacion): ?object
+    {
+        return DB::table('bylopez_va_dictado_operaciones')
+            ->where('admin_id', (int) $actor->id)->where('operacion', $operacion)->where('estado', 'aplicada')
+            ->first(['borrador_id', 'resumen']);
+    }
+
+    /** Un reintento recibe lo que se aplico la primera vez y el estado ACTUAL de la venta (sin volver a sumar). */
+    protected function resultadoRepetido(object $hecha): array
+    {
+        return [
+            'estado' => $this->estado((int) $hecha->borrador_id)->toArray(),
+            'resumen' => json_decode((string) $hecha->resumen, true) ?: [],
+            'repetida' => true,
+            'borrador_id' => (int) $hecha->borrador_id,
+        ];
+    }
+
+    /**
      * Facturacion + envio + metodo en un solo viaje (03D). La facturacion es la direccion
      * REAL indicada o la predeterminada del cliente (D-30); sin ninguna se rechaza y no se
      * inventa una (la bodega de recogida es el envio, nunca la facturacion). Todo o nada.

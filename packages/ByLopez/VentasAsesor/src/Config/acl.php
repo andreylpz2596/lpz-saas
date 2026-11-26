@@ -78,6 +78,7 @@ return [
             // Doc. 34: pedido por voz (solo interpreta y valida contra el catalogo).
             'admin.ventas_asesor.nueva_venta.dictado.interpretar',
             'admin.ventas_asesor.nueva_venta.dictado.corregir',
+            'admin.ventas_asesor.nueva_venta.dictado.agregar',
             'admin.ventas_asesor.nueva_venta.productos.matriz',
             'admin.ventas_asesor.nueva_venta.matrices',
             'admin.ventas_asesor.nueva_venta.estado_inicial',
