@@ -107,5 +107,9 @@ class LogisticaServiceProvider extends ServiceProvider
 
         // Scroll bloqueado en iPhone tras cerrar drawers/modales: libera el body cuando no hay ninguna capa abierta.
         Event::listen('bagisto.admin.layout.head.after', fn ($manager) => $manager->addTemplate('logistica::admin.guardia-scroll'));
+
+        // Ajustes moviles compartidos (iPhone/Safari) de las pantallas ByLopez: campos de 16 px, casillas y cierre tactiles,
+        // contenedor sin trampa de scroll y modales/drawers que no arrastran el fondo. Solo en rutas ByLopez.
+        Event::listen('bagisto.admin.layout.head.after', fn ($manager) => $manager->addTemplate('logistica::admin.responsive-movil'));
     }
 }
