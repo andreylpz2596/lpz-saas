@@ -131,6 +131,15 @@ final class InterpreteDictado
     /** @var array<int, string> numero del codigo unico → nombre de color («124» → «Blanco»): permite dictar el SKU entero */
     private array $codigos = [];
 
+    /** @var list<string>|null tokens con la escritura original de la interpretacion en curso (null = no alinean) */
+    private ?array $originales = null;
+
+    /** @var list<array{0: int, 1: int}> token de salida (tras unir numeros en palabras) → tokens de entrada que lo forman */
+    private array $mapa = [];
+
+    /** Tipo elegido para lo que no se diga en la interpretacion en curso (D, H, N, TP) o null. */
+    private ?string $tipoDefecto = null;
+
     /**
      * @param  list<string>  $colores  nombres de color del catalogo («Azul Rey», «Curuba/Salmon»)
      * @param  array<string, string|list<string>>  $alias  alias extra: «turquesa» => «Azul Turquesa»; «rosa» => [«Rosado», «Palo de Rosa»]
@@ -188,9 +197,13 @@ final class InterpreteDictado
      *                     fuentes: array<string, ?string>, sin_asignar: list<string>, opciones: list<array<string, mixed>>,
      *                     detalle: array<string, mixed>}>
      */
-    public function interpretar(string $texto): array
+    public function interpretar(string $texto, ?string $tipoDefecto = null): array
     {
-        $t = $this->numeros($this->tokens($texto));
+        // «Si no digo el tipo» (D, H, N, TP): un tipo de adulto descarta que un numero suelto sea talla de niño («lila 2» = 2 u.).
+        $this->tipoDefecto = $tipoDefecto;
+        $normalizados = $this->tokens($texto);
+        $this->originales = $this->tokensOriginales($texto, count($normalizados));
+        $t = $this->numeros($normalizados);
         $lineas = [];
         $actual = $this->nueva();
         $contextoAdulto = null;
@@ -205,6 +218,8 @@ final class InterpreteDictado
             $i += max(1, $consumidos) - 1;
             $frag = implode(' ', array_filter(array_slice($t, $inicio, $i - $inicio + 1), fn ($x) => $x !== '|'));
 
+            // do/while(false): cada «continue» de abajo termina el fragmento y deja registrar su rango en la linea donde quedo.
+            do {
             if ($pieza === null) {
                 if ($frag !== '') {
                     $actual['palabras'][] = $frag;
@@ -278,6 +293,13 @@ final class InterpreteDictado
                 $actual['ultima'] = $familia;
             }
             $ultimoFin = $i;
+            } while (false);
+
+            // Rango de tokens de la linea donde quedo este fragmento: con el se muestra lo que se dijo TAL CUAL.
+            if ($frag !== '') {
+                $actual['r_ini'] = $actual['r_ini'] === null ? $inicio : min($actual['r_ini'], $inicio);
+                $actual['r_fin'] = max($actual['r_fin'] ?? -1, $i);
+            }
         }
 
         $lineas[] = $actual;
@@ -330,7 +352,7 @@ final class InterpreteDictado
             }
             $actual = $this->nueva();
             if ($soloCantidad) {
-                foreach (['numeros', 'cantidad', 'cantidad_fuente', 'uno', 'palabras', 'sueltas'] as $campo) {
+                foreach (['numeros', 'cantidad', 'cantidad_fuente', 'uno', 'palabras', 'sueltas', 'r_ini', 'r_fin'] as $campo) {
                     $actual[$campo] = $previo[$campo];
                 }
             }
@@ -401,9 +423,13 @@ final class InterpreteDictado
         }
 
         if ($tipo === 'linea') {
-            // «top» fija linea, genero Dama y talla unica (blandas: una talla dicha despues las reemplaza).
-            if (($actual['linea'] === 'TP' && ! isset($actual['heredado']['linea'])) || ($this->completa($actual) && ! isset($actual['heredado']['talla']))) {
-                $cerrar(['genero']);
+            // «top» fija linea, genero Dama y talla unica (blandas: una talla dicha despues las reemplaza). Si la linea ya tiene
+            // su color y un tipo dicho que no es dama («rojo 10 niño, crop top negro 2»), el crop top es OTRA prenda: nunca
+            // convierte en crop top a la de niño o caballero (prueba de navegador, 2026-11-26).
+            $tipoAjeno = $actual['genero'] !== null && $actual['genero'] !== 'D' && $actual['genero_explicito'] && ! isset($actual['heredado']['genero']);
+            if (($actual['linea'] === 'TP' && ! isset($actual['heredado']['linea'])) || ($this->completa($actual) && ! isset($actual['heredado']['talla']))
+                || ($this->colorPropio($actual) && $tipoAjeno)) {
+                $cerrar([]);
             }
             $actual['palabras'][] = $frag;
             $actual['ancla'] = $i;
@@ -657,6 +683,7 @@ final class InterpreteDictado
                 && ! ($l['linea'] === 'TP' && ! isset($l['heredado']['linea']));
             if ($huerfana) {
                 $limpias[count($limpias) - 1]['cantidades_extra'][] = $l['cantidad_fuente'];
+                $limpias[count($limpias) - 1]['r_fin'] = max($limpias[count($limpias) - 1]['r_fin'] ?? -1, $l['r_fin'] ?? -1);
                 array_push($limpias[count($limpias) - 1]['palabras'], ...$l['palabras']);
 
                 continue;
@@ -689,6 +716,10 @@ final class InterpreteDictado
                     // El texto original acompaña al numero: sale de la linea anterior y encabeza esta.
                     $dichos = implode(' ', array_column($arrastre, 'texto'));
                     $salida[$k - 1]['texto'] = trim(preg_replace('/\s*'.preg_quote($dichos, '/').'(?!.*'.preg_quote($dichos, '/').')/', '', $salida[$k - 1]['texto'], 1) ?? $salida[$k - 1]['texto']);
+                    // Lo mismo con el fragmento original: el numero sale de la anterior y encabeza esta.
+                    $desde = min(array_column($arrastre, 'ini'));
+                    $salida[$k - 1]['texto_original'] = $this->fragmentoOriginal($lineas[$k - 1]['r_ini'] ?? -1, $desde - 1) ?? $salida[$k - 1]['texto_original'];
+                    $l['r_ini'] = min($l['r_ini'] ?? $desde, $desde);
                     $salida[] = ['texto' => trim($dichos.' '.implode(' ', $l['palabras']))] + $this->salida($l, $conArrastre);
                     $arrastre = [];
 
@@ -1328,6 +1359,10 @@ final class InterpreteDictado
             return false;
         }
 
+        if ($l['genero'] === null && in_array($this->tipoDefecto, ['D', 'H', 'TP'], true)) {
+            return false;
+        }
+
         return $l['genero'] === null || $l['genero'] === 'N' || ! $l['genero_explicito'] || isset($l['heredado']['genero']);
     }
 
@@ -1393,6 +1428,8 @@ final class InterpreteDictado
     private function numeros(array $t): array
     {
         $salida = [];
+        // Para el fragmento original: que tokens de entrada forman cada token de salida («sesenta y ocho» → «68»).
+        $this->mapa = [];
 
         for ($i = 0, $n = count($t); $i < $n; $i++) {
             if ($t[$i] === 'menos' && isset($t[$i + 1])) {
@@ -1400,6 +1437,7 @@ final class InterpreteDictado
                 $valor = ctype_digit($t[$j]) ? (int) $t[$j++] : $this->leerNumero($t, $j);
                 if ($valor !== null && $j > $i + 1) {
                     $salida[] = '-'.$valor;
+                    $this->mapa[] = [$i, $j - 1];
                     $i = $j - 1;
 
                     continue;
@@ -1411,15 +1449,47 @@ final class InterpreteDictado
 
             if ($valor === null || $j === $i) {
                 $salida[] = $t[$i];
+                $this->mapa[] = [$i, $i];
 
                 continue;
             }
 
             $salida[] = (string) $valor;
+            $this->mapa[] = [$i, $j - 1];
             $i = $j - 1;
         }
 
         return $salida;
+    }
+
+    /**
+     * Los mismos tokens que tokens(), pero con la escritura ORIGINAL (mayusculas, tildes, numeros en palabras): sirven para
+     * mostrar lo que se dijo en cada linea. Si no alinean uno a uno con los normalizados, se usan los normalizados.
+     *
+     * @return list<string>
+     */
+    private function tokensOriginales(string $texto, int $esperados): ?array
+    {
+        $t = preg_replace('#(\d)\s*[-/]\s*(\d)#u', '$1-$2', $texto) ?? $texto;
+        $t = preg_replace('/(\d)[.,:](\d)/u', '$1.$2', $t) ?? $t;
+        $t = preg_replace('/(^|\s)-\s*(\d)/u', '$1-$2', $t) ?? $t;
+        $t = preg_replace('/(?<!\d)[.,:]|[.,:](?!\d)|[;!?\n\r]+/u', ' | ', $t) ?? $t;
+        $t = preg_replace('/[^\p{L}\p{N}|.\- ]+/u', ' ', $t) ?? $t;
+        $tokens = array_values(array_filter(preg_split('/\s+/u', trim($t)) ?: [], fn ($x) => ! in_array($x, ['', '-', '.'], true)));
+
+        return count($tokens) === $esperados ? $tokens : null;
+    }
+
+    /** Fragmento original de los tokens de salida [$ini, $fin] (sin separadores). */
+    private function fragmentoOriginal(int $ini, int $fin): ?string
+    {
+        if ($this->originales === null || $ini < 0 || $fin < $ini || ! isset($this->mapa[$ini], $this->mapa[$fin])) {
+            return null;
+        }
+
+        $trozo = array_slice($this->originales, $this->mapa[$ini][0], $this->mapa[$fin][1] - $this->mapa[$ini][0] + 1);
+
+        return trim(implode(' ', array_filter($trozo, fn ($x) => $x !== '|'))) ?: null;
     }
 
     /** Lee un numero en palabras desde $j (avanza $j). */
@@ -1511,7 +1581,7 @@ final class InterpreteDictado
             // Jornada 2026-11-26: palabras no usadas, repeticiones, correcciones, tipos y SKU.
             'sueltas' => [], 'repetidas' => [], 'correccion' => null, 'negado' => null, 'correcciones' => [], 'correccion_dudosa' => [],
             'ultima' => null, 'tipos_dobles' => [], 'tipo_dudoso' => null, 'sku_dicho' => null, 'sku_fijo' => null, 'skus_invalidos' => [],
-            'sku_conflictos' => [], 'talla_asumida' => false];
+            'sku_conflictos' => [], 'talla_asumida' => false, 'r_ini' => null, 'r_fin' => null];
     }
 
     /** Linea nueva que hereda (en blando) los campos indicados de la anterior. */
@@ -1534,9 +1604,12 @@ final class InterpreteDictado
                 $nueva['linea'] = $anterior['linea'];
                 $nueva['heredado']['linea'] = true;
                 if ($anterior['talla'] === 'U') {
+                    // La talla no se hereda de otra prenda: la Única queda ASUMIDA y la decide el catalogo (si el color
+                    // tambien tiene M, se pregunta). Antes pasaba como dicha y se aceptaba sin preguntar.
                     $nueva['talla'] = 'U';
                     $nueva['talla_fuente'] = $anterior['talla_fuente'];
                     $nueva['heredado']['talla'] = true;
+                    $nueva['talla_asumida'] = true;
                 }
             }
         }
@@ -1711,6 +1784,8 @@ final class InterpreteDictado
 
         return [
             'texto' => trim(implode(' ', $l['palabras'])),
+            // Lo que se dijo para esta linea con su escritura original (mayusculas, tildes, numeros en palabras).
+            'texto_original' => $this->fragmentoOriginal($l['r_ini'] ?? -1, $l['r_fin'] ?? -1) ?? trim(implode(' ', $l['palabras'])),
             'color' => $l['color'],
             'candidatos' => $l['candidatos'],
             'genero' => $genero,

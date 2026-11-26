@@ -333,3 +333,34 @@ test('propiedades: mayusculas, espacios y signos no cambian el resultado', funct
     ['roja 68 niño 10', 'ROJA   68   NIÑO   10'], ['negro dama M 2', 'Negro Dama m 2'], ['una XL dama roja', 'UNA xl DAMA ROJA'],
     ['dos rojas M de dama', '  dos   rojas M  de   dama  '], ['azul rey caballero L 3', 'Azul Rey, caballero, L, 3'],
 ]);
+
+test('crop top tras una prenda de niño es OTRA prenda y la Única heredada queda asumida (hallado en la prueba de navegador)', function () {
+    expect(rev('rojo 10 niño, crop top negro 2'))->toBe([
+        ['N', 'Rojo', null, null, [I::TALLA_O_CANTIDAD], [], ['10-12×?', '?×10']], ok('TP', 'Negro', 'Única', 2),
+    ]);
+
+    $l = (new I(REV_COLORES))->interpretar('crop top rojo 2, negro 3');
+    // Las dos con la Única ASUMIDA: el resolutor pregunta si el color tambien tiene M (antes la segunda pasaba como dicha).
+    expect([$l[0]['talla_asumida'], $l[1]['talla_asumida']])->toBe([true, true]);
+});
+
+test('cada linea trae el fragmento ORIGINAL que se dijo (mayusculas, tildes, numeros en palabras)', function () {
+    $orig = fn (string $t) => array_column((new I(REV_COLORES))->interpretar($t), 'texto_original');
+
+    expect($orig('dos rojas M de dama, negro caballero L 3, rojo 10 niño'))->toBe(['dos rojas M de dama', 'negro caballero L 3', 'rojo 10 niño'])
+        ->and($orig('Roja, 68, NIÑO, diez'))->toBe(['Roja 68 NIÑO diez'])
+        // La cantidad dicha antes del producto siguiente viaja con su texto.
+        ->and($orig('caballero negro M 10, 5 blanco M'))->toBe(['caballero negro M 10', '5 blanco M'])
+        ->and($orig('sesenta y ocho rojas niño talla seis ocho'))->toBe(['sesenta y ocho rojas niño talla seis ocho']);
+});
+
+test('«Si no digo el tipo» de adulto descarta la talla de niño para un numero suelto; el niño dicho sigue preguntando', function () {
+    $i = new I(REV_COLORES);
+    $r = fn (string $t, ?string $td) => array_map(fn ($l) => [$l['talla'], $l['cantidad'], $l['problemas']], $i->interpretar($t, $td));
+
+    expect($r('lila 2', null))->toBe([[null, null, [I::TALLA_O_CANTIDAD]]])
+        ->and($r('lila 2', 'TP'))->toBe([[null, 2, [I::FALTA_TALLA]]])
+        ->and($r('lila 2', 'D'))->toBe([[null, 2, [I::FALTA_TALLA]]])
+        ->and($r('lila 2', 'N'))->toBe([[null, null, [I::TALLA_O_CANTIDAD]]])
+        ->and($r('rojo 10 niño', 'D'))->toBe([[null, null, [I::TALLA_O_CANTIDAD]]]);
+});

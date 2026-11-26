@@ -42,7 +42,7 @@ class ResolutorDictado
         $colores = $this->colores();
         $interprete = new Interprete(array_keys($colores), (array) config('ventasasesor.dictado.alias_colores', []), array_flip($colores));
 
-        return array_map(fn (array $l) => $this->resolver($l, $colores, $tipoDefecto), $interprete->interpretar($texto));
+        return array_map(fn (array $l) => $this->resolver($l, $colores, $tipoDefecto), $interprete->interpretar($texto, $tipoDefecto));
     }
 
     /**
