@@ -29,30 +29,97 @@
             .nv-cot-badge--convertida { background: #dbeafe; color: #1e40af; }
             .nv-cot-error { margin-top: 6px; color: #b91c1c; font-size: 12px; }
 
-            /* Doc. 34: dictar pedido. */
+            /* Doc. 34: dictar pedido (jornada 2026-11-26). Escritorio: columnas Tipo | Color | Talla | Cantidad; movil: tarjetas.
+               Clases propias (Tailwind no escanea ByLopez) con modo claro y oscuro. */
             .nv-dic-fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
             .nv-dic-ayuda { margin-top: 8px; color: #6b7280; font-size: 12px; }
-            .nv-dic-texto { margin-top: 8px; width: 100%; border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 10px; font-size: 14px; background: transparent; }
+            .nv-dic-config { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 13px; color: #374151; }
+            .nv-dic-config select { border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 8px; font-size: 14px; background: #fff; color: #111827; min-height: 40px; }
+            .nv-dic-texto { margin-top: 8px; width: 100%; border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 10px; font-size: 16px; background: transparent; color: inherit; }
+            .nv-dic-texto--escuchando { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, .25); }
+            .nv-dic-mic { margin-top: 4px; font-size: 12px; color: #4b5563; }
+            .nv-dic-mic--escuchando { color: #1d4ed8; font-weight: 600; }
+            .nv-dic-mic--aviso { color: #92400e; }
             .nv-dic-acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+            .nv-dic-acciones button { min-height: 40px; }
             .nv-dic-error { margin-top: 8px; color: #b91c1c; font-size: 13px; }
-            .nv-dic-lista { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-            .nv-dic-linea { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+            .nv-dic-resumen { margin-top: 12px; display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 13px; color: #374151; }
+            .nv-dic-resumen b { color: #111827; }
+            .nv-dic-cabecera, .nv-dic-celdas { display: grid; grid-template-columns: 110px minmax(90px, 1fr) minmax(120px, 1.3fr) 80px 90px; gap: 8px; align-items: center; }
+            .nv-dic-cabecera { margin-top: 12px; padding: 0 10px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
+            .nv-dic-lista { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+            .nv-dic-linea { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; font-size: 13px; background: #fff; }
             .nv-dic-linea--ok { border-color: #86efac; background: #f0fdf4; }
             .nv-dic-linea--aviso { border-color: #fcd34d; background: #fffbeb; }
-            .nv-dic-linea--error { border-color: #fca5a5; background: #fef2f2; }
-            .nv-dic-producto { flex: 1 1 200px; font-weight: 600; color: #111827; }
+            .nv-dic-linea--error, .nv-dic-linea--stock { border-color: #fca5a5; background: #fef2f2; }
+            .nv-dic-linea--omitida { border-color: #e5e7eb; background: #f9fafb; opacity: .75; }
+            .nv-dic-celda { min-width: 0; overflow-wrap: anywhere; }
+            .nv-dic-celda-etq { display: none; font-size: 11px; color: #6b7280; }
+            .nv-dic-valor { font-weight: 600; color: #111827; }
+            .nv-dic-falta { color: #b91c1c; font-weight: 600; }
+            .nv-dic-origen { display: block; font-size: 11px; font-weight: 400; color: #6b7280; }
+            .nv-dic-estado { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 700; background: #dcfce7; color: #166534; white-space: nowrap; }
+            .nv-dic-estado--aviso { background: #fef3c7; color: #92400e; }
+            .nv-dic-estado--error, .nv-dic-estado--stock { background: #fee2e2; color: #991b1b; }
+            .nv-dic-estado--omitida { background: #e5e7eb; color: #374151; }
             .nv-dic-sku { color: #6b7280; font-weight: 400; font-size: 12px; }
-            .nv-dic-dato { font-weight: 600; color: #111827; white-space: nowrap; }
-            .nv-dic-dijo { margin-top: 2px; color: #6b7280; font-size: 12px; }
-            .nv-dic-mensaje { margin-top: 2px; color: #92400e; font-size: 12px; }
-            .nv-dic-linea--error .nv-dic-mensaje { color: #b91c1c; }
-            .nv-dic-linea--omitida { border-color: #e5e7eb; background: #f9fafb; opacity: .7; }
+            .nv-dic-dijo { margin-top: 6px; color: #6b7280; font-size: 12px; }
+            .nv-dic-mensaje { margin-top: 4px; color: #92400e; font-size: 13px; }
+            .nv-dic-linea--error .nv-dic-mensaje, .nv-dic-linea--stock .nv-dic-mensaje { color: #b91c1c; }
+            .nv-dic-nota { margin-top: 4px; color: #1e40af; font-size: 12px; }
+            .nv-dic-efecto { margin-top: 4px; color: #374151; font-size: 12px; }
+            .nv-dic-opciones { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; align-items: center; }
+            .nv-dic-opciones span { font-size: 12px; color: #374151; }
+            .nv-dic-opcion { border: 1px solid #2563eb; color: #1d4ed8; background: #fff; border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; min-height: 36px; cursor: pointer; }
+            .nv-dic-opcion:focus-visible, .nv-dic-linea button:focus-visible, .nv-dic-texto:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
             .nv-dic-acciones--linea { margin-top: 6px; }
-            .nv-dic-acciones--linea button { padding: 4px 10px; font-size: 12px; }
+            .nv-dic-acciones--linea button { padding: 4px 12px; font-size: 13px; }
             .nv-dic-editor { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #d1d5db; }
-            .nv-dic-editor .nv-dic-acciones, .nv-dic-editor .nv-dic-error { grid-column: 1 / -1; margin-top: 0; }
+            .nv-dic-editor .nv-dic-acciones, .nv-dic-editor .nv-dic-error, .nv-dic-editor .nv-dic-ayuda { grid-column: 1 / -1; margin-top: 0; }
             .nv-dic-campo { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: #4b5563; }
-            .nv-dic-campo select, .nv-dic-campo input { border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 8px; font-size: 14px; background: #fff; color: #111827; min-height: 38px; }
+            .nv-dic-campo select, .nv-dic-campo input { border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 8px; font-size: 16px; background: #fff; color: #111827; min-height: 42px; }
+            .nv-dic-campo--pendiente select, .nv-dic-campo--pendiente input { border-color: #dc2626; box-shadow: 0 0 0 2px rgba(220, 38, 38, .15); }
+            .nv-dic-efectos { margin-top: 12px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+            .nv-dic-efectos p { margin: 2px 0; }
+            .nv-dic-agregar { position: sticky; bottom: 0; z-index: 5; margin-top: 12px; padding: 8px 0; background: inherit; display: flex; flex-direction: column; gap: 6px; }
+            .nv-dic-agregar button { width: 100%; min-height: 46px; font-size: 15px; }
+            .nv-dic-bloqueo { font-size: 13px; color: #b91c1c; }
+            .nv-dic-hecho { margin-top: 12px; border: 1px solid #86efac; background: #f0fdf4; border-radius: 8px; padding: 8px 10px; font-size: 13px; color: #14532d; }
+            .nv-dic-hecho p { margin: 2px 0; }
+            .nv-dic-incierto { margin-top: 12px; border: 1px solid #fcd34d; background: #fffbeb; border-radius: 8px; padding: 8px 10px; font-size: 13px; color: #78350f; }
+            @media (max-width: 767px) {
+                .nv-dic-cabecera { display: none; }
+                .nv-dic-celdas { grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+                .nv-dic-celda--estado { grid-column: 1 / -1; }
+                .nv-dic-celda-etq { display: block; }
+            }
+            html.dark .nv-dic-ayuda, html.dark .nv-dic-dijo, html.dark .nv-dic-sku, html.dark .nv-dic-origen, html.dark .nv-dic-celda-etq, html.dark .nv-dic-cabecera { color: #9ca3af; }
+            html.dark .nv-dic-config, html.dark .nv-dic-resumen, html.dark .nv-dic-efecto, html.dark .nv-dic-mic, html.dark .nv-dic-opciones span { color: #d1d5db; }
+            html.dark .nv-dic-resumen b, html.dark .nv-dic-valor { color: #f9fafb; }
+            html.dark .nv-dic-cabecera, html.dark .nv-dic-efectos { border-color: #374151; }
+            html.dark .nv-dic-config select, html.dark .nv-dic-campo select, html.dark .nv-dic-campo input { background: #111827; color: #f9fafb; border-color: #4b5563; }
+            html.dark .nv-dic-texto { border-color: #4b5563; }
+            html.dark .nv-dic-linea { background: #111827; border-color: #374151; }
+            html.dark .nv-dic-linea--ok { background: #052e16; border-color: #166534; }
+            html.dark .nv-dic-linea--aviso { background: #3a2a05; border-color: #92400e; }
+            html.dark .nv-dic-linea--error, html.dark .nv-dic-linea--stock { background: #3b0d0d; border-color: #991b1b; }
+            html.dark .nv-dic-linea--omitida { background: #1f2937; border-color: #374151; }
+            html.dark .nv-dic-mensaje { color: #fcd34d; }
+            html.dark .nv-dic-linea--error .nv-dic-mensaje, html.dark .nv-dic-linea--stock .nv-dic-mensaje, html.dark .nv-dic-error, html.dark .nv-dic-falta, html.dark .nv-dic-bloqueo { color: #fca5a5; }
+            html.dark .nv-dic-nota { color: #93c5fd; }
+            html.dark .nv-dic-opcion { background: #111827; color: #93c5fd; border-color: #3b82f6; }
+            html.dark .nv-dic-hecho { background: #052e16; border-color: #166534; color: #bbf7d0; }
+            html.dark .nv-dic-incierto { background: #3a2a05; border-color: #92400e; color: #fde68a; }
+            html.dark .nv-dic-mic--escuchando { color: #93c5fd; }
+            html.dark .nv-dic-acciones .transparent-button, html.dark .nv-dic-config { color: #e5e7eb; }
+            html.dark .nv-dic-acciones .transparent-button:disabled { color: #9ca3af; }
+            /* Movil: el contenedor de Bagisto (overflow-x oculto) impide el sticky; mientras el panel esta a la vista la barra queda fija
+               abajo y el panel reserva su alto para no tapar ninguna linea. */
+            @media (max-width: 767px) {
+                .nv-dic-agregar--fija { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; margin: 0; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); background: #fff; box-shadow: 0 -4px 12px rgba(0, 0, 0, .12); }
+                .nv-dic-con-barra { padding-bottom: 130px !important; }
+                html.dark .nv-dic-agregar--fija { background: #111827; box-shadow: 0 -4px 12px rgba(0, 0, 0, .5); }
+            }
             .nv-cot-aviso { margin-top: 6px; border-radius: 6px; background: #fffbeb; color: #92400e; padding: 4px 8px; font-size: 12px; }
             html.dark .nv-cot { border-color: #374151; }
             html.dark .nv-cot-meta { color: #9ca3af; }
@@ -476,8 +543,9 @@
                             <!-- Productos y Colores -->
                             <div class="flex flex-col gap-4">
                                 @if ($rutaNv('dictado.interpretar') !== '#' && config('ventasasesor.dictado.activo', true))
-                                    <!-- Doc. 34: pedido por voz. El navegador transcribe; el servidor interpreta y valida; se agrega con «aplicar tallas». -->
-                                    <div class="box-shadow rounded bg-white p-4 dark:bg-gray-900" data-venta="dictado">
+                                    <!-- Doc. 34: pedido por voz. El navegador transcribe; el servidor interpreta y valida; «Agregar» guarda TODO el
+                                         dictado como una operacion atomica e idempotente (nunca se agrega solo al terminar de hablar). -->
+                                    <div ref="panelDictado" class="box-shadow rounded bg-white p-4 dark:bg-gray-900" :class="{ 'nv-dic-con-barra': dictado.panelVisible && dictado.lineas.length }" data-venta="dictado">
                                         <div class="nv-dic-fila">
                                             <p class="text-base font-semibold text-gray-800 dark:text-white">Dictar pedido</p>
                                             <button type="button" class="secondary-button" data-venta="dictado-abrir" @click="dictado.abierto = ! dictado.abierto">
@@ -487,121 +555,229 @@
 
                                         <template v-if="dictado.abierto">
                                             <p class="nv-dic-ayuda">
-                                                Di color, dama/caballero/niño, talla y cantidad. Ej.: «roja 2-4, 2 unidades; azul rey talla S de dama, 15 unidades».
+                                                Di cada prenda en el orden que quieras: color, dama/caballero/niño, talla y cantidad (recomendado: la cantidad al final).
+                                                Ej.: «dos rojas M de dama, negro caballero L 3». Puedes decir el código: «124H-DZ-M 20».
                                             </p>
+
+                                            <label class="nv-dic-config">
+                                                <span>Si no digo el tipo:</span>
+                                                <select v-model="dictado.tipoDefecto" data-venta="dictado-tipo-defecto" @change="dictadoCambiarTipoDefecto">
+                                                    <option value="">Preguntar</option>
+                                                    <option value="D">Dama</option>
+                                                    <option value="H">Caballero</option>
+                                                    <option value="N">Niño</option>
+                                                    <option value="TP">Crop top</option>
+                                                </select>
+                                            </label>
 
                                             <textarea
                                                 v-model="dictado.texto"
                                                 rows="3"
                                                 class="nv-dic-texto"
+                                                :class="{ 'nv-dic-texto--escuchando': dictado.mic === 'escuchando' }"
                                                 data-venta="dictado-texto"
+                                                aria-label="Texto del pedido dictado"
                                                 placeholder="Toca «Hablar» o escribe / dicta con el teclado…"
+                                                :readonly="dictado.incierto !== null"
+                                                @input="dictadoEditadoAMano"
                                             ></textarea>
+                                            <p class="nv-dic-mic" :class="dictadoClaseMic" data-venta="dictado-mic" role="status" aria-live="polite">@{{ dictadoTextoMic }}</p>
 
                                             <div class="nv-dic-acciones">
-                                                <button type="button" :class="dictado.escuchando ? 'primary-button' : 'secondary-button'" data-venta="dictado-hablar" @click="dictadoEscuchar">
-                                                    @{{ dictado.escuchando ? '■ Detener' : '🎤 Hablar' }}
+                                                <button
+                                                    type="button"
+                                                    :class="dictado.mic === 'escuchando' ? 'primary-button' : 'secondary-button'"
+                                                    data-venta="dictado-hablar"
+                                                    :disabled="dictado.agregando || dictado.incierto !== null"
+                                                    @click="dictadoEscuchar"
+                                                >
+                                                    @{{ dictado.mic === 'escuchando' ? '■ Detener' : '🎤 Hablar' }}
                                                 </button>
-                                                <button type="button" class="primary-button" data-venta="dictado-interpretar" :disabled="dictado.cargando || ! dictado.texto.trim()" @click="dictadoInterpretar">
-                                                    @{{ dictado.cargando ? 'Interpretando…' : 'Interpretar' }}
+                                                <button type="button" class="primary-button" data-venta="dictado-interpretar" :disabled="dictado.cargando || dictado.agregando || dictado.incierto !== null || ! dictado.texto.trim()" @click="dictadoInterpretar">
+                                                    @{{ dictado.cargando ? 'Interpretando…' : (dictado.lineas.length ? 'Volver a interpretar' : 'Interpretar') }}
                                                 </button>
-                                                <button type="button" class="transparent-button" @click="dictadoLimpiar">Limpiar</button>
+                                                <button type="button" class="transparent-button" :disabled="dictado.agregando || dictado.incierto !== null" @click="dictadoLimpiar">Limpiar</button>
                                             </div>
 
-                                            <p v-if="dictado.error" class="nv-dic-error" data-venta="dictado-error">@{{ dictado.error }}</p>
+                                            <p v-if="dictado.error" class="nv-dic-error" data-venta="dictado-error" role="alert">@{{ dictado.error }}</p>
 
-                                            <div v-if="dictado.lineas.length" class="nv-dic-lista" data-venta="dictado-lineas">
-                                                <div
-                                                    v-for="(l, i) in dictado.lineas"
-                                                    :key="i"
-                                                    class="nv-dic-linea"
-                                                    :class="l.omitida ? 'nv-dic-linea--omitida' : 'nv-dic-linea--' + l.estado"
-                                                    :data-dictado-linea="i"
-                                                >
-                                                    <div class="nv-dic-fila">
-                                                        <span class="nv-dic-estado">@{{ l.omitida ? '⏭️' : (l.estado === 'ok' ? '✅' : (l.estado === 'aviso' ? '⚠️' : '❌')) }}</span>
-                                                        <span class="nv-dic-producto">
-                                                            <template v-if="l.nombre">@{{ l.nombre }} <span class="nv-dic-sku">@{{ l.sku }}</span></template>
-                                                            <template v-else>@{{ l.color || 'Sin color' }}</template>
-                                                        </span>
-                                                        <span class="nv-dic-dato">Talla @{{ l.talla_etiqueta || '—' }}</span>
-                                                        <span class="nv-dic-dato">× @{{ l.cantidad ?? '—' }}</span>
-                                                    </div>
-                                                    <p v-if="l.texto" class="nv-dic-dijo">Dijo: «@{{ l.texto }}»<template v-if="l.corregida"> · corregida</template></p>
-                                                    <p v-if="l.omitida" class="nv-dic-mensaje">Omitida: no se agrega.</p>
-                                                    <p v-else-if="l.mensaje" class="nv-dic-mensaje">@{{ l.mensaje }}</p>
+                                            <!-- Lo que se agrego la ultima vez (dicho por el servidor, no supuesto por la pantalla). -->
+                                            <div v-if="dictado.hecho" class="nv-dic-hecho" data-venta="dictado-hecho" role="status">
+                                                <p><b>@{{ dictado.hecho.repetida ? 'Ya estaba agregado: no se duplicó.' : 'Agregado a la venta.' }}</b></p>
+                                                <p v-for="r in dictado.hecho.resumen" :key="r.variante_id">@{{ r.sku }}: había @{{ r.antes }} + @{{ r.agregado }} = quedan @{{ r.despues }}</p>
+                                                <p>Para cambiar una cantidad, toca el lápiz del producto en el resumen de la venta.</p>
+                                            </div>
 
-                                                    <!-- Corregir con selectores: color, tipo, talla y cantidad; se valida otra vez contra el catalogo. -->
-                                                    <div v-if="l.editando" class="nv-dic-editor" data-venta="dictado-editor">
-                                                        <label class="nv-dic-campo">
-                                                            <span>Color</span>
-                                                            <select v-model="l.form.color" data-venta="dictado-color">
-                                                                <option value="">Elige…</option>
-                                                                <optgroup v-if="l.candidatos && l.candidatos.length" label="Lo que dijiste">
-                                                                    <option v-for="c in l.candidatos" :key="'c' + c" :value="c">@{{ c }}</option>
-                                                                </optgroup>
-                                                                <optgroup label="Todos los colores">
-                                                                    <option v-for="c in dictado.colores" :key="c" :value="c">@{{ c }}</option>
-                                                                </optgroup>
-                                                            </select>
-                                                        </label>
-                                                        <label class="nv-dic-campo">
-                                                            <span>Tipo</span>
-                                                            <select v-model="l.form.tipo" data-venta="dictado-tipo" @change="dictadoAjustarTalla(l)">
-                                                                <option value="D">Dama</option>
-                                                                <option value="H">Caballero</option>
-                                                                <option value="N">Niño</option>
-                                                                <option value="TP">Crop top</option>
-                                                            </select>
-                                                        </label>
-                                                        <label class="nv-dic-campo">
-                                                            <span>Talla</span>
-                                                            <select v-model="l.form.talla" data-venta="dictado-talla">
-                                                                <option value="">Elige…</option>
-                                                                <option v-for="t in dictadoTallasDe(l.form.tipo)" :key="t" :value="t">@{{ dictado.tallas[t] || t }}</option>
-                                                            </select>
-                                                        </label>
-                                                        <label class="nv-dic-campo nv-dic-campo--cantidad">
-                                                            <span>Cantidad</span>
-                                                            <input v-model.number="l.form.cantidad" type="number" min="1" max="9999" inputmode="numeric" data-venta="dictado-cantidad">
-                                                        </label>
-                                                        <p v-if="l.errorEdicion" class="nv-dic-error">@{{ l.errorEdicion }}</p>
-                                                        <div class="nv-dic-acciones">
-                                                            <button type="button" class="primary-button" data-venta="dictado-validar" :disabled="l.validando" @click="dictadoValidarCorreccion(i)">
-                                                                @{{ l.validando ? 'Validando…' : 'Validar' }}
+                                            <template v-if="dictado.lineas.length">
+                                                <div class="nv-dic-resumen" data-venta="dictado-resumen">
+                                                    <span><b>@{{ dictado.lineas.length }}</b> @{{ dictado.lineas.length === 1 ? 'línea' : 'líneas' }}</span>
+                                                    <span><b>@{{ dictadoUnidades }}</b> unidades listas para agregar</span>
+                                                    <span v-if="dictadoPendientes"><b>@{{ dictadoPendientes }}</b> por revisar</span>
+                                                    <span v-if="dictadoOmitidas"><b>@{{ dictadoOmitidas }}</b> @{{ dictadoOmitidas === 1 ? 'omitida' : 'omitidas' }}</span>
+                                                </div>
+                                                <p v-if="dictado.catalogoError" class="nv-dic-error" role="alert">@{{ dictado.catalogoError }}</p>
+
+                                                <div class="nv-dic-cabecera" aria-hidden="true">
+                                                    <span>Estado</span><span>Tipo</span><span>Color</span><span>Talla</span><span>Cantidad</span>
+                                                </div>
+
+                                                <div class="nv-dic-lista" data-venta="dictado-lineas">
+                                                    <div
+                                                        v-for="(l, i) in dictado.lineas"
+                                                        :key="l.uid"
+                                                        class="nv-dic-linea"
+                                                        :class="'nv-dic-linea--' + dictadoEstadoDe(l)"
+                                                        :data-dictado-linea="i"
+                                                        :data-dictado-estado="dictadoEstadoDe(l)"
+                                                    >
+                                                        <div class="nv-dic-celdas">
+                                                            <div class="nv-dic-celda nv-dic-celda--estado">
+                                                                <span class="nv-dic-estado" :class="'nv-dic-estado--' + dictadoEstadoDe(l)" data-venta="dictado-estado">@{{ dictadoEtiquetaEstado(l) }}</span>
+                                                            </div>
+                                                            <div class="nv-dic-celda">
+                                                                <span class="nv-dic-celda-etq">Tipo</span>
+                                                                <span v-if="dictadoTipoDe(l)" class="nv-dic-valor">@{{ dictadoNombreTipo(dictadoTipoDe(l)) }}</span>
+                                                                <span v-else class="nv-dic-falta">Falta</span>
+                                                                <span v-if="dictadoOrigenTipo(l)" class="nv-dic-origen">@{{ dictadoOrigenTipo(l) }}</span>
+                                                            </div>
+                                                            <div class="nv-dic-celda">
+                                                                <span class="nv-dic-celda-etq">Color</span>
+                                                                <span v-if="l.color" class="nv-dic-valor">@{{ l.color }}</span>
+                                                                <span v-else class="nv-dic-falta">@{{ l.candidatos && l.candidatos.length ? '¿Cuál?' : 'Falta' }}</span>
+                                                                <span v-if="l.sku" class="nv-dic-origen">@{{ l.sku }}</span>
+                                                            </div>
+                                                            <div class="nv-dic-celda">
+                                                                <span class="nv-dic-celda-etq">Talla</span>
+                                                                <span v-if="l.talla_etiqueta" class="nv-dic-valor">@{{ l.talla_etiqueta }}</span>
+                                                                <span v-else class="nv-dic-falta">Falta</span>
+                                                            </div>
+                                                            <div class="nv-dic-celda">
+                                                                <span class="nv-dic-celda-etq">Cantidad</span>
+                                                                <span v-if="l.cantidad" class="nv-dic-valor">@{{ l.cantidad }}</span>
+                                                                <span v-else class="nv-dic-falta">Falta</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <p v-if="l.texto_original || l.texto" class="nv-dic-dijo" data-venta="dictado-dijo">Dijo: «@{{ l.texto_original || l.texto }}»<template v-if="l.corregida"> · corregida a mano</template></p>
+                                                        <p v-if="l.omitida" class="nv-dic-mensaje">Omitida: no se agrega.</p>
+                                                        <template v-else>
+                                                            <p v-if="l.mensaje" class="nv-dic-mensaje" data-venta="dictado-mensaje">@{{ l.mensaje }}</p>
+                                                            <p v-if="dictadoProblemaStock(l)" class="nv-dic-mensaje" data-venta="dictado-stock">@{{ dictadoProblemaStock(l) }}</p>
+                                                            <p v-if="l.errorGuardado" class="nv-dic-mensaje" data-venta="dictado-error-guardado">@{{ l.errorGuardado }}</p>
+                                                            <p v-if="l.nota" class="nv-dic-nota">@{{ l.nota }}</p>
+                                                            <p v-if="l.variante_id && ! l.editando" class="nv-dic-efecto" data-venta="dictado-efecto">@{{ dictadoEfectoDe(l) }}</p>
+
+                                                            <!-- Opciones concretas: se elige una y se pide solo lo que siga faltando. -->
+                                                            <div v-if="! l.editando && dictadoOpciones(l).length" class="nv-dic-opciones" data-venta="dictado-opciones">
+                                                                <span>Elige:</span>
+                                                                <button
+                                                                    v-for="(o, k) in dictadoOpciones(l)"
+                                                                    :key="k"
+                                                                    type="button"
+                                                                    class="nv-dic-opcion"
+                                                                    data-venta="dictado-opcion"
+                                                                    :disabled="l.validando || dictado.agregando"
+                                                                    @click="dictadoElegirOpcion(i, o)"
+                                                                >@{{ o.etiqueta }}</button>
+                                                            </div>
+                                                        </template>
+
+                                                        <!-- Corregir: selectores con el catalogo real (tipo, color y talla dependientes) y la misma validacion. -->
+                                                        <div v-if="l.editando" class="nv-dic-editor" data-venta="dictado-editor">
+                                                            <label class="nv-dic-campo" :class="{ 'nv-dic-campo--pendiente': ! l.form.color }">
+                                                                <span>Color</span>
+                                                                <select v-model="l.form.color" data-venta="dictado-color" @change="dictadoCambioCampo(l, 'color')">
+                                                                    <option value="">Elige…</option>
+                                                                    <optgroup v-if="l.candidatos && l.candidatos.length" label="Lo que dijiste">
+                                                                        <option v-for="c in l.candidatos" :key="'c' + c" :value="c">@{{ c }}</option>
+                                                                    </optgroup>
+                                                                    <optgroup label="Colores">
+                                                                        <option v-for="c in dictadoColoresDisponibles()" :key="c" :value="c">@{{ c }}</option>
+                                                                    </optgroup>
+                                                                </select>
+                                                            </label>
+                                                            <label class="nv-dic-campo" :class="{ 'nv-dic-campo--pendiente': ! l.form.tipo }">
+                                                                <span>Tipo</span>
+                                                                <select v-model="l.form.tipo" data-venta="dictado-tipo" @change="dictadoCambioCampo(l, 'tipo')">
+                                                                    <option value="">Elige…</option>
+                                                                    <option v-for="t in dictadoTiposDe(l.form.color)" :key="t" :value="t">@{{ dictadoNombreTipo(t) }}</option>
+                                                                </select>
+                                                            </label>
+                                                            <label class="nv-dic-campo" :class="{ 'nv-dic-campo--pendiente': ! l.form.talla }">
+                                                                <span>Talla</span>
+                                                                <select v-model="l.form.talla" data-venta="dictado-talla" @change="dictadoCambioCampo(l, 'talla')">
+                                                                    <option value="">Elige…</option>
+                                                                    <option v-for="t in dictadoTallasDe(l.form.color, l.form.tipo)" :key="t" :value="t">@{{ dictado.tallas[t] || t }}</option>
+                                                                </select>
+                                                            </label>
+                                                            <label class="nv-dic-campo nv-dic-campo--cantidad" :class="{ 'nv-dic-campo--pendiente': ! (Number(l.form.cantidad) >= 1) }">
+                                                                <span>Cantidad</span>
+                                                                <input
+                                                                    v-model.number="l.form.cantidad"
+                                                                    type="number"
+                                                                    min="1"
+                                                                    max="9999"
+                                                                    step="1"
+                                                                    inputmode="numeric"
+                                                                    data-venta="dictado-cantidad"
+                                                                    :data-dictado-cantidad="i"
+                                                                    @input="dictadoCambioCampo(l, 'cantidad')"
+                                                                >
+                                                            </label>
+                                                            <p v-if="l.form.color && l.form.tipo && ! dictadoTallasDe(l.form.color, l.form.tipo).length" class="nv-dic-ayuda">
+                                                                No hay @{{ dictadoNombreTipo(l.form.tipo).toLowerCase() }} en @{{ l.form.color }}: elige otro tipo o color.
+                                                            </p>
+                                                            <p v-if="l.errorEdicion" class="nv-dic-error" role="alert">@{{ l.errorEdicion }}</p>
+                                                            <div class="nv-dic-acciones">
+                                                                <button type="button" class="primary-button" data-venta="dictado-validar" :disabled="l.validando" @click="dictadoValidarCorreccion(i)">
+                                                                    @{{ l.validando ? 'Validando…' : 'Validar' }}
+                                                                </button>
+                                                                <button type="button" class="transparent-button" @click="dictadoCancelarEdicion(l)">Cancelar</button>
+                                                            </div>
+                                                        </div>
+
+                                                        <div v-else class="nv-dic-acciones nv-dic-acciones--linea">
+                                                            <button v-if="! l.omitida" type="button" class="secondary-button" data-venta="dictado-corregir" :disabled="dictado.agregando || dictado.incierto !== null" @click="dictadoEditar(l)">Corregir</button>
+                                                            <button type="button" class="transparent-button" data-venta="dictado-omitir" :disabled="dictado.agregando || dictado.incierto !== null" @click="l.omitida = ! l.omitida">
+                                                                @{{ l.omitida ? 'Volver a incluir' : 'Omitir' }}
                                                             </button>
-                                                            <button type="button" class="transparent-button" @click="l.editando = false">Cancelar</button>
                                                         </div>
                                                     </div>
+                                                </div>
 
-                                                    <div v-else class="nv-dic-acciones nv-dic-acciones--linea">
-                                                        <button v-if="! l.omitida" type="button" class="secondary-button" data-venta="dictado-corregir" @click="dictadoEditar(l)">Corregir</button>
-                                                        <button type="button" class="transparent-button" data-venta="dictado-omitir" @click="l.omitida = ! l.omitida">
-                                                            @{{ l.omitida ? 'Incluir de nuevo' : 'Omitir' }}
+                                                <!-- Efecto real en la venta, por referencia (varias lineas del mismo SKU se suman). -->
+                                                <div v-if="dictadoEfectos.length" class="nv-dic-efectos" data-venta="dictado-efectos">
+                                                    <p><b>Efecto en la venta</b></p>
+                                                    <p v-for="e in dictadoEfectos" :key="e.variante_id">
+                                                        @{{ e.sku }}: ya hay @{{ e.enVenta }} + dictadas @{{ e.dictadas }}<template v-if="e.lineas > 1"> (@{{ e.lineas }} líneas)</template> = quedarán @{{ e.enVenta + e.dictadas }}<template v-if="e.gestiona && e.stock !== null"> · disponibles @{{ e.stock }}</template>
+                                                    </p>
+                                                </div>
+
+                                                <!-- Respuesta perdida: no se sabe si se guardo. Reintentar con la MISMA operacion no duplica. -->
+                                                <div v-if="dictado.incierto" class="nv-dic-incierto" data-venta="dictado-incierto" role="alert">
+                                                    <p><b>No sabemos si se guardó.</b> @{{ dictado.incierto }}</p>
+                                                    <p>«Reintentar» es seguro: si ya se había guardado, no se suma otra vez.</p>
+                                                    <div class="nv-dic-acciones">
+                                                        <button type="button" class="primary-button" data-venta="dictado-reintentar" :disabled="dictado.agregando" @click="dictadoAgregar(true)">
+                                                            @{{ dictado.agregando ? 'Reintentando…' : 'Reintentar' }}
                                                         </button>
                                                     </div>
                                                 </div>
 
-                                                <p v-if="dictadoPendientes" class="nv-dic-error" data-venta="dictado-pendientes">
-                                                    @{{ dictadoPendientes === 1 ? 'Hay 1 línea con ❌' : 'Hay ' + dictadoPendientes + ' líneas con ❌' }}: corrígela(s) u omítela(s) para poder agregar.
-                                                </p>
-
-                                                <div v-if="dictado.resultado" class="nv-dic-error">
-                                                    <p v-if="dictado.resultado.guardados.length">Agregados: @{{ dictado.resultado.guardados.join(', ') }}.</p>
-                                                    <p v-for="p in dictado.resultado.pendientes">No se agregó @{{ p.nombre }}: @{{ p.mensaje }}</p>
+                                                <div class="nv-dic-agregar" :class="{ 'nv-dic-agregar--fija': dictado.panelVisible }">
+                                                    <p v-if="dictadoBloqueo" class="nv-dic-bloqueo" data-venta="dictado-pendientes">@{{ dictadoBloqueo }}</p>
+                                                    <button
+                                                        v-if="! dictado.incierto"
+                                                        type="button"
+                                                        class="primary-button"
+                                                        data-venta="dictado-agregar"
+                                                        :disabled="dictado.agregando || !! dictadoBloqueo"
+                                                        @click="dictadoAgregar(false)"
+                                                    >
+                                                        @{{ dictado.agregando ? 'Agregando…' : 'Agregar ' + dictadoValidas.length + (dictadoValidas.length === 1 ? ' línea' : ' líneas') + ' (' + dictadoUnidades + ' u.) a la venta' }}
+                                                    </button>
                                                 </div>
-
-                                                <button
-                                                    v-if="dictadoValidas.length"
-                                                    type="button"
-                                                    class="primary-button"
-                                                    data-venta="dictado-agregar"
-                                                    :disabled="dictado.agregando || dictadoPendientes > 0 || dictado.lineas.some((x) => x.editando)"
-                                                    @click="dictadoAgregar"
-                                                >
-                                                    @{{ dictado.agregando ? 'Agregando…' : 'Agregar ' + dictadoValidas.length + (dictadoValidas.length === 1 ? ' línea' : ' líneas') + ' a la venta' }}
-                                                </button>
-                                            </div>
+                                            </template>
                                         </template>
                                     </div>
                                 @endif
@@ -2723,8 +2899,8 @@
                         creditoCliente: null,
                         creditoAplicar: { monto: '', enviando: false, error: null, hecho: null, claves: {} },
 
-                        // Doc. 34: pedido por voz (el navegador transcribe; el servidor interpreta y valida contra el catalogo).
-                        dictado: { abierto: false, texto: '', escuchando: false, cargando: false, agregando: false, lineas: [], colores: [], tallas: {}, error: null, resultado: null },
+                        // Doc. 34: pedido por voz (el navegador transcribe; el servidor interpreta, valida y agrega en una operacion idempotente).
+                        dictado: { abierto: false, texto: '', mic: 'inactivo', micMensaje: null, cargando: false, agregando: false, lineas: [], colores: [], tallas: {}, catalogo: {}, catalogoError: null, error: null, hecho: null, incierto: null, operacion: null, enviadas: null, tipoDefecto: '', secuencia: 0, panelVisible: false },
 
                         cargando: {
                             cliente: false, colores: false, matrices: false, tallas: false, direccion: false,
@@ -2752,14 +2928,78 @@
                 },
 
                 computed: {
-                    /** Doc. 34: lineas dictadas que ya tienen una variante exacta (ok o aviso). */
+                    /** Doc. 34: lineas dictadas listas (variante exacta, sin corregir en curso, sin error de guardado). */
                     dictadoValidas() {
-                        return this.dictado.lineas.filter((l) => ! l.omitida && l.variante_id && l.estado !== 'error');
+                        return this.dictado.lineas.filter((l) => ! l.omitida && l.variante_id && l.estado !== 'error' && ! l.editando && ! l.errorGuardado);
                     },
 
-                    /** Lineas con ❌ que aun no se corrigen ni se omiten: mientras haya, no se agrega nada. */
+                    /** Lineas por revisar (dato incompleto, variante inexistente, corrigiendo, error al guardar o stock insuficiente). */
                     dictadoPendientes() {
-                        return this.dictado.lineas.filter((l) => ! l.omitida && (! l.variante_id || l.estado === 'error')).length;
+                        return this.dictado.lineas.filter((l) => ! l.omitida && (l.editando || l.errorGuardado || ! l.variante_id || l.estado === 'error' || this.dictadoProblemaStock(l))).length;
+                    },
+
+                    dictadoOmitidas() {
+                        return this.dictado.lineas.filter((l) => l.omitida).length;
+                    },
+
+                    dictadoUnidades() {
+                        return this.dictadoValidas.reduce((suma, l) => suma + Number(l.cantidad || 0), 0);
+                    },
+
+                    /** Efecto real por referencia: lo que ya hay en la venta + todas las lineas dictadas de ese SKU. */
+                    dictadoEfectos() {
+                        const porVariante = {};
+
+                        this.dictadoValidas.forEach((l) => {
+                            const e = porVariante[l.variante_id] || (porVariante[l.variante_id] = {
+                                variante_id: l.variante_id, sku: l.sku, enVenta: this.dictadoEnVenta(l.variante_id), dictadas: 0, lineas: 0,
+                                stock: l.stock ?? null, gestiona: !! l.gestiona_stock,
+                            });
+
+                            e.dictadas += Number(l.cantidad || 0);
+                            e.lineas++;
+                        });
+
+                        return Object.values(porVariante);
+                    },
+
+                    /** Por que no se puede agregar todavia (null = se puede). Deshabilitar el boton no es la unica defensa: el servidor revalida. */
+                    dictadoBloqueo() {
+                        if (! this.dictado.lineas.length) {
+                            return null;
+                        }
+                        if (this.dictado.mic === 'escuchando') {
+                            return 'Detén el micrófono para revisar y agregar.';
+                        }
+                        if (this.dictado.lineas.some((l) => l.editando)) {
+                            return 'Termina de corregir (Validar o Cancelar) para agregar.';
+                        }
+                        if (this.dictadoPendientes) {
+                            return (this.dictadoPendientes === 1 ? 'Hay 1 línea por revisar' : 'Hay ' + this.dictadoPendientes + ' líneas por revisar') + ': corrígela(s) u omítela(s) para poder agregar.';
+                        }
+                        if (! this.dictadoValidas.length) {
+                            return 'Todas las líneas están omitidas: no hay nada para agregar.';
+                        }
+
+                        return null;
+                    },
+
+                    dictadoClaseMic() {
+                        return {
+                            'nv-dic-mic--escuchando': this.dictado.mic === 'escuchando',
+                            'nv-dic-mic--aviso': ['editado', 'no-disponible', 'denegado', 'sin-voz', 'error'].includes(this.dictado.mic),
+                        };
+                    },
+
+                    dictadoTextoMic() {
+                        return {
+                            escuchando: '● Escuchando… habla con pausas. Toca «Detener» para revisar.',
+                            editado: 'Micrófono detenido porque escribiste en el cuadro: tu texto no se reemplaza. Toca «Hablar» para seguir dictando.',
+                            'no-disponible': 'Este navegador no reconoce la voz: escribe o usa el micrófono del teclado del celular.',
+                            denegado: 'El micrófono está bloqueado para este sitio: permítelo en el navegador, o escribe / usa el micrófono del teclado.',
+                            'sin-voz': 'No se escuchó nada. Toca «Hablar» e intenta de nuevo.',
+                            error: 'El reconocimiento se interrumpió (' + (this.dictado.micMensaje || 'error') + '). El texto se conserva: puedes seguir escribiendo.',
+                        }[this.dictado.mic] || '';
                     },
 
                     /** D10 V1: tope aplicable = menor entre el saldo a favor y lo que debe el pedido recien creado. */
@@ -3168,133 +3408,486 @@
 
                 methods: {
                     /**
-                     * Doc. 34: dictar con el reconocimiento de voz del navegador (Chrome, Edge, Android; Safari en iPhone con el
-                     * dictado activado). Sin soporte se explica que se use el microfono del teclado sobre el mismo cuadro.
+                     * Doc. 34 · Microfono (jornada 2026-11-26). Estados: inactivo → escuchando → (detenido | editado | sin-voz |
+                     * denegado | error). Cada inicio es una SESION; los eventos de una sesion vieja o que llegan despues de
+                     * terminar se ignoran. El texto se arma por INDICE de resultado: un final repetido del mismo indice no se
+                     * duplica y dos frases iguales dichas a proposito (indices distintos) se conservan. Si la asesora escribe en
+                     * el cuadro mientras escucha, se detiene el microfono y su texto no se reemplaza. Nunca agrega solo.
                      */
                     dictadoEscuchar() {
+                        if (this.dictado.mic === 'escuchando') {
+                            this.dictadoDetenerMic(false);
+
+                            return;
+                        }
+
                         const Reconocimiento = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-                        if (this.dictado.escuchando) {
-                            this._reconocimiento && this._reconocimiento.stop();
-
-                            return;
-                        }
-
                         if (! Reconocimiento) {
-                            this.dictado.error = 'Este navegador no reconoce la voz. Toca el cuadro de texto y usa el micrófono del teclado del celular.';
+                            this.dictado.mic = 'no-disponible';
 
                             return;
                         }
 
+                        const sesion = (this._micSesion = (this._micSesion || 0) + 1);
                         const r = new Reconocimiento();
                         const base = this.dictado.texto.trim() ? this.dictado.texto.trim() + ', ' : '';
+                        const finales = {};
 
                         r.lang = 'es-CO';
                         r.continuous = true;
                         r.interimResults = true;
                         r.onresult = (evento) => {
-                            let finales = '';
+                            // Evento tardio (despues de detener o de editar a mano) o de otra sesion: no toca el texto.
+                            if (sesion !== this._micSesion || this.dictado.mic !== 'escuchando') {
+                                return;
+                            }
+
                             let parcial = '';
 
-                            for (let i = 0; i < evento.results.length; i++) {
+                            for (let i = evento.resultIndex; i < evento.results.length; i++) {
                                 const trozo = evento.results[i][0].transcript.trim();
 
                                 if (evento.results[i].isFinal) {
-                                    finales += trozo + ', ';
+                                    finales[i] = trozo;
                                 } else {
-                                    parcial += trozo + ' ';
+                                    parcial += (parcial ? ' ' : '') + trozo;
                                 }
                             }
 
-                            this.dictado.texto = (base + finales + parcial).trim();
+                            const dicho = Object.keys(finales).sort((a, b) => a - b).map((k) => finales[k]).filter(Boolean).join(', ');
+
+                            this.dictado.texto = (base + dicho + (parcial ? (dicho ? ', ' : '') + parcial : '')).trim();
                         };
                         r.onerror = (evento) => {
-                            this.dictado.error = evento.error === 'not-allowed' || evento.error === 'service-not-allowed'
-                                ? 'Permite el uso del micrófono para este sitio en el navegador.'
-                                : (evento.error === 'no-speech' ? 'No se escuchó nada. Intenta de nuevo.' : 'No se pudo escuchar (' + evento.error + ').');
+                            if (sesion !== this._micSesion) {
+                                return;
+                            }
+
+                            this.dictado.micMensaje = evento.error;
+                            this.dictado.mic = evento.error === 'not-allowed' || evento.error === 'service-not-allowed' ? 'denegado'
+                                : (evento.error === 'no-speech' ? 'sin-voz' : (evento.error === 'aborted' ? 'inactivo' : 'error'));
                         };
-                        r.onend = () => { this.dictado.escuchando = false; };
+                        r.onend = () => {
+                            if (sesion === this._micSesion && this.dictado.mic === 'escuchando') {
+                                this.dictado.mic = 'inactivo';
+                            }
+
+                            if (this._micFin) {
+                                this._micFin();
+                            }
+                        };
 
                         this._reconocimiento = r;
                         this.dictado.error = null;
-                        this.dictado.escuchando = true;
-                        r.start();
+                        this.dictado.mic = 'escuchando';
+
+                        try {
+                            r.start();
+                        } catch (e) {
+                            this.dictado.mic = 'error';
+                            this.dictado.micMensaje = e?.message || 'start';
+                        }
                     },
 
-                    dictadoInterpretar() {
-                        if (this.dictado.escuchando && this._reconocimiento) {
-                            this._reconocimiento.stop();
+                    /**
+                     * Detiene la escucha. Normal: termina de procesar lo ultimo dicho (stop). Descartar (la asesora escribio): se
+                     * cambia de sesion y se aborta, asi ningun evento posterior toca su texto. Resuelve al terminar (max. 1,5 s).
+                     */
+                    dictadoDetenerMic(descartar = false) {
+                        const r = this._reconocimiento;
+
+                        if (! r || this.dictado.mic !== 'escuchando') {
+                            return Promise.resolve();
+                        }
+
+                        return new Promise((listo) => {
+                            const fin = () => {
+                                this._micFin = null;
+                                listo();
+                            };
+
+                            this._micFin = fin;
+                            setTimeout(fin, 1500);
+
+                            if (descartar) {
+                                this._micSesion = (this._micSesion || 0) + 1;
+                                this.dictado.mic = 'editado';
+                                r.abort();
+                            } else {
+                                r.stop();
+                            }
+                        });
+                    },
+
+                    /** La asesora escribio en el cuadro: si estaba escuchando, se detiene y su texto manda. */
+                    dictadoEditadoAMano() {
+                        if (this.dictado.mic === 'escuchando') {
+                            this.dictadoDetenerMic(true);
+                        }
+                    },
+
+                    async dictadoInterpretar() {
+                        await this.dictadoDetenerMic(false);
+
+                        const conCambios = this.dictado.lineas.some((l) => l.corregida || l.omitida);
+
+                        if (conCambios && ! window.confirm('Volver a interpretar reemplaza las líneas y se pierden las correcciones hechas. ¿Continuar?')) {
+                            return;
                         }
 
                         this.dictado.cargando = true;
                         this.dictado.error = null;
-                        this.dictado.resultado = null;
+                        this.dictado.hecho = null;
+                        this.dictado.catalogoError = null;
 
-                        this.$axios.post("{{ $rutaNv('dictado.interpretar') }}", { texto: this.dictado.texto })
+                        const consulta = (this._dictadoConsulta = (this._dictadoConsulta || 0) + 1);
+
+                        return this.$axios.post("{{ $rutaNv('dictado.interpretar') }}", { texto: this.dictado.texto, tipo_defecto: this.dictado.tipoDefecto || null })
                             .then((response) => {
+                                // Una respuesta vieja (se volvio a interpretar mientras tanto) no reemplaza la nueva.
+                                if (consulta !== this._dictadoConsulta) {
+                                    return;
+                                }
+
+                                const catalogo = response.data.catalogo;
+
                                 this.dictado.colores = response.data.colores || [];
                                 this.dictado.tallas = response.data.tallas || {};
+                                this.dictado.catalogo = catalogo && ! Array.isArray(catalogo) ? catalogo : {};
+                                this.dictado.catalogoError = Object.keys(this.dictado.catalogo).length ? null
+                                    : 'No se pudo cargar el catálogo de tallas: los selectores muestran todas las opciones y el servidor valida cada corrección.';
                                 this.dictado.lineas = (response.data.lineas || []).map((l) => this.dictadoPreparar(l));
-
-                                // Lo que no se pudo resolver abre de una vez los selectores para corregirlo (o se omite).
-                                this.dictado.lineas.filter((l) => l.estado === 'error').forEach((l) => this.dictadoEditar(l));
+                                this.dictadoObservarPanel();
+                                // Interpretacion nueva = intencion nueva: el proximo «Agregar» es otra operacion.
+                                this.dictado.operacion = null;
 
                                 if (! this.dictado.lineas.length) {
-                                    this.dictado.error = 'No se entendió ninguna prenda. Ejemplo: «roja talla M de dama, 10 unidades».';
+                                    this.dictado.error = 'No se entendió ninguna prenda. Ejemplo: «dos rojas M de dama, negro caballero L 3».';
                                 }
                             })
                             .catch((error) => {
-                                this.dictado.error = error.response?.data?.message || error.response?.data?.mensaje || 'No se pudo interpretar el pedido.';
+                                if (consulta === this._dictadoConsulta) {
+                                    this.dictado.error = error.response ? (error.response.data?.message || error.response.data?.mensaje || 'No se pudo interpretar el pedido.')
+                                        : 'No hay conexión: no se pudo interpretar. El texto se conserva; intenta de nuevo.';
+                                }
                             })
-                            .finally(() => { this.dictado.cargando = false; });
+                            .finally(() => {
+                                if (consulta === this._dictadoConsulta) {
+                                    this.dictado.cargando = false;
+                                }
+                            });
+                    },
+
+                    /** Movil: sabe si el panel esta a la vista para dejar fija la barra de «Agregar» (el sticky no funciona en el contenedor). */
+                    dictadoObservarPanel() {
+                        if (this._observadorDictado || ! window.IntersectionObserver) {
+                            return;
+                        }
+
+                        this.$nextTick(() => {
+                            const panel = this.$refs.panelDictado;
+
+                            if (! panel || this._observadorDictado) {
+                                return;
+                            }
+
+                            this._observadorDictado = new IntersectionObserver((entradas) => {
+                                this.dictado.panelVisible = entradas[0].isIntersecting;
+                            }, { threshold: 0 });
+                            this._observadorDictado.observe(panel);
+                        });
+                    },
+
+                    /** «Si no digo el tipo» cambiado: se reinterpreta si no hay correcciones a mano (si las hay, se avisa). */
+                    dictadoCambiarTipoDefecto() {
+                        if (! this.dictado.lineas.length) {
+                            return;
+                        }
+
+                        if (this.dictado.lineas.some((l) => l.corregida || l.omitida)) {
+                            this.dictado.error = 'El tipo elegido se aplicará al volver a interpretar (hay líneas corregidas a mano).';
+
+                            return;
+                        }
+
+                        this.dictadoInterpretar();
                     },
 
                     /** Campos de pantalla de una linea dictada (omitir / corregir con selectores). */
                     dictadoPreparar(l, anterior = null) {
-                        return {
+                        const linea = {
                             ...l,
+                            uid: anterior?.uid || ('d' + (this.dictado.secuencia = (this.dictado.secuencia || 0) + 1)),
                             texto: l.texto || anterior?.texto || '',
+                            texto_original: l.texto_original || anterior?.texto_original || '',
+                            corregida: !! (l.corregida || anterior?.corregida),
                             omitida: false,
                             editando: false,
                             validando: false,
                             errorEdicion: null,
-                            form: anterior?.form || { color: '', tipo: 'D', talla: '', cantidad: null },
+                            errorGuardado: null,
+                            seq: anterior?.seq || 0,
                         };
+
+                        linea.form = this.dictadoFormDesde(linea);
+
+                        return linea;
                     },
 
-                    /** Tallas que ofrece el selector segun el tipo (codigo del SKU; la etiqueta viene del servidor). */
-                    dictadoTallasDe(tipo) {
-                        return { D: ['S', 'M', 'L', 'XL'], H: ['S', 'M', 'L', 'XL'], N: ['2', '6', '10', '14'], TP: ['U'] }[tipo] || [];
+                    dictadoFormDesde(l) {
+                        return { color: l.color || '', tipo: l.linea === 'TP' ? 'TP' : (l.genero || ''), talla: l.talla || '', cantidad: l.cantidad ?? null };
                     },
 
-                    dictadoAjustarTalla(l) {
-                        const tallas = this.dictadoTallasDe(l.form.tipo);
+                    dictadoNombreTipo(t) {
+                        return { D: 'Dama', H: 'Caballero', N: 'Niño', TP: 'Crop top' }[t] || '';
+                    },
 
-                        if (! tallas.includes(l.form.talla)) {
-                            l.form.talla = tallas.length === 1 ? tallas[0] : '';
+                    dictadoTipoDe(l) {
+                        return l.linea === 'TP' ? 'TP' : (l.genero || null);
+                    },
+
+                    /** De donde salio el tipo: dicho, de la prenda anterior, por la talla de niño, el predeterminado o el catalogo. */
+                    dictadoOrigenTipo(l) {
+                        if (! this.dictadoTipoDe(l)) {
+                            return '';
+                        }
+                        if (l.corregida) {
+                            return 'elegido a mano';
+                        }
+                        if (l.tipo_por_contexto) {
+                            return 'por «Si no digo el tipo»';
+                        }
+                        if (l.genero_heredado) {
+                            return 'de la prenda anterior';
+                        }
+                        if (l.genero_por_talla) {
+                            return 'por la talla de niño';
+                        }
+                        if (l.linea === 'TP' || l.genero_explicito || l.sku_dicho) {
+                            return 'dicho';
+                        }
+
+                        return 'asumido por catálogo: revisa';
+                    },
+
+                    dictadoEnVenta(varianteId) {
+                        const linea = (this.estado?.lineas || []).find((x) => x.varianteId === varianteId);
+
+                        return linea ? Number(linea.cantidad) : 0;
+                    },
+
+                    dictadoEfectoDe(l) {
+                        const e = this.dictadoEfectos.find((x) => x.variante_id === l.variante_id);
+
+                        return e ? 'En la venta: ya hay ' + e.enVenta + ' + dictadas ' + e.dictadas + ' = quedarán ' + (e.enVenta + e.dictadas) + '.' : '';
+                    },
+
+                    /** Stock: solo si la variante lo gestiona; compara lo que QUEDARIA (lo que hay + todo lo dictado de ese SKU). */
+                    dictadoProblemaStock(l) {
+                        if (l.omitida || ! l.variante_id || ! l.gestiona_stock || l.stock === null || l.stock === undefined) {
+                            return null;
+                        }
+
+                        const e = this.dictadoEfectos.find((x) => x.variante_id === l.variante_id);
+                        const quedarian = e ? e.enVenta + e.dictadas : Number(l.cantidad);
+
+                        return quedarian > Number(l.stock)
+                            ? 'Stock insuficiente: quedarían ' + quedarian + ' y hay ' + l.stock + ' disponibles. Baja la cantidad u omite la línea (no se rebaja sola).'
+                            : null;
+                    },
+
+                    dictadoEstadoDe(l) {
+                        if (l.omitida) {
+                            return 'omitida';
+                        }
+                        if (l.editando || l.errorGuardado || ! l.variante_id || l.estado === 'error') {
+                            return 'error';
+                        }
+                        if (this.dictadoProblemaStock(l)) {
+                            return 'stock';
+                        }
+
+                        return l.estado === 'aviso' ? 'aviso' : 'ok';
+                    },
+
+                    dictadoEtiquetaEstado(l) {
+                        const estado = this.dictadoEstadoDe(l);
+
+                        if (estado === 'omitida') {
+                            return 'Omitida';
+                        }
+                        if (l.editando) {
+                            return 'Corrigiendo';
+                        }
+                        if (estado === 'stock') {
+                            return 'Sin stock suficiente';
+                        }
+                        if (l.errorGuardado) {
+                            return 'No se pudo agregar';
+                        }
+                        if (estado === 'error') {
+                            if (l.tipo_error === 'catalogo') {
+                                return 'No existe';
+                            }
+
+                            return this.dictadoOpciones(l).length ? 'Elige una opción' : 'Falta un dato';
+                        }
+
+                        return estado === 'aviso' ? 'Revisar' : 'Lista';
+                    },
+
+                    /** Opciones concretas para lo que falta o es dudoso (de la interpretacion y del catalogo). */
+                    dictadoOpciones(l) {
+                        if (l.omitida || (l.variante_id && l.estado !== 'error' && ! l.errorGuardado)) {
+                            return [];
+                        }
+
+                        const opciones = [];
+
+                        (l.opciones || []).forEach((o) => {
+                            const conTalla = o.talla !== null && o.talla !== undefined && o.talla !== l.talla;
+                            const conCantidad = o.cantidad !== null && o.cantidad !== undefined && o.cantidad !== l.cantidad;
+                            const etiqueta = conTalla && conCantidad ? 'Talla ' + o.talla_etiqueta + ' y ' + o.cantidad + ' unidades'
+                                : (conTalla ? 'Talla ' + o.talla_etiqueta : o.cantidad + ' unidades');
+
+                            opciones.push({ etiqueta, cambios: { ...(conTalla ? { talla: o.talla } : {}), ...(conCantidad ? { cantidad: o.cantidad } : {}) } });
+                        });
+                        (l.candidatos || []).forEach((c) => opciones.push({ etiqueta: c, cambios: { color: c } }));
+                        (l.opciones_tipo || []).forEach((t) => opciones.push({ etiqueta: this.dictadoNombreTipo(t), cambios: { tipo: t } }));
+                        (l.opciones_talla || []).forEach((t) => opciones.push({ etiqueta: 'Talla ' + (this.dictado.tallas[t] || t), cambios: { talla: t } }));
+
+                        return opciones;
+                    },
+
+                    /** Elegir una opcion conserva lo valido; si aun falta algo, se abren los selectores en ese campo (nada se completa solo). */
+                    dictadoElegirOpcion(i, opcion) {
+                        const l = this.dictado.lineas[i];
+                        const form = { ...this.dictadoFormDesde(l), ...opcion.cambios };
+
+                        if (opcion.cambios.tipo !== undefined && ! this.dictadoTallasDe(form.color, form.tipo).includes(form.talla)) {
+                            form.talla = '';
+                        }
+
+                        l.form = form;
+
+                        if (form.color && form.tipo && form.talla && Number(form.cantidad) >= 1) {
+                            this.dictadoValidarCorreccion(i);
+
+                            return;
+                        }
+
+                        this.dictadoEditar(l, form);
+                    },
+
+                    dictadoColoresDisponibles() {
+                        const conCatalogo = Object.keys(this.dictado.catalogo || {});
+
+                        return conCatalogo.length ? this.dictado.colores.filter((c) => conCatalogo.includes(c)) : this.dictado.colores;
+                    },
+
+                    /** Tipos que existen para el color (del catalogo real); sin catalogo, los cuatro. */
+                    dictadoTiposDe(color) {
+                        const todos = ['D', 'H', 'N', 'TP'];
+                        const tipos = (this.dictado.catalogo || {})[color];
+
+                        if (! Object.keys(this.dictado.catalogo || {}).length) {
+                            return todos;
+                        }
+
+                        return tipos ? todos.filter((t) => tipos[t]) : [];
+                    },
+
+                    /** Tallas que existen para color + tipo (Crop top M, XXL cuando existan); sin catalogo, las del tipo. */
+                    dictadoTallasDe(color, tipo) {
+                        if (! tipo) {
+                            return [];
+                        }
+
+                        if (! Object.keys(this.dictado.catalogo || {}).length) {
+                            return { D: ['S', 'M', 'L', 'XL', 'XXL'], H: ['S', 'M', 'L', 'XL', 'XXL'], N: ['2', '6', '10', '14'], TP: ['M', 'U'] }[tipo] || [];
+                        }
+
+                        return ((this.dictado.catalogo[color] || {})[tipo]) || [];
+                    },
+
+                    /**
+                     * Un campo cambio en el editor: la variante resuelta antes deja de valer (no queda un SKU oculto que ya no
+                     * corresponde) y se limpian los campos que dejaron de existir para el nuevo color o tipo.
+                     */
+                    dictadoCambioCampo(l, campo) {
+                        l.variante_id = null;
+                        l.producto_id = null;
+                        l.sku = null;
+                        l.errorGuardado = null;
+                        l.seq = (l.seq || 0) + 1;
+
+                        if (campo === 'color' && l.form.tipo && ! this.dictadoTiposDe(l.form.color).includes(l.form.tipo)) {
+                            l.form.tipo = '';
+                        }
+                        if ((campo === 'color' || campo === 'tipo') && l.form.talla && ! this.dictadoTallasDe(l.form.color, l.form.tipo).includes(l.form.talla)) {
+                            l.form.talla = '';
                         }
                     },
 
-                    /** Abre los selectores con lo que se entendio (el color unico, o vacio si fue ambiguo). */
-                    dictadoEditar(l) {
-                        const tipo = l.linea === 'TP' ? 'TP' : (l.genero || (l.talla && /^\d+$/.test(l.talla) ? 'N' : 'D'));
+                    /** Abre los selectores con lo que se entendio y pone el foco en el primer campo pendiente. */
+                    dictadoEditar(l, form = null) {
+                        this.dictadoDetenerMic(false);
+                        l.form = form || this.dictadoFormDesde(l);
 
-                        l.form = { color: l.color || '', tipo, talla: l.talla || '', cantidad: l.cantidad ?? null };
-                        this.dictadoAjustarTalla(l);
+                        if (l.form.tipo && l.form.color && ! this.dictadoTiposDe(l.form.color).includes(l.form.tipo)) {
+                            l.form.tipo = '';
+                        }
+                        if (l.form.talla && ! this.dictadoTallasDe(l.form.color, l.form.tipo).includes(l.form.talla)) {
+                            l.form.talla = '';
+                        }
+
+                        l.variante_id = null;
+                        l.sku = null;
+                        l.seq = (l.seq || 0) + 1;
                         l.errorEdicion = null;
                         l.editando = true;
+
+                        this.$nextTick(() => {
+                            const fila = document.querySelector('[data-dictado-linea="' + this.dictado.lineas.indexOf(l) + '"]');
+                            const pendiente = ! l.form.color ? 'dictado-color' : (! l.form.tipo ? 'dictado-tipo' : (! l.form.talla ? 'dictado-talla' : 'dictado-cantidad'));
+                            const campo = fila && fila.querySelector('[data-venta="' + pendiente + '"]');
+
+                            if (campo) {
+                                campo.focus();
+                                campo.scrollIntoView({ block: 'nearest' });
+                            }
+                        });
+                    },
+
+                    dictadoCancelarEdicion(l) {
+                        // Se vuelve a pedir la validacion de lo que habia (sin SKU oculto): la linea queda por revisar.
+                        l.editando = false;
+                        l.seq = (l.seq || 0) + 1;
+
+                        if (! l.variante_id) {
+                            l.estado = 'error';
+                            l.mensaje = l.mensaje || 'Sin validar: corrígela u omítela.';
+                        }
                     },
 
                     /** Valida la linea corregida contra el catalogo (mismo resolutor del dictado) y la reemplaza. */
                     dictadoValidarCorreccion(i) {
                         const l = this.dictado.lineas[i];
                         const f = l.form;
+                        const cantidad = Number(f.cantidad);
 
-                        if (! f.color || ! f.talla || ! (Number(f.cantidad) >= 1)) {
-                            l.errorEdicion = 'Elige color, talla y una cantidad mayor que cero.';
+                        if (! f.color || ! f.tipo || ! f.talla || ! Number.isInteger(cantidad) || cantidad < 1 || cantidad > 9999) {
+                            l.errorEdicion = 'Elige color, tipo, talla y una cantidad entera de 1 a 9999.';
+
+                            if (! l.editando) {
+                                this.dictadoEditar(l, f);
+                            }
 
                             return;
                         }
+
+                        const seq = (l.seq = (l.seq || 0) + 1);
 
                         l.validando = true;
                         l.errorEdicion = null;
@@ -3305,79 +3898,138 @@
                             genero: f.tipo === 'TP' ? null : f.tipo,
                             linea: f.tipo === 'TP' ? 'TP' : 'DZ',
                             talla: f.talla,
-                            cantidad: Number(f.cantidad),
+                            cantidad,
                         })
                             .then((response) => {
-                                const nueva = this.dictadoPreparar(response.data.linea, l);
+                                const idx = this.dictado.lineas.indexOf(l);
 
-                                // Si la combinacion no existe se deja abierta para seguir corrigiendo, con el motivo.
+                                // Respuesta vieja (se cambio un campo o se volvio a validar despues) o linea ya reemplazada: se ignora.
+                                if (seq !== l.seq || idx === -1) {
+                                    return;
+                                }
+
+                                const nueva = this.dictadoPreparar({ ...response.data.linea, corregida: true }, l);
+
                                 if (nueva.estado === 'error') {
                                     nueva.editando = true;
+                                    nueva.form = { ...f };
                                     nueva.errorEdicion = nueva.mensaje;
                                 }
 
-                                this.dictado.lineas.splice(i, 1, nueva);
+                                this.dictado.lineas.splice(idx, 1, nueva);
                             })
                             .catch((error) => {
-                                l.errorEdicion = error.response?.data?.message || error.response?.data?.mensaje || 'No se pudo validar la línea.';
+                                if (seq === l.seq) {
+                                    l.errorEdicion = error.response ? (error.response.data?.message || error.response.data?.mensaje || 'No se pudo validar la línea.')
+                                        : 'No hay conexión: no se pudo validar. Intenta de nuevo.';
+                                }
                             })
-                            .finally(() => { l.validando = false; });
+                            .finally(() => {
+                                if (seq === l.seq) {
+                                    l.validando = false;
+                                }
+                            });
                     },
 
                     dictadoLimpiar() {
+                        this.dictadoDetenerMic(true);
+                        this.dictado.mic = 'inactivo';
                         this.dictado.texto = '';
                         this.dictado.lineas = [];
                         this.dictado.error = null;
-                        this.dictado.resultado = null;
+                        this.dictado.hecho = null;
+                        this.dictado.incierto = null;
+                        this.dictado.operacion = null;
+                        this.dictado.enviadas = null;
+                    },
+
+                    dictadoNuevaOperacion() {
+                        const aleatorio = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID()
+                            : 'op-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+
+                        return aleatorio.replace(/[^A-Za-z0-9_-]/g, '');
                     },
 
                     /**
-                     * Agrega las lineas validas con el MISMO «aplicar tallas» de la matriz: un lote por producto (linea x color), en
-                     * secuencia (el primero crea la venta si aun no existe). aplicarTallas recibe la cantidad FINAL por talla: se suma lo
-                     * que la venta ya tenia de esa talla + lo dictado (y lo repetido en el dictado).
+                     * Agrega TODO el dictado revisado en UNA operacion del servidor (atomica e idempotente): manda cantidades a
+                     * SUMAR con un identificador de operacion; el servidor suma sobre lo que hay en la venta y devuelve lo que
+                     * aplico. Si la respuesta se pierde, «Reintentar» manda la MISMA operacion (no duplica). Una respuesta clara
+                     * de error significa que no se guardo nada.
                      */
-                    dictadoAgregar() {
-                        const porProducto = {};
+                    dictadoAgregar(reintento = false) {
+                        // Un segundo clic mientras se guarda no manda otra peticion (y si llegara, el servidor la reconoce por la operacion).
+                        if (this.dictado.agregando || (! reintento && this.dictadoBloqueo)) {
+                            return;
+                        }
 
-                        this.dictadoValidas.forEach((l) => {
-                            porProducto[l.producto_id] = porProducto[l.producto_id] || {};
-                            porProducto[l.producto_id][l.variante_id] = (porProducto[l.producto_id][l.variante_id] || 0) + Number(l.cantidad);
-                        });
+                        if (! reintento) {
+                            this.dictado.operacion = this.dictado.operacion || this.dictadoNuevaOperacion();
+                            this.dictado.enviadas = this.dictadoValidas.map((l) => ({
+                                uid: l.uid, color: l.color, genero: l.linea === 'TP' ? null : l.genero, linea: l.linea, talla: l.talla, cantidad: Number(l.cantidad),
+                            }));
+                        }
 
-                        const enVenta = (varianteId) => {
-                            const linea = (this.estado?.lineas || []).find((x) => x.varianteId === varianteId);
+                        const enviadas = this.dictado.enviadas || [];
+                        const datos = { operacion: this.dictado.operacion, lineas: enviadas.map(({ uid, ...resto }) => resto) };
 
-                            return linea ? Number(linea.cantidad) : 0;
-                        };
-
-                        const lotes = Object.entries(porProducto).map(([productId, cantidades]) => ({
-                            productId: Number(productId),
-                            nombre: (this.dictadoValidas.find((l) => l.producto_id === Number(productId)) || {}).nombre,
-                            cantidades: Object.fromEntries(Object.entries(cantidades).map(([vid, c]) => [vid, c + enVenta(Number(vid))])),
-                        }));
-
-                        const resultados = [];
+                        if (this.borradorId) {
+                            datos.borrador_id = this.borradorId;
+                        } else {
+                            Object.assign(datos, { customer_id: this.clienteIdPendiente(), canal: this.canalSeleccionado, referencia: this.referenciaVenta });
+                        }
 
                         this.dictado.agregando = true;
-                        this.dictado.resultado = null;
+                        this.dictado.error = null;
+                        this.dictado.hecho = null;
+                        this.dictado.lineas.forEach((l) => { l.errorGuardado = null; });
 
-                        lotes
-                            .reduce((cadena, lote) => cadena.then(() => this.aplicarCantidadesProducto(lote.productId, lote.cantidades, { sincronizar: false })
-                                .then((r) => { resultados.push({ nombre: lote.nombre, ...r }); })), Promise.resolve())
-                            .then(() => {
-                                const fallidos = resultados.filter((r) => ! r.ok);
+                        this.$axios.post("{{ $rutaNv('dictado.agregar') }}", datos, { timeout: 30000 })
+                            .then((response) => {
+                                this.fijarEstado(response.data.estado);
+                                this.dictado.hecho = { repetida: !! response.data.repetida, resumen: response.data.resumen || [] };
+                                this.dictado.lineas = [];
+                                this.dictado.texto = '';
+                                this.dictado.incierto = null;
+                                this.dictado.operacion = null;
+                                this.dictado.enviadas = null;
+                                this.$emitter.emit('add-flash', {
+                                    type: 'success',
+                                    message: response.data.repetida ? 'Ese dictado ya estaba agregado: no se duplicó.' : 'Pedido dictado agregado a la venta.',
+                                });
+                            })
+                            .catch((error) => {
+                                const datosError = error?.response?.data;
 
-                                if (! fallidos.length) {
-                                    this.$emitter.emit('add-flash', { type: 'success', message: 'Pedido dictado agregado a la venta. Para cambiar una cantidad, toca el lápiz del producto en el resumen.' });
-                                    this.dictadoLimpiar();
+                                // Sin respuesta o error del servidor: no se sabe si se guardo. Se bloquea la edicion y se ofrece reintentar.
+                                if (! error.response || error.response.status >= 500) {
+                                    this.dictado.incierto = ! error.response ? 'Se perdió la conexión al guardar.' : 'El servidor respondió con un error (' + error.response.status + ').';
 
                                     return;
                                 }
 
-                                this.dictado.resultado = {
-                                    guardados: resultados.filter((r) => r.ok).map((r) => r.nombre),
-                                    pendientes: fallidos.map((r) => ({ nombre: r.nombre, mensaje: r.mensaje })),
-                                };
+                                // Respuesta clara: no se guardo nada (todo o nada). Se marca la linea que fallo.
+                                this.dictado.incierto = null;
+                                const mensaje = this.mensajeDeError(error);
+
+                                if (datosError?.codigo === 'dictado_invalido') {
+                                    (datosError.errores || []).forEach((e) => {
+                                        const l = this.dictado.lineas.find((x) => x.uid === enviadas[e.indice]?.uid);
+
+                                        if (l) {
+                                            l.errorGuardado = e.mensaje;
+                                            l.tipo_error = e.tipo_error;
+                                        }
+                                    });
+                                    this.dictado.error = datosError.mensaje;
+
+                                    return;
+                                }
+
+                                if (datosError?.codigo === 'lote_rechazado' && datosError.variante_id) {
+                                    this.dictado.lineas.filter((x) => x.variante_id === datosError.variante_id).forEach((l) => { l.errorGuardado = mensaje; });
+                                }
+
+                                this.dictado.error = 'No se agregó nada: ' + mensaje;
                             })
                             .finally(() => { this.dictado.agregando = false; });
                     },
