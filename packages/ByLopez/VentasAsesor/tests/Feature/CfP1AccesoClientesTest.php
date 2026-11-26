@@ -151,15 +151,14 @@ test('P1 contrasena manual: solo el administrador autorizado la cambia; queda so
         'name' => 'Admin principal', 'email' => 'admin.'.uniqid().'@example.test', 'password' => Hash::make('x'),
         'role_id' => (int) config('ventasasesor.credito.rol_administrador_id', 1), 'status' => 1,
     ]);
-    $datos = ['contrasena' => 'ClaveNueva2026', 'contrasena_confirmation' => 'ClaveNueva2026'];
+    $datos = ['contrasena' => 'ClaveNueva2026'];
 
     // Con la clave de accesos pero sin ser el administrador: no puede, ni ve la opcion.
     expect($this->actingAs($this->gestor, 'admin')->getJson(($this->url)('mostrar'))->json('puede_cambiar_contrasena'))->toBeFalse();
     $this->actingAs($this->gestor, 'admin')->postJson(($this->url)('contrasena'), $datos)->assertStatus(403)->assertJsonPath('codigo', 'solo_administrador');
 
-    // Confirmacion distinta o corta: 422 sin tocar nada.
-    $this->actingAs($admin, 'admin')->postJson(($this->url)('contrasena'), ['contrasena' => 'ClaveNueva2026', 'contrasena_confirmation' => 'otra'])->assertStatus(422);
-    $this->actingAs($admin, 'admin')->postJson(($this->url)('contrasena'), ['contrasena' => 'corta', 'contrasena_confirmation' => 'corta'])->assertStatus(422);
+    // Menos de 6 caracteres: 422 sin tocar nada. No se pide repetirla.
+    $this->actingAs($admin, 'admin')->postJson(($this->url)('contrasena'), ['contrasena' => 'corta'])->assertStatus(422);
 
     $r = $this->actingAs($admin, 'admin')->postJson(($this->url)('contrasena'), $datos)->assertOk()->json();
     $usuario = Admin::query()->findOrFail($acceso->admin_id);
@@ -178,5 +177,5 @@ test('P1 contrasena manual: un cliente sin acceso no tiene usuario al que cambia
         'role_id' => (int) config('ventasasesor.credito.rol_administrador_id', 1), 'status' => 1,
     ]);
 
-    $this->actingAs($admin, 'admin')->postJson(($this->url)('contrasena'), ['contrasena' => 'ClaveNueva2026', 'contrasena_confirmation' => 'ClaveNueva2026'])->assertStatus(409);
+    $this->actingAs($admin, 'admin')->postJson(($this->url)('contrasena'), ['contrasena' => 'ClaveNueva2026'])->assertStatus(409);
 });
