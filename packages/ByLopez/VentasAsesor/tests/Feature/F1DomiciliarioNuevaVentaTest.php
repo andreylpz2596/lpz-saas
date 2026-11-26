@@ -43,7 +43,7 @@ beforeEach(function () {
     f03f_configurarBase();   // domicilio_local con valor GENERICO de 8000: ya NO se usa como fallback (destino no local = no se ofrece)
     geo_cargar([...geo_filas(), ['25', 'CUNDINAMARCA', '25754', 'SOACHA', 'Municipio', '-74,2168', '4,5794']]);
 
-    $this->c = log6_catalogo();   // Jeison 10.000/12.000 · Brian 12.000/12.000 · PICAP sin tarifa
+    $this->c = log6_catalogo();   // Jeison 10.000/12.000 · Brian 12.000/12.000 · PICAP plataforma (valor 0)
     $this->asesor = f03b_admin();
     $this->cliente = f03b_cliente(f03b_grupo('A'));
     $this->configurable = f03b_configurable(10000.0);
@@ -138,7 +138,7 @@ test('F1V-1 la tarifa sale de domiciliario + zona (no del valor generico) y se a
         ->and($d['requerido'])->toBeTrue()
         ->and($d['listo'])->toBeFalse()
         ->and($d['tarifa'])->toBeNull()
-        ->and(array_column($d['opciones'], 'tarifa', 'nombre'))->toBe(['BRIAN' => 12000.0, 'JEISON' => 10000.0, 'PICAP' => null])
+        ->and(array_column($d['opciones'], 'tarifa', 'nombre'))->toBe(['BRIAN' => 12000.0, 'JEISON' => 10000.0, 'PICAP' => 0.0])
         ->and(f1v_metodos($this, $venta))->not->toHaveKey('domicilio_local');
 
     // Jeison + Bogota = 10.000; el metodo domicilio_local aparece con ESE valor y entra al total.
@@ -252,13 +252,9 @@ test('F1V-4 destino NO local para el origen: sin Domicilio local (ni con el valo
 test('F1V-5 sin tarifa resoluble no se confirma: PICAP se elige a mano solo si tiene tarifa en la zona; desactivada o generico no', function () {
     $venta = f1v_venta($this, '11001', 'free_free');
 
-    // PICAP no tiene tarifa en Bogota: queda elegido pero no resuelve tarifa → no listo y el servidor lo rechaza.
+    // PICAP es una PLATAFORMA: sin tarifa de zona su valor es 0 (no cobra nada al cliente) y queda listo.
     $d = $this->ventas->elegirDomiciliario($venta->id, $this->c['picap']->id, $this->asesor)->toArray()['entrega']['domiciliario'];
-    expect($d['elegido_id'])->toBe($this->c['picap']->id)->and($d['tarifa'])->toBeNull()->and($d['listo'])->toBeFalse()
-        ->and(f1v_rechazo_entrega($this, $venta))->toBe('domiciliario_requerido');
-
-    // El domicilio local tampoco se ofrece con PICAP elegido (sin tarifa no hay valor).
-    expect(f1v_metodos($this, $venta))->not->toHaveKey('domicilio_local');
+    expect($d['elegido_id'])->toBe($this->c['picap']->id)->and($d['tarifa'])->toBe(0.0)->and($d['listo'])->toBeTrue();
 
     // Con tarifa configurada en Bogota, PICAP es valido (seleccion MANUAL; nunca sugerido por historial).
     Tarifa::query()->create(['transportadora_id' => $this->c['picap']->id, 'zona_id' => $this->c['bogota']->id, 'valor' => 8500, 'vigente_desde' => now()->subDay()->toDateString()]);

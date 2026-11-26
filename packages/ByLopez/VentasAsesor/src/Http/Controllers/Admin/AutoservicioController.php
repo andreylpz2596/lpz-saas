@@ -251,11 +251,20 @@ class AutoservicioController extends Controller
                 return response()->json(['codigo' => 'metodo_no_permitido', 'mensaje' => ''], 403);
             }
 
+            // Viaje local: el envio nacional no se ofrece ni se acepta. Se fija primero la direccion para saber si es local.
+            if ($metodo === self::METODO_NACIONAL) {
+                $previo = $this->nuevaVenta->entregaRapida($borrador, $this->actor(), $envio, null, $facturacionId === null ? null : OrigenDireccion::guardada($facturacionId));
+
+                if ($previo->entrega->domiciliario !== null) {
+                    return response()->json(['codigo' => 'metodo_no_permitido', 'mensaje' => ''], 403);
+                }
+            }
+
             $estado = $this->nuevaVenta->entregaRapida(
                 $borrador, $this->actor(), $envio, $metodo, $facturacionId === null ? null : OrigenDireccion::guardada($facturacionId),
             );
 
-            // Domicilio local: el domiciliario es obligatorio para confirmar y el cliente no lo elige.
+            // Domicilio local: el domiciliario es obligatorio para confirmar; si el cliente aun no eligio, se aplica uno por defecto (puede cambiarlo).
             $dom = $estado->entrega->domiciliario;
 
             if ($dom && ($dom['requerido'] ?? false) && empty($dom['elegido_id'])) {
@@ -267,6 +276,24 @@ class AutoservicioController extends Controller
             }
 
             return $estado->toArray();
+        });
+    }
+
+    /** El cliente cambia quien hace su domicilio local: solo entre las opciones con valor (domiciliarios y PICAP). */
+    public function domiciliario(int $borrador, Request $request): JsonResponse
+    {
+        $datos = $request->validate(['transportadora_id' => ['required', 'integer']]);
+
+        return $this->responder(function () use ($borrador, $datos) {
+            $this->propio($borrador);
+            $actual = $this->nuevaVenta->estado($borrador)->entrega->domiciliario ?? null;
+            $validas = collect($actual['opciones'] ?? [])->filter(fn ($o) => ($o['tarifa'] ?? null) !== null)->pluck('id')->map(fn ($i) => (int) $i)->all();
+
+            if (! in_array((int) $datos['transportadora_id'], $validas, true)) {
+                return response()->json(['codigo' => 'entrega_no_permitida', 'mensaje' => ''], 403);
+            }
+
+            return $this->nuevaVenta->elegirDomiciliario($borrador, (int) $datos['transportadora_id'], $this->actor())->toArray();
         });
     }
 
@@ -393,6 +420,8 @@ class AutoservicioController extends Controller
     }
 
     /** Lo que el cliente NO ve de la entrega: el envio gratuito y las opciones/tarifas internas del domiciliario. */
+    private const METODO_NACIONAL = 'envio_nacional';
+
     protected function paraCliente(array $datos): array
     {
         if (isset($datos['entrega']['metodos_disponibles']) && is_array($datos['entrega']['metodos_disponibles'])) {
@@ -403,7 +432,20 @@ class AutoservicioController extends Controller
         }
 
         if (isset($datos['entrega']['domiciliario']) && is_array($datos['entrega']['domiciliario'])) {
-            unset($datos['entrega']['domiciliario']['opciones'], $datos['entrega']['domiciliario']['sugerido_id']);
+            $dom = &$datos['entrega']['domiciliario'];
+            unset($dom['sugerido_id']);
+
+            // El cliente ve a quien puede elegir (domiciliarios y plataformas CON valor, PICAP incluido), nunca los que no tienen tarifa.
+            $dom['opciones'] = array_values(array_filter($dom['opciones'] ?? [], fn ($o) => ($o['tarifa'] ?? null) !== null));
+            unset($dom);
+
+            // Viaje local: el envio nacional no se ofrece.
+            if (isset($datos['entrega']['metodos_disponibles']) && is_array($datos['entrega']['metodos_disponibles'])) {
+                $datos['entrega']['metodos_disponibles'] = array_values(array_filter(
+                    $datos['entrega']['metodos_disponibles'],
+                    fn ($m) => ($m['codigo'] ?? '') !== self::METODO_NACIONAL,
+                ));
+            }
         }
 
         return $datos;
