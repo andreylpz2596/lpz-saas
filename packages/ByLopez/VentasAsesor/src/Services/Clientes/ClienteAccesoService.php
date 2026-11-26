@@ -230,7 +230,7 @@ class ClienteAccesoService
             throw new Invalido(Invalido::SOLO_ADMINISTRADOR);
         }
 
-        if (mb_strlen($contrasena) < 8 || mb_strlen($contrasena) > 100) {
+        if (mb_strlen($contrasena) < 6 || mb_strlen($contrasena) > 100) {
             throw new Invalido(Invalido::CONTRASENA_INVALIDA);
         }
 

@@ -58,7 +58,7 @@ class ClienteAccesoController extends Controller
 
     public function contrasena(int $cliente, Request $request): JsonResponse
     {
-        $datos = $request->validate(['contrasena' => ['required', 'string', 'min:8', 'max:100', 'confirmed']]);
+        $datos = $request->validate(['contrasena' => ['required', 'string', 'min:6', 'max:100']]);
 
         return $this->responder(fn () => $this->acceso->cambiarContrasena($cliente, $this->actor(), $datos['contrasena']));
     }
