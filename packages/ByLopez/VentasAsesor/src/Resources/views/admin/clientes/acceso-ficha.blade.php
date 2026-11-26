@@ -134,6 +134,26 @@
                         acc.append(boton('Reactivar acceso', 'primary-button', () => recargar('/reactivar', {}, 'Acceso reactivado.')));
                     }
                     acc.append(boton('Desvincular usuario', 'transparent-button text-red-600', () => recargar('/desvincular', { motivo: motivo.input.value }, 'Usuario desvinculado.')));
+
+                    // Solo el administrador: poner la contrasena a mano (otra opcion ademas del enlace por correo).
+                    if (datos.puede_cambiar_contrasena) {
+                        const caja = document.createElement('div');
+                        caja.className = 'mt-2 grid gap-2 border-t pt-3 dark:border-gray-800';
+                        const titulo = document.createElement('p'); titulo.className = 'text-sm font-semibold'; titulo.textContent = 'Cambiar contraseña manualmente';
+                        const nota = document.createElement('p'); nota.className = 'text-xs text-gray-500 dark:text-gray-400'; nota.textContent = 'Entrégasela al cliente por un medio seguro. Mínimo 8 caracteres.';
+                        const clave = campo('Nueva contraseña', { type: 'password', autocomplete: 'new-password', minLength: 8, maxLength: 100 });
+                        const repetir = campo('Repite la contraseña', { type: 'password', autocomplete: 'new-password', minLength: 8, maxLength: 100 });
+                        const ver = document.createElement('label'); ver.className = 'flex items-center gap-2 text-xs';
+                        const check = document.createElement('input'); check.type = 'checkbox';
+                        check.addEventListener('change', () => { clave.input.type = repetir.input.type = check.checked ? 'text' : 'password'; });
+                        ver.append(check, document.createTextNode('Mostrar'));
+                        caja.append(titulo, nota, clave.wrap, repetir.wrap, ver, boton('Guardar contraseña', 'primary-button', async () => {
+                            if (clave.input.value.length < 8) { throw new Error('La contraseña debe tener al menos 8 caracteres.'); }
+                            if (clave.input.value !== repetir.input.value) { throw new Error('Las contraseñas no coinciden.'); }
+                            await recargar('/contrasena', { contrasena: clave.input.value, contrasena_confirmation: repetir.input.value }, 'Contraseña actualizada. El cliente ya puede ingresar con ella.');
+                        }));
+                        acc.append(caja);
+                    }
                 }
             }
 

@@ -510,6 +510,7 @@ return [
             'admin.ventas_asesor.clientes_acceso.suspender',
             'admin.ventas_asesor.clientes_acceso.reactivar',
             'admin.ventas_asesor.clientes_acceso.desvincular',
+            'admin.ventas_asesor.clientes_acceso.contrasena',
         ],
         'sort' => 1,
     ], [

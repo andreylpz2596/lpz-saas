@@ -56,13 +56,20 @@ class ClienteAccesoController extends Controller
         return $this->responder(fn () => $this->acceso->desvincular($cliente, $this->actor(), $datos['motivo']));
     }
 
+    public function contrasena(int $cliente, Request $request): JsonResponse
+    {
+        $datos = $request->validate(['contrasena' => ['required', 'string', 'min:8', 'max:100', 'confirmed']]);
+
+        return $this->responder(fn () => $this->acceso->cambiarContrasena($cliente, $this->actor(), $datos['contrasena']));
+    }
+
     protected function responder(callable $accion): JsonResponse
     {
         try {
             return response()->json($accion());
         } catch (Invalido $e) {
             return response()->json(['codigo' => $e->codigo, 'mensaje' => $e->getMessage()], match ($e->codigo) {
-                Invalido::SIN_PERMISO => 403,
+                Invalido::SIN_PERMISO, Invalido::SOLO_ADMINISTRADOR => 403,
                 Invalido::CLIENTE_INEXISTENTE, Invalido::USUARIO_INEXISTENTE => 404,
                 Invalido::YA_TIENE_ACCESO, Invalido::SIN_ACCESO, Invalido::ESTADO_NO_PERMITE, Invalido::USUARIO_YA_VINCULADO, Invalido::CORREO_EN_USO => 409,
                 default => 422,
