@@ -44,6 +44,9 @@ final class InterpreteDictado
     /** Numeros que no encajan en ningun campo de la linea (`sin_asignar`). */
     public const NUMEROS_SIN_ASIGNAR = 'numeros_sin_asignar';
 
+    /** Dos tallas distintas para el mismo producto («talla M talla L 3»): no se elige ninguna (`detalle.tallas_dobles`). */
+    public const TALLA_CONTRADICTORIA = 'talla_contradictoria';
+
     private const GENEROS = [
         'dama' => 'D', 'damas' => 'D', 'mujer' => 'D', 'mujeres' => 'D', 'femenino' => 'D', 'femenina' => 'D', 'senora' => 'D', 'senoras' => 'D',
         'caballero' => 'H', 'caballeros' => 'H', 'hombre' => 'H', 'hombres' => 'H', 'masculino' => 'H', 'masculina' => 'H', 'senor' => 'H', 'senores' => 'H',
@@ -290,6 +293,16 @@ final class InterpreteDictado
                 continue;
             }
 
+            if ($tipo === 'talla' && $propio && ! isset($actual['heredado']['talla']) && ! $this->completa($actual)) {
+                // «negro dama talla M talla L 3»: dos tallas para un producto que aun no tiene cantidad. No se elige en
+                // silencio ni se abre otra linea: se pregunta (auditoria 2026-11-25, frases adversas).
+                $actual['palabras'][] = $frag;
+                $actual['ancla'] = $i;
+                $actual['tallas_dobles'] = array_values(array_unique([...($actual['tallas_dobles'] ?: [$actual['talla_fuente']]), $frag]));
+
+                continue;
+            }
+
             if ($propio) {
                 $cerrar($tipo === 'color' ? ['genero', 'linea'] : ['color', 'genero', 'linea']);
             }
@@ -321,8 +334,26 @@ final class InterpreteDictado
         }
 
         $lineas[] = $actual;
+        $lineas = array_values(array_filter($lineas, fn ($l) => $this->tieneDatos($l)));
 
-        return $this->asignarLineas(array_values(array_filter($lineas, fn ($l) => $this->tieneDatos($l))));
+        // Una cantidad huerfana («negro dama M 2 unidades 3 unidades»): la linea nueva solo trae cantidad, sin color, talla
+        // ni numeros propios. No es otro producto: es una segunda cantidad del anterior → contradiccion, se pregunta.
+        $limpias = [];
+        foreach ($lineas as $l) {
+            $huerfana = $limpias !== [] && $l['cantidad'] !== null && $l['numeros'] === [] && $l['uno'] === null && $l['tallas_invalidas'] === []
+                && ($l['color'] === null && $l['candidatos'] === [] || isset($l['heredado']['color']))
+                && ($l['talla'] === null || isset($l['heredado']['talla']))
+                && ! ($l['linea'] === 'TP' && ! isset($l['heredado']['linea']));
+            if ($huerfana) {
+                $limpias[count($limpias) - 1]['cantidades_extra'][] = $l['cantidad_fuente'];
+                array_push($limpias[count($limpias) - 1]['palabras'], ...$l['palabras']);
+
+                continue;
+            }
+            $limpias[] = $l;
+        }
+
+        return $this->asignarLineas($limpias);
     }
 
     /**
@@ -553,6 +584,8 @@ final class InterpreteDictado
 
         if (in_array($tok, ['un', 'una', 'uno'], true) && $sig !== null
             && (in_array($sig, self::UNO_CON, true) || $this->colorEn($t, $i + 1) !== null
+                // «una XL dama roja», «una ESE …», «una equis ele …», «una 2XL …»: artículo + talla = 1 unidad.
+                || in_array($sig, ['ese', 'eme', 'ele'], true) || $this->tallaLetra($t, $i + 1) !== null
                 || ($sig === 'de' && isset($t[$i + 2]) && (in_array($t[$i + 2], ['ese', 'eme', 'ele'], true) || $this->colorEn($t, $i + 2) !== null)))) {
             return [['uno', 1], 1];
         }
@@ -882,7 +915,21 @@ final class InterpreteDictado
             if (! $esArticulo || $valor !== null) {
                 $valor = ($valor ?? 0) + self::UNIDADES_PALABRA[$palabra];
                 $j++;
+                // «diez y seis» (forma antigua de dieciséis) = 16..19.
+                if ($palabra === 'diez' && ($t[$j] ?? null) === 'y' && in_array($t[$j + 1] ?? null, ['seis', 'siete', 'ocho', 'nueve'], true)) {
+                    $valor += self::UNIDADES_PALABRA[$t[$j + 1]];
+                    $j += 2;
+                }
             }
+        }
+
+        // «mil», «dos mil», «dos mil quinientos»: queda dentro del rango; el tope 9999 lo valida la cantidad.
+        if (($t[$j] ?? null) === 'mil' && ($valor === null || $valor < 10)) {
+            $miles = ($valor ?? 1) * 1000;
+            $j++;
+            $resto = $this->leerNumero($t, $j);
+
+            return $miles + ($resto ?? 0);
         }
 
         return $valor;
@@ -929,7 +976,7 @@ final class InterpreteDictado
     {
         return ['color' => null, 'candidatos' => [], 'color_dicho' => null, 'genero' => null, 'genero_explicito' => false, 'genero_dicho' => null,
             'linea' => 'DZ', 'talla' => null, 'talla_fuente' => null, 'cantidad' => null, 'cantidad_fuente' => null, 'uno' => null,
-            'numeros' => [], 'tallas_invalidas' => [], 'palabras' => [], 'heredado' => [], 'ancla' => -1];
+            'numeros' => [], 'tallas_invalidas' => [], 'tallas_dobles' => [], 'cantidades_extra' => [], 'palabras' => [], 'heredado' => [], 'ancla' => -1];
     }
 
     /** Linea nueva que hereda (en blando) los campos indicados de la anterior. */
@@ -1045,8 +1092,20 @@ final class InterpreteDictado
             $problemas[] = self::TALLA_O_CANTIDAD;
             $detalle['dudoso'] = $a['sin_asignar'];
         }
-        if ($talla === null && ! $ambigua) {
+        if ($l['tallas_dobles'] !== []) {
+            $problemas[] = self::TALLA_CONTRADICTORIA;
+            $detalle['tallas_dobles'] = $l['tallas_dobles'];
+            $talla = null;
+            $tallaFuente = null;
+        } elseif ($talla === null && ! $ambigua) {
             $problemas[] = $l['tallas_invalidas'] !== [] ? self::TALLA_NO_RECONOCIDA : self::FALTA_TALLA;
+        }
+        if ($l['cantidades_extra'] !== [] && ! in_array(self::CANTIDAD_CONTRADICTORIA, $problemas, true)) {
+            $problemas[] = self::CANTIDAD_CONTRADICTORIA;
+            $detalle['contradiccion'] = array_values(array_filter([$cantidadFuente, ...$l['cantidades_extra']]));
+            $cantidad = null;
+            $cantidadFuente = null;
+            $invalida = null;
         }
         if ($l['tallas_invalidas'] !== []) {
             $detalle['talla_invalida'] = $l['tallas_invalidas'];

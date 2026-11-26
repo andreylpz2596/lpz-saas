@@ -199,3 +199,31 @@ test('SKU dictado: «124H-DZ-M 20» y mezclado con lenguaje natural', function (
         ->and($sku('106D-TP-U 4'))->toBe([['TP', 'Negro', 'Única', 4, []]])
         ->and($sku('999H-DZ-M 5')[0][1])->toBeNull();
 });
+
+test('reglas obligatorias 2026-11-25: «una» + talla = 1; ESE/EME/ELE sin importar mayúsculas; XXL nunca baja a XL', function () {
+    expect(rev('una XL dama roja'))->toBe([ok('D', 'Rojo', 'XL', 1)])
+        ->and(rev('una ESE dama roja'))->toBe([ok('D', 'Rojo', 'S', 1)])
+        ->and(rev('una equis ele dama roja'))->toBe([ok('D', 'Rojo', 'XL', 1)])
+        ->and(rev('una 2XL caballero roja'))->toBe([ok('H', 'Rojo', 'XXL', 1)])
+        ->and(rev('una EME dama roja'))->toBe([ok('D', 'Rojo', 'M', 1)])
+        ->and(rev('ROJO ESE DAMA 4'))->toBe([ok('D', 'Rojo', 'S', 4)])
+        ->and(rev('Rojo Eme Caballero 3'))->toBe([ok('H', 'Rojo', 'M', 3)])
+        ->and(rev('rojo ELE dama 2'))->toBe([ok('D', 'Rojo', 'L', 2)])
+        ->and(rev('una referencia roja dama M'))->toBe([['D', 'Rojo', 'M', null, [I::FALTA_CANTIDAD], [], []]])
+        ->and(rev('una camiseta roja dama M 5'))->toBe([['D', 'Rojo', 'M', null, [I::CANTIDAD_CONTRADICTORIA], [], []]]);
+});
+
+test('frases adversas 2026-11-25: dos tallas o dos cantidades para un producto se preguntan, no se aceptan', function () {
+    expect(rev('negro dama talla M talla L 3'))->toBe([['D', 'Negro', null, 3, [I::TALLA_CONTRADICTORIA], [], []]])
+        ->and(rev('negro dama M 2 unidades 3 unidades'))->toBe([['D', 'Negro', 'M', null, [I::CANTIDAD_CONTRADICTORIA], [], []]])
+        // Un producto nuevo despues de la cantidad sigue siendo otra linea.
+        ->and(rev('negro dama M 2 unidades, 3 unidades blanco dama M'))->toBe([ok('D', 'Negro', 'M', 2), ok('D', 'Blanco', 'M', 3)])
+        // Con cantidad ya dicha, la talla nueva abre otro producto («negro M 10, XL 3»).
+        ->and(rev('negro dama M 10, XL 3'))->toBe([ok('D', 'Negro', 'M', 10), ok('D', 'Negro', 'XL', 3)]);
+});
+
+test('numeros escritos 2026-11-25: «diez y seis», «doscientas», «mil»', function () {
+    expect(rev('diez y seis negras dama S'))->toBe([ok('D', 'Negro', 'S', 16)])
+        ->and(rev('doscientas blancas caballero M'))->toBe([ok('H', 'Blanco', 'M', 200)])
+        ->and(rev('mil blancas caballero M'))->toBe([ok('H', 'Blanco', 'M', 1000)]);
+});

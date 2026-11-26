@@ -205,6 +205,7 @@ class ResolutorDictado
                 Interprete::CANTIDAD_INVALIDA => 'Cantidad inválida '.$comillas([(string) ($detalle['cantidad_invalida'] ?? '')]).': debe ser un número entero de 1 a 9999.',
                 Interprete::CANTIDAD_CONTRADICTORIA => 'Hay dos cantidades '.$comillas((array) ($detalle['contradiccion'] ?? [])).': revisa cuál es.',
                 Interprete::NUMEROS_SIN_ASIGNAR => 'No sé a qué corresponde '.$comillas($l['sin_asignar']).'.',
+                Interprete::TALLA_CONTRADICTORIA => 'Hay dos tallas '.$comillas((array) ($detalle['tallas_dobles'] ?? [])).': elige cuál es.',
                 default => $problema,
             };
         }
