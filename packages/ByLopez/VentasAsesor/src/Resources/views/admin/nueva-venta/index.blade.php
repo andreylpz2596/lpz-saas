@@ -95,6 +95,18 @@
             :is(.dark) .nv-res-dest dt, :is(.dark) .nv-res-total dt { color: #bfdbfe; }
             :is(.dark) .nv-res-dest dd, :is(.dark) .nv-res-total dd { color: #fff; }
             :is(.dark) .nv-ico--on { color: #93c5fd; }
+
+            /* Matriz de tallas (modal): aire entre columnas y precio en una sola linea. En pantallas tactiles los botones
+               − / + y el campo miden 40 px de alto (antes 28 px) para acertar con el dedo; la letra de 16 px del campo
+               (sin acercamiento automatico de Safari) la pone el ajuste movil compartido. */
+            .nv-matriz th, .nv-matriz td { padding-right: 6px; }
+            .nv-matriz th:last-child, .nv-matriz td:last-child { padding-right: 0; }
+            .nv-matriz .nv-precio { white-space: nowrap; }
+            @media (pointer: coarse) {
+                .nv-matriz .nv-paso { width: 40px; height: 40px; font-size: 18px; }
+                .nv-matriz .nv-cantidad { width: 56px; height: 40px; padding-left: 4px; padding-right: 4px; }
+                .nv-matriz .nv-quitar { min-width: 36px; min-height: 40px; margin-left: 0; }
+            }
         </style>
     @endPushOnce
 
@@ -776,7 +788,7 @@
 
                                     <table
                                         v-if="matricesPorProducto[tarjeta.productId]"
-                                        class="w-full text-left text-sm"
+                                        class="nv-matriz w-full text-left text-sm"
                                     >
                                         <thead>
                                             <tr class="border-b bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
@@ -836,7 +848,7 @@
                                                         </button>
                                                     </td>
 
-                                                    <td class="py-2 text-gray-600 dark:text-gray-300">
+                                                    <td class="nv-precio py-2 text-gray-600 dark:text-gray-300">
                                                         @{{ celda.variante.precioUnitario !== null ? precio(celda.variante.precioUnitario) : '—' }}
                                                     </td>
 
@@ -844,16 +856,19 @@
                                                         <div class="flex items-center gap-1">
                                                             <button
                                                                 type="button"
-                                                                class="h-7 w-7 shrink-0 rounded-lg border text-sm leading-none text-gray-600 hover:border-blue-400 disabled:opacity-40 dark:border-gray-800 dark:text-gray-300"
+                                                                class="nv-paso h-7 w-7 shrink-0 rounded-lg border text-sm leading-none text-gray-600 hover:border-blue-400 disabled:opacity-40 dark:border-gray-800 dark:text-gray-300"
+                                                                :aria-label="'Restar una unidad de la talla ' + tallaDe(celda.variante)"
                                                                 :disabled="! celda.variante.activa || celda.variante.stockVendible === 0 || ! cantidadDe(tarjeta.productId, celda.variante.productId)"
                                                                 @click="ajustarCantidad(tarjeta.productId, celda.variante.productId, -1)"
                                                             >−</button>
 
                                                             <input
                                                                 type="number"
+                                                                inputmode="numeric"
                                                                 min="0"
                                                                 step="1"
-                                                                class="w-16 rounded-lg border px-2 py-1 text-center dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300"
+                                                                :aria-label="'Cantidad de la talla ' + tallaDe(celda.variante)"
+                                                                class="nv-cantidad w-16 rounded-lg border px-2 py-1 text-center dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300"
                                                                 :disabled="! celda.variante.activa || celda.variante.stockVendible === 0"
                                                                 v-model.number="cantidadesPorProducto[tarjeta.productId][celda.variante.productId]"
                                                                 @focus="$event.target.select()"
@@ -864,7 +879,8 @@
 
                                                             <button
                                                                 type="button"
-                                                                class="h-7 w-7 shrink-0 rounded-lg border text-sm leading-none text-gray-600 hover:border-blue-400 disabled:opacity-40 dark:border-gray-800 dark:text-gray-300"
+                                                                class="nv-paso h-7 w-7 shrink-0 rounded-lg border text-sm leading-none text-gray-600 hover:border-blue-400 disabled:opacity-40 dark:border-gray-800 dark:text-gray-300"
+                                                                :aria-label="'Sumar una unidad a la talla ' + tallaDe(celda.variante)"
                                                                 :disabled="! celda.variante.activa || celda.variante.stockVendible === 0"
                                                                 @click="ajustarCantidad(tarjeta.productId, celda.variante.productId, 1)"
                                                             >+</button>
@@ -873,7 +889,8 @@
                                                                 type="button"
                                                                 v-if="cantidadAplicada(celda.variante.productId)"
                                                                 title="Quitar esta talla de la venta"
-                                                                class="ml-1 text-base text-gray-400 hover:text-red-600 disabled:opacity-40 dark:text-gray-500 dark:hover:text-red-400"
+                                                                aria-label="Quitar esta talla de la venta"
+                                                                class="nv-quitar ml-1 text-base text-gray-400 hover:text-red-600 disabled:opacity-40 dark:text-gray-500 dark:hover:text-red-400"
                                                                 :disabled="cargando.tallas"
                                                                 @click="quitarTalla(tarjeta.productId, celda.variante.productId)"
                                                             >🗑</button>
