@@ -1,144 +1,179 @@
 # 34 · Pedido por voz en Nueva venta
 
-Estado: **implementado en develop y en pruebas** (2026-11-24), **sin servicios externos**. Decisión de Camilo: nada de API;
-todo con reglas propias. La imagen pegada queda para una fase 2.
+Estado: **prototipo completo en develop y en pruebas.alpz.com.co** (jornada 2026-11-26). **Producción no se tocó**: espera la
+aprobación de Camilo. La interpretación es **código y reglas propias** (sin LLM, embeddings, búsqueda vectorial ni APIs de IA).
+La imagen pegada queda para una fase 2.
 
-## 1. Cómo funciona
+## 1. Voz a texto e interpretación: dos cosas distintas
 
-1. La asesora busca o crea el cliente en Nueva venta, como hoy.
-2. Abre **«Dictar pedido»**, toca **🎤 Hablar** y dicta. El navegador pasa la voz a texto en un cuadro **editable**. Si el navegador
-   no reconoce voz, se usa el micrófono del teclado del celular sobre el mismo cuadro.
-3. **«Interpretar»** envía el texto al servidor. `InterpreteDictado` lo lee con reglas y `ResolutorDictado` valida cada línea contra
-   el catálogo con el código único.
-4. Se ve una lista con un estado por línea:
-   - ✅ variante exacta;
-   - ⚠️ resuelta asumiendo el género, porque el color y la talla solo existen en una línea;
-   - ❌ con el motivo.
-5. Cada línea se puede **corregir** con selectores (color, tipo Dama/Caballero/Niño/Crop top, talla del tipo, cantidad) que se
-   validan otra vez contra el catálogo (`POST nueva-venta/dictado/corregir`), u **omitir**. Las líneas ❌ abren los selectores
-   solas. Mientras quede una ❌ sin corregir ni omitir, no se puede agregar.
-6. Después de agregar, la cantidad de cualquier talla se cambia con el lápiz ✏️ del producto en el resumen (modal solo de ese
-   producto).
-7. **«Agregar N líneas a la venta»** usa el mismo «aplicar tallas» de la matriz: un lote por producto, y la cantidad final es lo que ya había más lo dictado. Precio, stock y permisos son los de siempre. Si aún no hay venta, la primera prenda la crea, igual que con la matriz.
+| Parte | Quién la hace | Qué hace | IA |
+|---|---|---|---|
+| Voz → texto | El **navegador** (Web Speech API: `webkitSpeechRecognition`, `es-CO`) o el micrófono del teclado del celular | Convierte el audio en texto dentro del cuadro editable | **No es nuestra y no se afirma que sea «sin IA».** Según MDN, en navegadores como Chrome el reconocimiento usa un motor en el servidor del fabricante (el audio sale del equipo). Safari en iPhone usa el dictado de Apple. ByLopez no controla ese motor. |
+| Texto → líneas | **ByLopez** (`InterpreteDictado` + `ResolutorDictado`) | Reglas propias y el catálogo real con el código único | No: código y reglas. Sin servicios externos. |
 
-## 2. Qué entiende (InterpreteDictado)
+La asesora puede **escribir** el pedido en el mismo cuadro: el micrófono es opcional y el flujo funciona igual sin él.
+
+## 2. Cómo funciona
+
+1. La asesora elige el cliente en Nueva venta y abre **«Dictar pedido»**.
+2. Opcional: **«Si no digo el tipo»** (Preguntar · Dama · Caballero · Niño · Crop top). Solo completa lo que no se dijo; un tipo
+   dicho siempre manda.
+3. Dicta (🎤 Hablar) o escribe, **en el orden que quiera** («dos rojas M de dama», «roja dos dama M», «dama M roja dos» son lo mismo).
+   La cantidad al final es una recomendación, no una condición.
+4. **Interpretar**: el servidor lee el texto y valida cada línea contra el catálogo. **No escribe en la venta.**
+5. Revisión (escritorio: columnas **Estado · Tipo · Color · Talla · Cantidad**; móvil: tarjetas). Cada línea muestra:
+   - el **estado en texto**: Lista · Revisar · Elige una opción · Falta un dato · No existe · Sin stock suficiente · Corrigiendo ·
+     No se pudo agregar · Omitida;
+   - el **fragmento original** que se dijo («Dijo: «dos rojas M de dama»»);
+   - de dónde salió el tipo: dicho, de la prenda anterior, por la talla de niño, por «Si no digo el tipo», o asumido por catálogo;
+   - el **efecto en la venta**: «ya hay 3 + dictadas 2 = quedarán 5» (varias líneas del mismo SKU se suman: 3 + 2 + 1 = 6).
+6. Lo dudoso trae **opciones concretas** («¿«68» es talla 6-8 o 68 unidades?» → botones «Talla 6-8» / «68 unidades»). Al elegir,
+   se conserva lo válido y el foco va al campo que siga faltando; nada se completa solo.
+7. **Corregir** abre selectores con el **catálogo real** (tipo, color y talla dependientes: Crop top M, XXL cuando existan). Al
+   cambiar un atributo se revalidan los demás y la variante anterior deja de valer (no queda un SKU oculto). Una respuesta vieja
+   de validación no pisa una corrección más nueva. **Omitir / Volver a incluir** por línea.
+8. **Agregar** queda bloqueado (con el motivo escrito) si hay líneas por revisar, si todas están omitidas, si se está
+   corrigiendo o si el micrófono sigue escuchando. Nunca se agrega solo al terminar de hablar.
+9. **Agregar N líneas (M u.) a la venta** guarda **todo el dictado en una operación** (§5). La pantalla muestra lo que dice el
+   servidor: «110D-DZ-M: había 2 + 3 = quedan 5». Después, el lápiz del producto en el resumen cambia cantidades sin tocar otros.
+
+## 3. Qué entiende (InterpreteDictado)
 
 | Pieza | Acepta |
 |---|---|
-| Color | Nombre exacto del catálogo (`bylopez_va_sku_colores` + etiqueta de la opción), sin importar tildes, en femenino o plural («roja», «negras»), con o sin «de» interno («palo rosa»). Una palabra que solo está en un color lo identifica («turquesa» → Azul Turquesa, «vino» → Vino Tinto). Una palabra de varios colores queda **ambigua** y se pide elegir («azul», «verde», «beige»). Alias en `ventasasesor.dictado.alias_colores` («rosa» → Rosado / Palo de Rosa). |
-| Género | dama, mujer, señora, femenino → D · caballero, hombre, señor, masculino → H · niño, niña, infantil → N |
-| Talla | S, M, L, XL, XXL **sin decir «talla»** y sin importar mayúsculas; «ese/eme/ele» = S/M/L (también sin «talla»); «equis ele» = XL; «doble equis ele», «2XL», «XXL» = XXL (**nunca baja a XL**; si la variante no existe se conserva XXL y se explica); niño 2-4, 6-8, 10-12, 14-16 («6-8», «6 a 8», «seis ocho», «6.8», «talla 6» = 6-8, siempre mostrada como 6-8); «única». |
-| Cantidad | Cifras o palabras («quince», «treinta y dos», «doscientas», «diez y seis», «mil»), con o sin «unidades»/«cantidad»/«x»/«por». Entero de 1 a 9999; 0, negativos y decimales se rechazan. |
-| «una» | «una camiseta…», «una XL…», «una ESE…», «una equis ele…», «una 2XL…», «una roja…» = **1 unidad**. «una referencia» **no** es cantidad. «una» + otra cantidad = contradicción. |
-| Top | «top», «crop top» → línea TP, Dama, talla única (con aviso) salvo que se diga M. |
-| SKU | El código completo: «124H-DZ-M 20», «124h dz m 20», «110N-DZ-6 10», «106D-TP-U 4». Cada SKU es una línea propia. Un código de color inexistente no inventa nada. |
+| Color | Nombre del catálogo sin importar tildes, plural o femenino; compuestos completos (Azul Rey, Verde Botella, Azul Bebe Oscuro); «de» interno. Palabra de varios colores = **ambigua** (opciones). Alias en `ventasasesor.dictado.alias_colores`. Nunca se quita una palabra para convertirlo en otro color. |
+| Tipo | dama/mujer/señora → D · caballero/hombre/señor → H · niño/niña/infantil → N · crop top / top → Crop top (siempre dama). Rojo/roja/rojas no deciden el tipo. |
+| Talla | S, M, L, XL, XXL sin decir «talla» y sin importar mayúsculas; «ese/eme/ele» = S/M/L; «equis ele» = XL; «doble equis ele», «2XL», «XXL» = XXL (**nunca baja a XL**). Niño 2-4, 6-8, 10-12, 14-16 («6-8», «6 a 8», «seis ocho», «6.8», «talla 6» = 6-8); alias pegados 24/68/1012/1416 solo con contexto de niño. |
+| Cantidad | Cifras o palabras («quince», «doscientas», «diez y seis», «mil»), con «unidades», «cantidad», «x», «por». Entero de 1 a 9999; 0, negativos, decimales (2.5 / 2,5, nunca truncados) y fuera de límite → se pregunta. |
+| «una/un/uno» | Cantidad 1 delante de una prenda, talla, tipo o color («una XL dama roja», «una ESE…», «un caballero negro…»). «una referencia» no es cantidad. Con otra cantidad → contradicción. No se confunde con talla Única. |
+| SKU | El código completo se busca **exacto** («124H-DZ-M 20», «124h dz m 20», «cinco 124H-DZ-M»). Incompleto («124H-DZ 5») pide la talla con las que existen. Con forma de código pero inexistente, de otra tela o con talla inválida → se marca. Seguido de un atributo que no coincide («124H-DZ-M 5 dama») → se pregunta. Los códigos de color sueltos no se aceptan (se confundirían con cantidades). |
 
 **Cómo arma las líneas (dos pasos):**
-1. Las piezas seguras (color, tipo, talla en letra, «talla …», rango, «N unidades», SKU) arman las líneas. Una pieza que la línea
-   ya tenía la cierra; la siguiente hereda el color y el género no repetidos: «caballero negro M 10, L 5, XL 3 y blanco M 4» da 4
-   líneas. Los números sueltos se guardan y **no** cierran líneas.
-2. Cada línea reparte sus números sueltos entre la talla que falte y la cantidad. Solo se acepta una lectura que use todos los
-   números; con dos lecturas se pregunta con **opciones** («¿68 es talla 6-8 o 68 unidades?»); un número nunca viaja a otra línea
-   (salvo una cantidad dicha justo antes del producto siguiente, si es la única lectura posible).
+1. Las **piezas seguras** arman las líneas; una pieza que la línea ya tenía la cierra. Los números sueltos se guardan.
+2. Cada línea reparte sus números entre la talla que falte y la cantidad. Se acepta solo la **única lectura completa**; con dos se
+   pregunta con opciones. Un número nunca vale por dos campos ni pasa a otra línea (salvo la cantidad dicha justo antes del
+   producto siguiente, si es la única lectura). El último número es una pista, no una regla: «dos rojas niño talla 10» = 2 de 10-12.
 
-**Decisiones de Camilo (2026-11-24):** A «una camiseta» = 1 · B «talla 6» = 6-8 · C «niño rojo 68» pregunta · D XXL nunca se
-degrada · E un tipo dicho nunca se reemplaza; el tipo elegido en pantalla solo completa lo no dicho (`tipo_defecto`).
+**Reglas de la jornada 2026-11-26:**
+- **Orden libre** sin contaminación: «una» delante de OTRO color abre la prenda siguiente («…tres negras L, una blanca S» ya no
+  deja «Negro L × 1» aceptado).
+- **Número suelto con niño** («rojo 10 niño», «rojo 2 niño»): se pregunta talla o cantidad y luego se completa lo que falte. Con
+  otro número es la única lectura («rojo niño 10 5» = 10-12 × 5); dos lecturas completas («rojo niño 6 10») se preguntan; un par
+  que forma rango («6 y 8») no se parte; un alias o un par ganan al número suelto («roja 68 niño 10» = 6-8 × 10). Si «Si no digo
+  el tipo» es de adulto, un número suelto no se toma como talla de niño.
+- **Correcciones**: «no», «mejor», «perdón», «digo», «o sea» cambian lo ÚLTIMO dicho con la siguiente pieza del mismo tipo
+  («negro dama M diez, no, mejor ocho» = 8; «kaki, no, terracota»). «no negro, blanco» = blanco. Si no queda claro qué se corrige
+  («…M 2, no» o «M 2 no blanco caballero…») se pregunta; no se cambia en silencio la prenda anterior.
+- **Repeticiones**: la misma pieza dicha dos veces seguidas («negro negro», «M M») no crea productos ni contradicciones. Dos
+  solicitudes completas iguales sí son dos líneas. Números iguales seguidos («68 68») se confirman (puede ser eco del dictado).
+- **Tipo con alcance definido**: el tipo dicho vale para las prendas siguientes del mismo dictado hasta que se diga otro (marcado
+  «de la prenda anterior»). Dos tipos distintos en una prenda se preguntan. Un tipo entre dos prendas completas: es de la
+  siguiente si hubo pausa antes; de la anterior si la pausa fue después o si la siguiente ya dice el suyo; sin pausas, la
+  anterior queda en duda (se pregunta) y la siguiente lo toma. Decir un tipo quita el crop top heredado.
+- **Crop top**: la talla Única que se asume es blanda (una talla dicha después la reemplaza) y la decide el catálogo; la Única
+  heredada de otra prenda también queda asumida. «Crop top» después de una prenda de niño o caballero es otra prenda.
+- **Nada se pierde en silencio**: las palabras que no se usan (y no son de apoyo como «quiero», «dame», «por favor») se muestran
+  («No usé: «camel»»). La línea guarda el fragmento original que se dijo.
 
-**Se pregunta, nunca se elige en silencio:** color ambiguo; falta talla o cantidad; número que puede ser talla o cantidad;
-números sobrantes; cantidad inválida; dos cantidades («una camiseta … 5», «2 unidades 3 unidades»); dos tallas para el mismo
-producto sin cantidad entre ellas («talla M talla L 3»).
+## 4. Validación contra el catálogo (ResolutorDictado)
 
-## 3. Validación contra el catálogo (ResolutorDictado)
+`número del color` + `D/H/N` + `-DZ-`/`-TP-` + `talla` → SKU exacto de la variante (Doc. 33). Un SKU dicho completo se busca tal
+cual. La disponibilidad (`stock`, `gestiona_stock`) orienta; **nunca** se usa para adivinar la variante.
 
-`número del color` + `D/H/N` + `-DZ-` o `-TP-` + `talla` → SKU exacto de la variante (Doc. 33). El ejemplo de Camilo da
-110N-DZ-2, 110N-DZ-6 y 108D-DZ-S.
+| Estado | Cuándo |
+|---|---|
+| `ok` | Una variante exacta. |
+| `aviso` | Resuelta con algo visible: tipo asumido porque el color y la talla solo existen en una línea; crop top con una sola talla; palabras no usadas. |
+| `error` + `interpretacion` | Falta o duda un dato. Trae `opciones` (talla/cantidad), `candidatos` (color), `opciones_talla` (tallas que existen para ese color y tipo) u `opciones_tipo`. |
+| `error` + `catalogo` | La combinación o la referencia no existe, o el producto no está activo. |
 
-Mensajes:
-- «Azul Rey Dama no tiene talla XL.»
-- «No hay Rojo en Caballero.»
-- «¿Cuál color? Azul Oscuro, Azul Rey…»
-- «Di si es dama o caballero…»
-- «Falta la talla / la cantidad.»
-- «El producto … no está activo.»
+Crop top sin talla dicha: si el color tiene M y Única → se pregunta («El crop top Negro existe en M y Única: elige la talla»); con
+una sola → se toma con aviso. «Si no digo el tipo» acepta Crop top también en el servidor (`tipo_defecto` D, H, N o TP) y no
+resuelve una duda de tipo.
 
-## 4. Piezas
+## 5. Guardado seguro
+
+`POST nueva-venta/dictado/agregar` → `NuevaVentaService::agregarDictado`:
+- Cada línea se **resuelve otra vez** con el catálogo con sus atributos visibles; no se confía en un SKU o id de la pantalla.
+- **Todo el dictado en una transacción**: o se agrega completo o no se agrega nada (no solo por producto). Si una variante falla
+  (stock, producto, precio, permiso), se informa cuál y por qué, y la línea queda marcada.
+- Se envían cantidades **a sumar** y el servidor suma sobre lo que **hay** en la venta, leído con el borrador y el carrito
+  bloqueados y con lectura bloqueante. El bloqueo es la primera lectura de la transacción: con REPEATABLE READ, una foto tomada
+  antes de esperar perdía la suma de un dictado simultáneo (la prueba DIC03-2 lo demostró: 3 + 2 + 4 quedaba en 7).
+- **Idempotente**: cada «Agregar» lleva un identificador de operación; se registra en la misma transacción en
+  `bylopez_va_dictado_operaciones` (UNIQUE admin + operación). Un reintento, una respuesta perdida o un doble clic simultáneo
+  devuelven lo que ya se aplicó, sin sumar otra vez. Otra operación sí suma (solicitud intencional).
+- Pantalla: un segundo clic mientras guarda no envía otra petición. Sin respuesta (red caída o error 5xx) → «No sabemos si se
+  guardó» con **Reintentar** (misma operación) y la edición bloqueada. Una respuesta clara de error = no se guardó nada.
+- Migración aditiva: `2026_11_26_000001_create_bylopez_va_dictado_operaciones_table` (solo su tabla).
+
+## 6. Micrófono
+
+Estados: inactivo → escuchando → (detenido · editado · sin voz · denegado · interrumpido). Cada inicio es una sesión; los
+eventos de una sesión vieja o que llegan después de terminar se ignoran. El texto se arma por **índice de resultado**: un final
+repetido del mismo índice no se duplica y dos frases iguales dichas a propósito (índices distintos) se conservan. Si la asesora
+escribe mientras escucha, el micrófono se detiene y su texto no se reemplaza. Corregir una línea detiene la escucha. Sin soporte
+o con permiso denegado se explica y se sigue escribiendo.
+
+## 7. Piezas
 
 | Pieza | Archivo |
 |---|---|
 | Reglas | `src/Support/Dictado/InterpreteDictado.php` (sin base de datos) |
-| Validación | `src/Services/Venta/Dictado/ResolutorDictado.php` (solo lectura) |
-| Ruta | `POST nueva-venta/dictado/interpretar` (`NuevaVentaController::interpretarDictado`), con el permiso de Nueva venta (`ventas_asesor.pedidos.create`) |
-| Pantalla | Panel «Dictar pedido» en `nueva-venta/index.blade.php` (Web Speech API, `es-CO`); no aparece en autoservicio |
-| Configuración | `ventasasesor.dictado.activo` (`VENTASASESOR_DICTADO_ACTIVO`, activo por defecto) y `alias_colores` |
-| Pruebas | `tests/Unit/InterpreteDictadoTest.php` (reglas) y `tests/Feature/Dictado01Test.php` (catálogo, ruta, permiso, pantalla) |
+| Catálogo | `src/Services/Venta/Dictado/ResolutorDictado.php` (solo lectura) |
+| Guardado | `NuevaVentaService::agregarDictado` + tabla `bylopez_va_dictado_operaciones` |
+| Rutas (permiso `ventas_asesor.pedidos.create`) | `POST nueva-venta/dictado/interpretar`, `…/corregir`, `…/agregar` |
+| Pantalla | Panel «Dictar pedido» en `nueva-venta/index.blade.php` (clases propias `nv-dic-*`, claro y oscuro; en móvil la barra de «Agregar» queda fija mientras el panel está a la vista porque el contenedor de Bagisto impide el sticky) |
+| Configuración | `ventasasesor.dictado.activo` y `alias_colores` |
 
-## 5. Límites conocidos
+## 8. Pruebas
 
-- La voz depende del navegador:
-  - Chrome y Edge en computador y Android funcionan bien.
-  - En iPhone (Safari), el dictado de Siri debe estar activo.
-  - Con internet lento, el reconocimiento se corta: se puede seguir con el teclado.
-- Solo productos del patrón del código único (camisetas Piel Durazno y Crop Top). Lo demás se agrega con la matriz.
-- El selector de talla ofrece las tallas del tipo (S–XL, 2-4…14-16, Única), no solo las que existen en ese color: si no existe,
-  «Validar» lo dice.
-- Fase 2, sin hacer: pegar una imagen o captura del pedido. Sin API haría falta reconocimiento de texto local (Tesseract, como en los comprobantes), con menos exactitud en fotos.
-
-## 6. Evaluación de herramientas de código abierto (2026-11-25)
-
-Pregunta: ¿conviene cambiar las reglas propias por un analizador? Siempre sin LLM, embeddings ni IA externa.
-
-| Herramienta | Licencia / estado | PHP 8.3 | Veredicto |
-|---|---|---|---|
-| phplrt 4.2.4 | MIT, activa (release 2026-10-16) | Sí la 4.x (la rama 5 pide 8.4) | Prototipo construido. **No se adopta** (ver abajo) |
-| nearley 2.20.1 | MIT, sin publicar desde 2023-03 | No aplica (JavaScript) | Descartada: movería la regla al navegador o exigiría Node; sin mantenimiento |
-| ICU (`intl`) SPELLOUT | Incluida en PHP; ICU 72 local, 74 en pruebas | Sí | **No se adopta**: «doscientas» → 2, «diez y seis» → 10, «una» → 1 (convertiría «una referencia» en cantidad) |
-| Fuse.js 7.5.0 | Apache-2.0, activa, sin dependencias | No aplica (navegador) | Útil **solo** para sugerir nombres en el corrector, nunca para elegir. Aplazada hasta la interfaz con catálogo dinámico |
-
-**Comparación con la misma matriz** (100 frases y 111 líneas esperadas, fijadas antes de correr). Grupos:
-- 30 de la matriz del 24-11.
-- 13 reglas obligatorias.
-- 40 nuevas, redactadas para la evaluación (no son transcripciones de asesoras).
-- 17 adversas, que buscan aceptar algo incorrecto.
-
-| Métrica | Intérprete actual (ordenado) | Prototipo phplrt + ICU |
+| Tipo | Archivo | Qué prueba |
 |---|---|---|
-| Líneas correctas | 109 / 111 | 100 / 111 |
-| Interpretaciones incorrectas aceptadas | **0** | **2** («talla M talla L 3», «niño 68 68») |
-| Aclaraciones de más | 1 | 9 |
-| Tiempo medio por frase | ~0,15 ms | ~4 ms (con el parser generado en proceso) |
+| Texto (desarrollo) | `tests/Unit/InterpreteDictadoRevisionTest.php`, `InterpreteDictadoTest.php`, `InterpreteDictadoMatrizTest.php` | Reglas y casos del brief |
+| Texto (contrato) | `InterpreteDictadoMatrizComunTest.php` + `Datos/dictado_matriz_comun.php` | 100 frases, 111 líneas: cero aceptadas mal y las 111 correctas |
+| Texto (evaluación ciega) | `InterpreteDictadoEvaluacionCiegaTest.php` + `Datos/dictado_evaluacion_ciega.php` | 80 frases **sintéticas** escritas antes de implementar (commit 881df2a5f6) |
+| Propiedades | `InterpreteDictadoPropiedadesTest.php` | Mayúsculas/espacios, 24 órdenes por prenda, otra prenda no cambia las anteriores, línea válida completa, ningún dato se pierde, determinismo |
+| HTTP + catálogo | `tests/Feature/Dictado01Test.php`, `Dictado04ResolutorTest.php` | Resolutor, rutas, permisos |
+| HTTP + guardado | `tests/Feature/Dictado02GuardadoTest.php` | Todo o nada, suma sobre lo actual, idempotencia, revalidación, permisos, interpretar no escribe |
+| Concurrencia real | `tests/Concurrencia/DictadoConcurrenteTest.php` + `proceso_dictado.php` | Procesos PHP simultáneos: doble clic con la misma operación y dos dictados a la vez |
+| Navegador | `tests/Demo/dictado/navegador_*.cjs` (demo local aislada, autenticación real) | Flujo completo, robustez de red, micrófono con eventos simulados, móvil 390 px, claro y oscuro |
 
-- **Antes de ordenarlo**, el actual tenía 2 aceptaciones incorrectas y 6 aclaraciones de más. Se corrigieron así:
-  - «una + talla» = 1.
-  - Dos tallas y dos cantidades se preguntan.
-  - «diez y seis» y «mil» se leen bien.
-- **Las 2 diferencias que quedan** («rojo 10 niño», «rojo niño 2 3») son un conflicto de expectativas, no un error. Las adversas suponían que un «10» o «2» suelto con niño es talla, mientras que la matriz del 24-11 (aprobada antes) lo trata como cantidad y pide la talla. El sistema pregunta en ambos casos: es seguro. Decide Camilo.
+Demo local: `tests/Demo/dictado/preparar_demo_dictado.php` sobre una copia de la base limpia de preproducción (sin clientes); la
+clave de la asesora de prueba se escribe fuera del repositorio.
 
-**Por qué no se adopta phplrt:**
-- La gramática solo resuelve el troceo en piezas, que ya es lo fácil.
-- Todo lo difícil sigue en PHP igual que hoy: repartir los números, heredar entre líneas, detectar contradicciones y ofrecer opciones.
-- Su elección ordenada (PEG) toma la primera lectura en silencio, lo contrario de «las ambigüedades deben dar opciones».
-- Exige generar y commitear la clase del parser, más dependencias de desarrollo nuevas (laminas-code, symfony/console, twig).
-- Añadir una regla no fue más fácil: tocó el token, la gramática y la semántica.
+## 9. Evaluación de herramientas de código abierto (corregida el 2026-11-26)
 
-**Recomendación:** conservar el intérprete propio, ya ordenado. Mantener la matriz común
-(`tests/Unit/InterpreteDictado*Test.php`) como contrato, y añadir frases reales de asesoras como grupo de control antes de
-cada cambio de reglas.
+Se comparó **A** (intérprete propio) con **B** (el mismo intérprete con el reconocimiento de piezas hecho por **phplrt 4.2.4**,
+parser **generado** con `phplrt compile`). Mismos colores, alias, conversión de números (la propia, no ICU), catálogo, entradas y
+expectativas.
 
-## 7. Pendiente
+- Las dos aceptaciones incorrectas del prototipo del 2026-11-25 («talla M talla L 3» y «niño 68 68») venían de **mi capa
+  semántica de integración**, no de phplrt ni de ICU. ICU solo causó aclaraciones de más («doscientas» → 2, «diez y seis» → 10).
+- B quedó **idéntico a A en 207/207 frases** (matriz común, evaluación ciega y frases de la jornada) después de corregir un defecto
+  propio de integración: la gramática unía «2 y 3» en una pieza y el adaptador usaba solo el primer número, así que el «3» se
+  perdía y B aceptaba «Negro M × 2» (falso positivo). El riesgo es estructural: si la segmentación de la gramática no coincide
+  exactamente con las reglas en PHP, se pierden datos en silencio.
+- Complejidad: B reemplaza `pieza()` (105 líneas) por adaptador (128) + gramática (127) + parser generado (1.091); el resto del
+  intérprete (reglas de contexto, asignación, correcciones, ~1.700 líneas) sigue igual de necesario. Los colores salen del
+  catálogo y no caben en una gramática compilada.
+- Rendimiento: B ≈ 1,4 veces más lento (0,76 frente a 0,56 ms por frase; 65 frente a 49 ms con 3.000 caracteres).
+- Dependencias: en producción `phplrt/runtime`; en desarrollo el compilador (trae laminas-code, symfony/console y twig) y
+  regenerar el parser en cada cambio de gramática. phplrt 4.x corre en PHP 8.3; la rama 5 pide 8.4.
+- nearley (JavaScript, sin publicar desde 2023) y Fuse.js (solo sugerencias en el navegador) no se reconsideraron.
 
-Interfaz:
-- Columnas Tipo | Color | Talla | Cantidad.
-- Botones para elegir entre las opciones.
-- Selectores con el catálogo real (`catalogo`) y «Si no digo el tipo» (`tipo_defecto`).
-- «Ya hay 3 + dictadas 2 = quedarán 5».
-- Disponibilidad y stock sin rebajar en silencio.
+**Decisión: conservar y mejorar el intérprete propio.** phplrt iguala la corrección pero no reduce la complejidad, agrega un
+paso de compilación y una dependencia, y abre una clase de errores nueva. La matriz común, la evaluación ciega y las propiedades
+quedan como contrato para cualquier cambio de reglas.
 
-Micrófono:
-- No borrar la edición manual.
+## 10. Límites reales
 
-Guardado:
-- Reintento y doble clic seguros.
-
-Pruebas:
-- Pruebas de navegador con un usuario autorizado de pruebas.
-- Audio real en iPhone y Android.
+- **Audio real y iPhone físico no se probaron en esta jornada**: el micrófono se probó con eventos simulados; Chrome con ancho
+  móvil no equivale a Safari en iPhone.
+- En Android, el modo continuo de Chrome puede repetir frases en resultados nuevos (otro índice): no se puede distinguir de una
+  repetición intencional, así que se ve como dos líneas y la asesora la omite en la revisión.
+- Las frases de evaluación son sintéticas (no hay frases reales de asesoras todavía); hacen falta 30-50 reales como grupo de control.
+- La intención de «208 … blancas» sigue sin confirmar (se lee como cantidad 208; no se presenta como acierto comprobado).
+- El cruce matriz/dictado al mismo tiempo sobre la misma talla: la matriz fija cantidades finales (la última escritura gana), el
+  dictado suma; es el comportamiento esperado de cada una.
+- Pendiente de Camilo: aprobar producción (migración + rutas + pantalla) y frases reales.
