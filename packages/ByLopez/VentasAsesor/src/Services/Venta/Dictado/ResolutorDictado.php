@@ -10,7 +10,7 @@ use Webkul\Product\Models\ProductProxy;
  * Doc. 34 · Pedido por voz: cada linea que entendio InterpreteDictado se valida contra el catalogo REAL con el codigo unico
  * (Doc. 33): color → numero (bylopez_va_sku_colores) + genero (D/H/N) + linea (DZ/TP) + talla → SKU exacto de la variante
  * («110N-DZ-2»). Un SKU dictado se busca TAL COMO SE DIJO (no se reconstruye desde el nombre del color). Sin servicios externos.
- * Solo lectura: no toca la venta; agregar lo resuelto lo hace AgregarDictadoService con las reglas de siempre (precio, stock,
+ * Solo lectura: no toca la venta; agregar lo resuelto lo hace NuevaVentaService::agregarDictado con las reglas de siempre (precio, stock,
  * permisos), revalidando en el servidor.
  *
  * Estados por linea: `ok` (una variante exacta), `aviso` (resuelta, pero se asumio o se descarto algo visible) y `error`, con

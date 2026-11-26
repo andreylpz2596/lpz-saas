@@ -4,6 +4,10 @@ Estado: **prototipo completo en develop y en pruebas.alpz.com.co** (jornada 2026
 aprobación de Camilo. La interpretación es **código y reglas propias** (sin LLM, embeddings, búsqueda vectorial ni APIs de IA).
 La imagen pegada queda para una fase 2.
 
+En pruebas se instaló con la rama **`integracion/pruebas-20261126`** = develop (dictado) + `responsive/iphone-2026-11` (ajustes
+de iPhone de otra sesión que ya estaban instalados en pruebas), para no quitarlos. Quien vuelva a publicar
+`responsive/iphone-2026-11` en pruebas debe partir de esa rama o integrar develop, o el dictado desaparece de pruebas.
+
 ## 1. Voz a texto e interpretación: dos cosas distintas
 
 | Parte | Quién la hace | Qué hace | IA |
@@ -132,7 +136,7 @@ o con permiso denegado se explica y se sigue escribiendo.
 |---|---|---|
 | Texto (desarrollo) | `tests/Unit/InterpreteDictadoRevisionTest.php`, `InterpreteDictadoTest.php`, `InterpreteDictadoMatrizTest.php` | Reglas y casos del brief |
 | Texto (contrato) | `InterpreteDictadoMatrizComunTest.php` + `Datos/dictado_matriz_comun.php` | 100 frases, 111 líneas: cero aceptadas mal y las 111 correctas |
-| Texto (evaluación ciega) | `InterpreteDictadoEvaluacionCiegaTest.php` + `Datos/dictado_evaluacion_ciega.php` | 80 frases **sintéticas** escritas antes de implementar (commit 881df2a5f6) |
+| Texto (evaluación ciega) | `InterpreteDictadoEvaluacionCiegaTest.php` + `Datos/dictado_evaluacion_ciega.php` | 80 frases **sintéticas** escritas antes de implementar (commit bc25bd5496) |
 | Propiedades | `InterpreteDictadoPropiedadesTest.php` | Mayúsculas/espacios, 24 órdenes por prenda, otra prenda no cambia las anteriores, línea válida completa, ningún dato se pierde, determinismo |
 | HTTP + catálogo | `tests/Feature/Dictado01Test.php`, `Dictado04ResolutorTest.php` | Resolutor, rutas, permisos |
 | HTTP + guardado | `tests/Feature/Dictado02GuardadoTest.php` | Todo o nada, suma sobre lo actual, idempotencia, revalidación, permisos, interpretar no escribe |
@@ -141,6 +145,27 @@ o con permiso denegado se explica y se sigue escribiendo.
 
 Demo local: `tests/Demo/dictado/preparar_demo_dictado.php` sobre una copia de la base limpia de preproducción (sin clientes); la
 clave de la asesora de prueba se escribe fuera del repositorio.
+
+**Expectativas cambiadas por una regla aprobada en el brief del 2026-11-26** (cada una comentada en su prueba; no se cambió
+ninguna para que pasara):
+
+| Prueba | Antes | Ahora | Regla |
+|---|---|---|---|
+| `InterpreteDictadoRevisionTest` «ningún número pendiente…» y «números sobrantes…»; matriz «rojo niño 10» | «10» era cantidad y faltaba la talla | Se pregunta talla 10-12 o 10 unidades | «niño rojo 68», «rojo 10 niño» y «rojo 2 niño» → preguntar |
+| `Dictado01Test` DIC01-10 «crop top azul oscuro 2» (catálogo con M y Única) | Aviso con 907D-TP-U | Error con opciones M / Única | «Crop top con M y U no asume Única» |
+
+**Resultados con el código final (2026-11-26):**
+
+| Grupo | Resultado |
+|---|---|
+| A orden libre + B casos del brief (texto, esperado copiado del brief) | 38 líneas: 37 exactas, 0 falsos positivos, 1 sin confirmar («208 blancas») |
+| Unitarias del dictado (incluye C propiedades) | 134 pasan, 3 omitidas (las expectativas revisadas, con cobertura activa en otro archivo); salida 0 |
+| Matriz común | 111/111 líneas, 0 aceptadas mal |
+| F evaluación ciega | 1.ª corrida: 93/95 líneas, **1 falso positivo** (E41 «tres crop top lila M» → Única). Corregido: 94/94; E41 ya no es ciega |
+| HTTP + catálogo | DIC01 12/12 · DIC04 4/4 |
+| Guardado y concurrencia | DIC02 8/8 · DIC03 2/2 (procesos PHP simultáneos) |
+| E regresión | ACL y menú 12 · seguridad de Nueva venta 6 · pantalla 4 · API 7 · Nueva venta 39: todas pasan, salida 0 |
+| D navegador (demo local, autenticación real) | flujo 26/26 · robustez de red 10/10 · micrófono simulado + móvil 390 px 18/18 · humo 17/17 |
 
 ## 9. Evaluación de herramientas de código abierto (corregida el 2026-11-26)
 
