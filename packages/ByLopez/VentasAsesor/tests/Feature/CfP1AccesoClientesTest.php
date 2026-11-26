@@ -143,3 +143,40 @@ test('P1 el resumen cuenta activos, suspendidos y sin acceso', function () {
 
     expect($r['activos'])->toBe(1)->and($r['suspendidos'])->toBe(1)->and($r['sin_acceso'])->toBeGreaterThanOrEqual(0);
 });
+
+test('P1 contrasena manual: solo el administrador autorizado la cambia; queda solo el hash y un evento sin la contrasena', function () {
+    $this->actingAs($this->gestor, 'admin')->postJson(($this->url)('crear_usuario'), [])->assertOk();
+    $acceso = ClienteAcceso::query()->where('customer_id', $this->cliente->id)->firstOrFail();
+    $admin = Admin::query()->create([
+        'name' => 'Admin principal', 'email' => 'admin.'.uniqid().'@example.test', 'password' => Hash::make('x'),
+        'role_id' => (int) config('ventasasesor.credito.rol_administrador_id', 1), 'status' => 1,
+    ]);
+    $datos = ['contrasena' => 'ClaveNueva2026', 'contrasena_confirmation' => 'ClaveNueva2026'];
+
+    // Con la clave de accesos pero sin ser el administrador: no puede, ni ve la opcion.
+    expect($this->actingAs($this->gestor, 'admin')->getJson(($this->url)('mostrar'))->json('puede_cambiar_contrasena'))->toBeFalse();
+    $this->actingAs($this->gestor, 'admin')->postJson(($this->url)('contrasena'), $datos)->assertStatus(403)->assertJsonPath('codigo', 'solo_administrador');
+
+    // Confirmacion distinta o corta: 422 sin tocar nada.
+    $this->actingAs($admin, 'admin')->postJson(($this->url)('contrasena'), ['contrasena' => 'ClaveNueva2026', 'contrasena_confirmation' => 'otra'])->assertStatus(422);
+    $this->actingAs($admin, 'admin')->postJson(($this->url)('contrasena'), ['contrasena' => 'corta', 'contrasena_confirmation' => 'corta'])->assertStatus(422);
+
+    $r = $this->actingAs($admin, 'admin')->postJson(($this->url)('contrasena'), $datos)->assertOk()->json();
+    $usuario = Admin::query()->findOrFail($acceso->admin_id);
+    $evento = ClienteAccesoEvento::query()->where('customer_id', $this->cliente->id)->where('accion', 'contrasena_manual')->firstOrFail();
+
+    expect($r['puede_cambiar_contrasena'])->toBeTrue()
+        ->and(Hash::check('ClaveNueva2026', $usuario->password))->toBeTrue()
+        ->and($usuario->password)->not->toContain('ClaveNueva2026')
+        ->and((int) $evento->actor_admin_id)->toBe((int) $admin->id)
+        ->and(json_encode($evento->toArray()))->not->toContain('ClaveNueva2026');
+});
+
+test('P1 contrasena manual: un cliente sin acceso no tiene usuario al que cambiarle la contrasena', function () {
+    $admin = Admin::query()->create([
+        'name' => 'Admin principal', 'email' => 'admin.'.uniqid().'@example.test', 'password' => Hash::make('x'),
+        'role_id' => (int) config('ventasasesor.credito.rol_administrador_id', 1), 'status' => 1,
+    ]);
+
+    $this->actingAs($admin, 'admin')->postJson(($this->url)('contrasena'), ['contrasena' => 'ClaveNueva2026', 'contrasena_confirmation' => 'ClaveNueva2026'])->assertStatus(409);
+});

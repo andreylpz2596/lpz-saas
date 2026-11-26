@@ -33,6 +33,10 @@ class ClienteAccesoInvalidoException extends RuntimeException
 
     public const MOTIVO_REQUERIDO = 'motivo_requerido';
 
+    public const SOLO_ADMINISTRADOR = 'solo_administrador';
+
+    public const CONTRASENA_INVALIDA = 'contrasena_invalida';
+
     private const MENSAJES = [
         self::SIN_PERMISO => 'No tienes permiso para administrar accesos de clientes.',
         self::CLIENTE_INEXISTENTE => 'El cliente no existe.',
@@ -47,6 +51,8 @@ class ClienteAccesoInvalidoException extends RuntimeException
         self::USUARIO_YA_VINCULADO => 'Ese usuario ya pertenece a otro cliente.',
         self::ESTADO_NO_PERMITE => 'El estado actual del acceso no permite esta accion.',
         self::MOTIVO_REQUERIDO => 'Indica un motivo (entre 3 y 500 caracteres).',
+        self::SOLO_ADMINISTRADOR => 'Solo el administrador puede cambiar la contraseña del cliente.',
+        self::CONTRASENA_INVALIDA => 'La contraseña debe tener entre 8 y 100 caracteres.',
     ];
 
     public function __construct(public readonly string $codigo)

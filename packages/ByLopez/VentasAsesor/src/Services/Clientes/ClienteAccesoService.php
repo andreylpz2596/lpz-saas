@@ -68,6 +68,7 @@ class ClienteAccesoService
             'ultimo_acceso' => null,
             'email_cliente' => $cliente->email,
             'puede_habilitar' => $acceso === null,
+            'puede_cambiar_contrasena' => $acceso !== null && $this->autorizacion->esAdministradorAutorizado($actor),
             'resumen' => $this->resumen(),
         ];
     }
@@ -212,6 +213,33 @@ class ClienteAccesoService
             $acceso->update(['estado' => ClienteAcceso::DESVINCULADO, 'desvinculado_at' => now(), 'desvinculado_motivo' => $motivo]);
             Admin::query()->whereKey($acceso->admin_id)->update(['status' => 0]);
             $this->evento($acceso, 'desvincular', $actor, $motivo);
+        });
+
+        return $this->estado($customerId, $actor);
+    }
+
+    /**
+     * Contrasena puesta A MANO por el administrador (alternativa al enlace por correo). Solo el administrador autorizado, nunca
+     * otro rol con la clave de accesos. Se guarda solo el hash y el evento no lleva la contrasena; se cierran los «recordarme».
+     */
+    public function cambiarContrasena(int $customerId, AdminContract $actor, string $contrasena): array
+    {
+        $this->exigirPermiso($actor);
+
+        if (! $this->autorizacion->esAdministradorAutorizado($actor)) {
+            throw new Invalido(Invalido::SOLO_ADMINISTRADOR);
+        }
+
+        if (mb_strlen($contrasena) < 8 || mb_strlen($contrasena) > 100) {
+            throw new Invalido(Invalido::CONTRASENA_INVALIDA);
+        }
+
+        DB::transaction(function () use ($customerId, $actor, $contrasena) {
+            $acceso = $this->bloquearVigente($customerId);
+            $usuario = Admin::query()->lockForUpdate()->find($acceso->admin_id) ?? throw new Invalido(Invalido::USUARIO_INEXISTENTE);
+
+            $usuario->forceFill(['password' => Hash::make($contrasena), 'remember_token' => null])->save();
+            $this->evento($acceso, 'contrasena_manual', $actor, null);
         });
 
         return $this->estado($customerId, $actor);
