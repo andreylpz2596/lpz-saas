@@ -187,6 +187,25 @@
             :is(.dark) .nv-res-dest dt, :is(.dark) .nv-res-total dt { color: #bfdbfe; }
             :is(.dark) .nv-res-dest dd, :is(.dark) .nv-res-total dd { color: #fff; }
             :is(.dark) .nv-ico--on { color: #93c5fd; }
+
+            /* Matriz de tallas (modal): aire entre columnas y precio en una sola linea. En pantallas tactiles los botones
+               − / + y el campo miden 40 px de alto (antes 28 px) para acertar con el dedo; la letra de 16 px del campo
+               (sin acercamiento automatico de Safari) la pone el ajuste movil compartido. Para que la tabla quepa en el
+               ancho del iPhone (sin desplazamiento lateral, tambien con la papelera de una talla ya guardada) la senal
+               «en otras ventas…» va en su propia linea y en pantallas de 380 px o menos los controles se estrechan. */
+            .nv-matriz th, .nv-matriz td { padding-right: 6px; }
+            .nv-matriz th:last-child, .nv-matriz td:last-child { padding-right: 0; }
+            .nv-matriz .nv-precio { white-space: nowrap; }
+            @media (pointer: coarse) {
+                .nv-matriz .nv-senal { display: block; margin-left: 0; }
+                .nv-matriz .nv-paso { width: 36px; height: 40px; font-size: 18px; }
+                .nv-matriz .nv-cantidad { width: 48px; height: 40px; padding-left: 2px; padding-right: 2px; }
+                .nv-matriz .nv-quitar { min-width: 32px; min-height: 40px; margin-left: 0; }
+            }
+            @media (pointer: coarse) and (max-width: 380px) {
+                .nv-matriz .nv-paso { width: 32px; }
+                .nv-matriz .nv-cantidad { width: 44px; }
+            }
         </style>
     @endPushOnce
 
@@ -1108,7 +1127,7 @@
 
                                     <table
                                         v-if="matricesPorProducto[tarjeta.productId]"
-                                        class="w-full text-left text-sm"
+                                        class="nv-matriz w-full text-left text-sm"
                                     >
                                         <thead>
                                             <tr class="border-b bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
@@ -1144,8 +1163,11 @@
                                                         >
                                                             @{{ celda.variante.stockVendible }}
                                                         </span>
+                                                        {{-- Espacio real entre el numero y «disponible»: Vue quita el salto de linea entre etiquetas y
+                                                             quedaba «149disponible» (una sola palabra para el lector de pantalla y para el ancho minimo). --}}
+                                                        @{{ ' ' }}
                                                         <span
-                                                            class="ml-1 text-xs font-semibold"
+                                                            class="text-xs font-semibold"
                                                             :class="celda.variante.stockVendible === 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
                                                         >
                                                             @{{ celda.variante.stockVendible === 0 ? 'No disponible' : 'disponible' }}
@@ -1170,7 +1192,7 @@
                                                     </td>
 
                                                     <td
-                                                        class="py-2"
+                                                        class="nv-precio py-2"
                                                         :class="precioCambia(matricesPorProducto[tarjeta.productId].celdas, indiceCelda) ? 'font-bold text-amber-700 dark:text-amber-300' : 'text-gray-600 dark:text-gray-300'"
                                                     >
                                                         @{{ celda.variante.precioUnitario !== null ? precio(celda.variante.precioUnitario) : '—' }}
@@ -1180,16 +1202,19 @@
                                                         <div class="flex items-center gap-1">
                                                             <button
                                                                 type="button"
-                                                                class="h-7 w-7 shrink-0 rounded-lg border text-sm leading-none text-gray-600 hover:border-blue-400 disabled:opacity-40 dark:border-gray-800 dark:text-gray-300"
+                                                                class="nv-paso h-7 w-7 shrink-0 rounded-lg border text-sm leading-none text-gray-600 hover:border-blue-400 disabled:opacity-40 dark:border-gray-800 dark:text-gray-300"
+                                                                :aria-label="'Restar una unidad de la talla ' + tallaDe(celda.variante)"
                                                                 :disabled="! celda.variante.activa || celda.variante.stockVendible === 0 || ! cantidadDe(tarjeta.productId, celda.variante.productId)"
                                                                 @click="ajustarCantidad(tarjeta.productId, celda.variante.productId, -1)"
                                                             >−</button>
 
                                                             <input
                                                                 type="number"
+                                                                inputmode="numeric"
                                                                 min="0"
                                                                 step="1"
-                                                                class="w-16 rounded-lg border px-2 py-1 text-center dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300"
+                                                                :aria-label="'Cantidad de la talla ' + tallaDe(celda.variante)"
+                                                                class="nv-cantidad w-16 rounded-lg border px-2 py-1 text-center dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300"
                                                                 :disabled="! celda.variante.activa || celda.variante.stockVendible === 0"
                                                                 v-model.number="cantidadesPorProducto[tarjeta.productId][celda.variante.productId]"
                                                                 @focus="$event.target.select()"
@@ -1200,7 +1225,8 @@
 
                                                             <button
                                                                 type="button"
-                                                                class="h-7 w-7 shrink-0 rounded-lg border text-sm leading-none text-gray-600 hover:border-blue-400 disabled:opacity-40 dark:border-gray-800 dark:text-gray-300"
+                                                                class="nv-paso h-7 w-7 shrink-0 rounded-lg border text-sm leading-none text-gray-600 hover:border-blue-400 disabled:opacity-40 dark:border-gray-800 dark:text-gray-300"
+                                                                :aria-label="'Sumar una unidad a la talla ' + tallaDe(celda.variante)"
                                                                 :disabled="! celda.variante.activa || celda.variante.stockVendible === 0"
                                                                 @click="ajustarCantidad(tarjeta.productId, celda.variante.productId, 1)"
                                                             >+</button>
@@ -1209,7 +1235,8 @@
                                                                 type="button"
                                                                 v-if="cantidadAplicada(celda.variante.productId)"
                                                                 title="Quitar esta talla de la venta"
-                                                                class="ml-1 text-base text-gray-400 hover:text-red-600 disabled:opacity-40 dark:text-gray-500 dark:hover:text-red-400"
+                                                                aria-label="Quitar esta talla de la venta"
+                                                                class="nv-quitar ml-1 text-base text-gray-400 hover:text-red-600 disabled:opacity-40 dark:text-gray-500 dark:hover:text-red-400"
                                                                 :disabled="cargando.tallas"
                                                                 @click="quitarTalla(tarjeta.productId, celda.variante.productId)"
                                                             >🗑</button>
