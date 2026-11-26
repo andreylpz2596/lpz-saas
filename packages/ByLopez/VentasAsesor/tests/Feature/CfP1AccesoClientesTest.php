@@ -179,3 +179,26 @@ test('P1 contrasena manual: un cliente sin acceso no tiene usuario al que cambia
 
     $this->actingAs($admin, 'admin')->postJson(($this->url)('contrasena'), ['contrasena' => 'ClaveNueva2026'])->assertStatus(409);
 });
+
+test('P1 correo de ingreso: solo el administrador lo cambia; unico, en minusculas, auditado y sin tocar el correo de la ficha', function () {
+    $this->actingAs($this->gestor, 'admin')->postJson(($this->url)('crear_usuario'), [])->assertOk();
+    $acceso = ClienteAcceso::query()->where('customer_id', $this->cliente->id)->firstOrFail();
+    $anterior = Admin::query()->findOrFail($acceso->admin_id)->email;
+    $admin = Admin::query()->create([
+        'name' => 'Admin principal', 'email' => 'admin.'.uniqid().'@example.test', 'password' => Hash::make('x'),
+        'role_id' => (int) config('ventasasesor.credito.rol_administrador_id', 1), 'status' => 1,
+    ]);
+    $nuevo = 'Nuevo.Ingreso.'.uniqid().'@Example.test';
+
+    $this->actingAs($this->gestor, 'admin')->postJson(($this->url)('correo'), ['email' => $nuevo])->assertStatus(403)->assertJsonPath('codigo', 'solo_administrador');
+    $this->actingAs($admin, 'admin')->postJson(($this->url)('correo'), ['email' => 'no-es-correo'])->assertStatus(422);
+    $this->actingAs($admin, 'admin')->postJson(($this->url)('correo'), ['email' => strtoupper($admin->email)])->assertStatus(409)->assertJsonPath('codigo', 'correo_en_uso');
+
+    $r = $this->actingAs($admin, 'admin')->postJson(($this->url)('correo'), ['email' => $nuevo])->assertOk()->json();
+    $evento = ClienteAccesoEvento::query()->where('customer_id', $this->cliente->id)->where('accion', 'correo_cambiado')->firstOrFail();
+
+    expect($r['usuario']['email'])->toBe(strtolower($nuevo))
+        ->and(Admin::query()->findOrFail($acceso->admin_id)->email)->toBe(strtolower($nuevo))
+        ->and($this->cliente->fresh()->email)->toBe($this->cliente->email)
+        ->and($evento->detalle)->toBe(['anterior' => $anterior, 'nuevo' => strtolower($nuevo)]);
+});

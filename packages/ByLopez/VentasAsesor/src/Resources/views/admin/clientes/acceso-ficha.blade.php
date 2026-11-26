@@ -151,6 +151,22 @@
                             await recargar('/contrasena', { contrasena: valor }, 'Contraseña actualizada: ' + valor + ' — el cliente ya puede ingresar con ella.');
                         }));
                         acc.append(caja);
+
+                        // Correo de ingreso (solo administrador). El correo de la ficha del cliente no cambia.
+                        const cajaCorreo = document.createElement('div');
+                        cajaCorreo.className = 'mt-2 grid gap-2 border-t pt-3 dark:border-gray-800';
+                        const tituloCorreo = document.createElement('p'); tituloCorreo.className = 'text-sm font-semibold'; tituloCorreo.textContent = 'Cambiar correo de ingreso';
+                        const notaCorreo = document.createElement('p'); notaCorreo.className = 'text-xs text-gray-500 dark:text-gray-400'; notaCorreo.textContent = 'Es el correo con el que el cliente entra al aplicativo. La contraseña no cambia.';
+                        const correoNuevo = campo('Nuevo correo', { type: 'email', autocomplete: 'off', autocapitalize: 'off', spellcheck: false, maxLength: 191, value: datos.usuario ? datos.usuario.email : '' });
+                        correoNuevo.input.setAttribute('data-1p-ignore', ''); correoNuevo.input.setAttribute('data-lpignore', 'true');
+                        cajaCorreo.append(tituloCorreo, notaCorreo, correoNuevo.wrap, boton('Guardar correo', 'secondary-button', async () => {
+                            const valor = correoNuevo.input.value.trim().toLowerCase();
+                            if (! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor)) { throw new Error('Escribe un correo válido.'); }
+                            if (datos.usuario && valor === datos.usuario.email.toLowerCase()) { throw new Error('Es el mismo correo actual.'); }
+                            if (! window.confirm('¿Cambiar el correo de ingreso a ' + valor + '?')) { return; }
+                            await recargar('/correo', { email: valor }, 'Correo actualizado. El cliente ahora entra con ' + valor + '.');
+                        }));
+                        acc.append(cajaCorreo);
                     }
                 }
             }

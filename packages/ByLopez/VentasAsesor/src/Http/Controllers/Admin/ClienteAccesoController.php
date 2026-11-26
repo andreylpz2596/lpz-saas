@@ -63,6 +63,13 @@ class ClienteAccesoController extends Controller
         return $this->responder(fn () => $this->acceso->cambiarContrasena($cliente, $this->actor(), $datos['contrasena']));
     }
 
+    public function correo(int $cliente, Request $request): JsonResponse
+    {
+        $datos = $request->validate(['email' => ['required', 'email', 'max:191']]);
+
+        return $this->responder(fn () => $this->acceso->cambiarCorreo($cliente, $this->actor(), $datos['email']));
+    }
+
     protected function responder(callable $accion): JsonResponse
     {
         try {

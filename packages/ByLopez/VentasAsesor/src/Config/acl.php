@@ -516,6 +516,7 @@ return [
             'admin.ventas_asesor.clientes_acceso.reactivar',
             'admin.ventas_asesor.clientes_acceso.desvincular',
             'admin.ventas_asesor.clientes_acceso.contrasena',
+            'admin.ventas_asesor.clientes_acceso.correo',
         ],
         'sort' => 1,
     ], [
