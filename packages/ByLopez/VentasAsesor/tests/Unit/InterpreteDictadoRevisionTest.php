@@ -39,8 +39,10 @@ test('prioridad: la contaminacion entre lineas desaparece', function () {
 
 test('ningun numero pendiente viaja al producto siguiente', function () {
     // La linea incompleta conserva su numero y su problema; la siguiente queda exacta.
+    // Revisado 2026-11-26 (brief de Camilo: «rojo 10 niño» requiere aclarar talla o cantidad): antes «10» era cantidad y se
+    // pedia la talla; ahora se ofrecen las dos lecturas. La linea siguiente sigue exacta.
     expect(rev('roja niño 10 y negro dama M 2'))->toBe([
-        ['N', 'Rojo', null, 10, [I::FALTA_TALLA], [], []],
+        ['N', 'Rojo', null, null, [I::TALLA_O_CANTIDAD], [], ['10-12×?', '?×10']],
         ok('D', 'Negro', 'M', 2),
     ])->and(rev('negro dama M 2, roja niño 68, blanco caballero L 3'))->toBe([
         ok('D', 'Negro', 'M', 2),
@@ -116,7 +118,8 @@ test('cantidades invalidas nunca se vuelven validas', function (string $frase, s
 test('numeros sobrantes, frases incompletas y atributos contradictorios', function () {
     expect(rev('negro dama M 2 4'))->toBe([['D', 'Negro', 'M', null, [I::FALTA_CANTIDAD, I::NUMEROS_SIN_ASIGNAR], ['2', '4'], []]])
         ->and(rev('negro dama M 2, 5'))->toBe([['D', 'Negro', 'M', null, [I::FALTA_CANTIDAD, I::NUMEROS_SIN_ASIGNAR], ['2', '5'], []]])
-        ->and(rev('rojo niño 10'))->toBe([['N', 'Rojo', null, 10, [I::FALTA_TALLA], [], []]])
+        // Revisado 2026-11-26 (misma regla): el codigo de talla suelto con niño se pregunta.
+        ->and(rev('rojo niño 10'))->toBe([['N', 'Rojo', null, null, [I::TALLA_O_CANTIDAD], [], ['10-12×?', '?×10']]])
         ->and(rev('roja niño talla'))->toBe([['N', 'Rojo', null, null, [I::FALTA_TALLA, I::FALTA_CANTIDAD], [], []]])
         ->and(rev('niño rojo talla 8 5'))->toBe([['N', 'Rojo', null, 5, [I::TALLA_NO_RECONOCIDA], [], []]])
         ->and(rev('azul S 3'))->toBe([[null, null, 'S', 3, [I::COLOR_AMBIGUO], [], []]])
@@ -227,3 +230,106 @@ test('numeros escritos 2026-11-25: «diez y seis», «doscientas», «mil»', fu
         ->and(rev('doscientas blancas caballero M'))->toBe([ok('H', 'Blanco', 'M', 200)])
         ->and(rev('mil blancas caballero M'))->toBe([ok('H', 'Blanco', 'M', 1000)]);
 });
+
+/*
+| Jornada 2026-11-26 (brief de Camilo): orden libre, correcciones, repeticiones, tipo entre prendas, SKU exacto y palabras no
+| usadas. Casos de DESARROLLO; la evaluacion ciega esta aparte (Datos/dictado_evaluacion_ciega.php) y no se uso para programar.
+*/
+
+test('orden libre: tipo, color, talla y cantidad en cualquier posicion dan lo mismo', function (string $frase) {
+    expect(rev($frase))->toBe([ok('D', 'Rojo', 'M', 2)]);
+})->with(['roja dama M dos', 'dos rojas M de dama', 'roja dos dama M', 'dama M roja dos', 'M roja dos dama', 'dos dama roja M',
+    'roja M dama dos', 'dama dos rojas M', 'M dama dos rojas', 'quiero por favor dos rojas dama M', 'dame dos rojas de dama en M']);
+
+test('el ultimo numero es una pista, no una regla: «dos rojas niño talla 10» = 2 de 10-12', function () {
+    expect(rev('dos rojas niño talla 10'))->toBe([ok('N', 'Rojo', '10-12', 2)])
+        ->and(rev('niño rojo talla 6 5'))->toBe([ok('N', 'Rojo', '6-8', 5)])
+        ->and(rev('niño rojo cantidad sesenta y ocho talla seis ocho'))->toBe([ok('N', 'Rojo', '6-8', 68)])
+        ->and(rev('rojo niño 10 5'))->toBe([ok('N', 'Rojo', '10-12', 5)]);
+});
+
+test('codigo de talla suelto con niño: se pregunta talla o cantidad; con dos lecturas completas tambien', function () {
+    expect(rev('rojo 10 niño'))->toBe([['N', 'Rojo', null, null, [I::TALLA_O_CANTIDAD], [], ['10-12×?', '?×10']]])
+        ->and(rev('rojo 2 niño'))->toBe([['N', 'Rojo', null, null, [I::TALLA_O_CANTIDAD], [], ['2-4×?', '?×2']]])
+        ->and(rev('rojo niño 6 10'))->toBe([['N', 'Rojo', null, null, [I::TALLA_O_CANTIDAD], [], ['6-8×10', '10-12×6']]])
+        // Numeros iguales seguidos pueden ser eco del dictado: se confirma con un solo boton.
+        ->and(rev('rojo niño 68 68'))->toBe([['N', 'Rojo', null, null, [I::TALLA_O_CANTIDAD], [], ['6-8×68']]])
+        // Un par que forma rango no se parte en «talla suelta + cantidad».
+        ->and(rev('niño rojo 6 y 8'))->toBe([['N', 'Rojo', null, null, [I::FALTA_TALLA, I::FALTA_CANTIDAD, I::NUMEROS_SIN_ASIGNAR], ['6', '8'], []]]);
+});
+
+test('varias prendas seguidas: «una» delante de otro color abre la prenda siguiente (antes contaminaba)', function () {
+    expect(rev('dos rojas M de dama, tres negras L de caballero, una blanca S dama'))->toBe([
+        ok('D', 'Rojo', 'M', 2), ok('H', 'Negro', 'L', 3), ok('D', 'Blanco', 'S', 1),
+    ])->and(rev('una dama roja M'))->toBe([ok('D', 'Rojo', 'M', 1)])
+        ->and(rev('un caballero negro talla L'))->toBe([ok('H', 'Negro', 'L', 1)])
+        ->and(rev('una ELE dama roja'))->toBe([ok('D', 'Rojo', 'L', 1)])
+        ->and(rev('XL dama roja'))->toBe([['D', 'Rojo', 'XL', null, [I::FALTA_CANTIDAD], [], []]]);
+});
+
+test('correcciones: «no», «mejor», «perdón» cambian lo ultimo dicho; si no queda claro, se pregunta', function () {
+    expect(rev('negro dama M diez, no, mejor ocho'))->toBe([ok('D', 'Negro', 'M', 8)])
+        ->and(rev('negro, no, blanco dama M 2'))->toBe([ok('D', 'Blanco', 'M', 2)])
+        ->and(rev('no negro, blanco dama M 2'))->toBe([ok('D', 'Blanco', 'M', 2)])
+        ->and(rev('negro dama no caballero M 2'))->toBe([ok('H', 'Negro', 'M', 2)])
+        ->and(rev('negro dama M 2 no'))->toBe([['D', 'Negro', 'M', 2, [I::CORRECCION_DUDOSA], [], []]])
+        // La corrección no coincide con lo ultimo dicho (la cantidad): no se cambia el color de la prenda anterior.
+        ->and(rev('negro dama M 2 no blanco caballero L 3'))->toBe([
+            ['D', 'Negro', 'M', 2, [I::CORRECCION_DUDOSA], [], []], ok('H', 'Blanco', 'L', 3),
+        ]);
+
+    [$l] = (new I(REV_COLORES))->interpretar('negro dama M diez, no, mejor ocho');
+    expect($l['detalle']['correcciones'])->toBe(['10 → 8']);
+});
+
+test('dos tipos distintos para una prenda se preguntan; la misma pieza repetida no crea otra prenda', function () {
+    expect(rev('negro dama caballero M 2'))->toBe([[null, 'Negro', 'M', 2, [I::TIPO_CONTRADICTORIO], [], []]])
+        ->and(rev('negro dama M 2 caballero'))->toBe([[null, 'Negro', 'M', 2, [I::TIPO_CONTRADICTORIO], [], []]])
+        ->and(rev('negro dama M 2 caballero L 3'))->toBe([ok('D', 'Negro', 'M', 2), ok('H', 'Negro', 'L', 3)])
+        ->and(rev('negro negro dama M 2'))->toBe([ok('D', 'Negro', 'M', 2)])
+        ->and(rev('negro dama M M 2'))->toBe([ok('D', 'Negro', 'M', 2)])
+        ->and(rev('negro dama M 2 negro dama M 2'))->toBe([ok('D', 'Negro', 'M', 2), ok('D', 'Negro', 'M', 2)]);
+});
+
+test('tipo entre dos prendas: alcance definido y nunca retroactivo en silencio', function () {
+    expect(rev('roja M dos, caballero negro L 3'))->toBe([[null, 'Rojo', 'M', 2, [], [], []], ok('H', 'Negro', 'L', 3)])
+        ->and(rev('roja M dos caballero, negro L 3'))->toBe([ok('H', 'Rojo', 'M', 2), ok('H', 'Negro', 'L', 3)])
+        ->and(rev('roja M dos caballero negro L 3'))->toBe([[null, 'Rojo', 'M', 2, [I::TIPO_DUDOSO], [], []], ok('H', 'Negro', 'L', 3)])
+        ->and(rev('roja M dos caballero negro dama L 3'))->toBe([ok('H', 'Rojo', 'M', 2), ok('D', 'Negro', 'L', 3)])
+        ->and(rev('roja M dos caballero'))->toBe([ok('H', 'Rojo', 'M', 2)]);
+});
+
+test('lo que no se usa se muestra; los saludos solos no son una linea', function () {
+    [$l] = (new I(REV_COLORES))->interpretar('negro camel dama M 2');
+    expect($l['problemas'])->toBe([])->and($l['detalle']['no_usadas'])->toBe(['camel'])
+        ->and((new I(REV_COLORES))->interpretar('hola buenos dias'))->toBe([])
+        ->and(rev('camel'))->toBe([[null, null, null, null, [I::FALTA_COLOR, I::FALTA_TALLA, I::FALTA_CANTIDAD], [], []]]);
+});
+
+test('SKU: exacto, incompleto, contradictorio, inexistente y con la cantidad antes', function () {
+    $sku = fn (string $texto) => array_map(fn ($l) => [$l['linea'] === 'TP' ? 'TP' : $l['genero'], $l['color'], $l['talla_etiqueta'], $l['cantidad'], $l['problemas'], $l['sku_dicho']],
+        (new I(['Blanco', 'Negro', 'Rojo'], [], [124 => 'Blanco', 106 => 'Negro', 110 => 'Rojo']))->interpretar($texto));
+
+    expect($sku('124H-DZ-M 5'))->toBe([['H', 'Blanco', 'M', 5, [], '124H-DZ-M']])
+        ->and($sku('cinco 124H-DZ-M'))->toBe([['H', 'Blanco', 'M', 5, [], '124H-DZ-M']])
+        ->and($sku('124H-DZ 5'))->toBe([['H', 'Blanco', null, 5, [I::FALTA_TALLA], '124H-DZ']])
+        ->and($sku('124H-DZ talla M 5'))->toBe([['H', 'Blanco', 'M', 5, [], '124H-DZ']])
+        ->and($sku('124H-DZ-M 5 dama'))->toBe([['H', 'Blanco', 'M', 5, [I::SKU_CONTRADICTORIO], '124H-DZ-M']])
+        ->and($sku('124H-DZ-M dama 5'))->toBe([['H', 'Blanco', 'M', 5, [I::SKU_CONTRADICTORIO], '124H-DZ-M']])
+        ->and($sku('124H-DZ-M caballero 5'))->toBe([['H', 'Blanco', 'M', 5, [], '124H-DZ-M']])
+        ->and($sku('124H-DZ-M 5 negro dama L 2'))->toBe([['H', 'Blanco', 'M', 5, [], '124H-DZ-M'], ['D', 'Negro', 'L', 2, [], null]])
+        ->and($sku('999H-DZ-M 5')[0][4])->toContain(I::SKU_NO_RECONOCIDO)
+        ->and($sku('124H-PD-M 5')[0][4])->toContain(I::SKU_NO_RECONOCIDO)
+        ->and($sku('124H-DZ-Q 5')[0][4])->toContain(I::SKU_NO_RECONOCIDO);
+
+    // Crop top sin talla: el interprete lo marca como asumido; el resolutor decide con el catalogo (M y Única → pregunta).
+    [$tp] = (new I(['Negro'], [], [106 => 'Negro']))->interpretar('106D-TP 3');
+    expect($tp['talla'])->toBe('U')->and($tp['talla_asumida'])->toBeTrue();
+});
+
+test('propiedades: mayusculas, espacios y signos no cambian el resultado', function (string $a, string $b) {
+    expect(rev($a))->toBe(rev($b));
+})->with([
+    ['roja 68 niño 10', 'ROJA   68   NIÑO   10'], ['negro dama M 2', 'Negro Dama m 2'], ['una XL dama roja', 'UNA xl DAMA ROJA'],
+    ['dos rojas M de dama', '  dos   rojas M  de   dama  '], ['azul rey caballero L 3', 'Azul Rey, caballero, L, 3'],
+]);

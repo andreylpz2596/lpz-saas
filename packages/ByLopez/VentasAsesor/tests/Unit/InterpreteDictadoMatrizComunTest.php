@@ -4,8 +4,9 @@ use ByLopez\VentasAsesor\Support\Dictado\InterpreteDictado;
 
 /*
 | Doc. 34 §6 · Matriz comun de la evaluacion de herramientas (2026-11-25): 100 frases, expectativas fijadas antes de correr.
-| Contrato: CERO interpretaciones incorrectas aceptadas. Las dos diferencias conocidas («rojo 10 niño», «rojo niño 2 3») son un
-| conflicto de expectativas pendiente de Camilo; ambas piden aclaracion (seguro), por eso no cuentan como aceptadas.
+| Contrato: CERO interpretaciones incorrectas aceptadas y las 111 lineas correctas (una prueba que rechaza todo no pasa).
+| 2026-11-26: el conflicto de expectativas «rojo 10 niño» / «rojo niño 2 3» lo resolvio la regla de Camilo (el codigo de talla
+| suelto con niño se pregunta; con otro numero es la unica lectura completa). Ninguna expectativa de esta matriz se cambio.
 */
 
 test('matriz comun: ninguna interpretacion incorrecta se acepta como valida', function () {
@@ -35,5 +36,5 @@ test('matriz comun: ninguna interpretacion incorrecta se acepta como valida', fu
 
     expect($aceptadasMal)->toBe([])
         ->and($total)->toBe(111)
-        ->and($correctas)->toBeGreaterThanOrEqual(109);
+        ->and($correctas)->toBe(111);
 });

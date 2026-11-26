@@ -10,16 +10,19 @@
 | 'nueva' = frases redactadas hoy, no usadas al programar las reglas (NO son transcripciones reales de asesoras).
 */
 
-const MC_COLORES = ['Beige Claro', 'Beige Oscuro', 'Café', 'Mostaza', 'Kaki', 'Negro', 'Azul Oscuro', 'Azul Rey', 'Vino Tinto', 'Rojo',
+// Se puede incluir varias veces en la misma corrida (matriz comun y propiedades): constantes y funciones con guarda.
+defined('MC_COLORES') || define('MC_COLORES', ['Beige Claro', 'Beige Oscuro', 'Café', 'Mostaza', 'Kaki', 'Negro', 'Azul Oscuro', 'Azul Rey', 'Vino Tinto', 'Rojo',
     'Fucsia', 'Morado', 'Naranja', 'Gris Rato', 'Verde Cali', 'Verde Petróleo', 'Marfil', 'Verde Militar', 'Verde Pistacho', 'Verde Oliva',
     'Verde Manzana', 'Verde Pastel', 'Verde Neón', 'Blanco', 'Verde Menta', 'Verde Botella', 'Terracota', 'Lila', 'Curuba/Salmon',
-    'Amarillo Pastel', 'Azul Cielo', 'Azul Bebe', 'Rosado', 'Palo de Rosa', 'Azul Turquesa', 'Verde Agua Marina', 'Azul Bebe Oscuro'];
+    'Amarillo Pastel', 'Azul Cielo', 'Azul Bebe', 'Rosado', 'Palo de Rosa', 'Azul Turquesa', 'Verde Agua Marina', 'Azul Bebe Oscuro']);
 
-const MC_ALIAS = ['rosa' => ['Rosado', 'Palo de Rosa']];
+defined('MC_ALIAS') || define('MC_ALIAS', ['rosa' => ['Rosado', 'Palo de Rosa']]);
 
-function mcOk($t, $c, $s, $q) { return [$t, $c, $s, $q, 'ok']; }
-function mcRev() { return [null, null, null, null, 'revisar']; }
-function mcOpc() { return [null, null, null, null, 'opciones']; }
+if (! function_exists('mcOk')) {
+    function mcOk($t, $c, $s, $q) { return [$t, $c, $s, $q, 'ok']; }
+    function mcRev() { return [null, null, null, null, 'revisar']; }
+    function mcOpc() { return [null, null, null, null, 'opciones']; }
+}
 
 return [
     // ---- previa (matriz 2026-11-24; A y B revisadas ese dia) ----

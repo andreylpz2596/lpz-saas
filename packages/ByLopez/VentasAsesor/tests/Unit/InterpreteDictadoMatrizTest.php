@@ -67,7 +67,10 @@ dataset('matriz', [
 |  - A: «una camiseta …» expresa 1 unidad (antes se esperaba cantidad pendiente).
 |  - B: «talla 6» = 6-8: equivalencia unica confirmada en el catalogo (codigo del SKU ↔ grupo_de_edad_ninos).
 */
-const DICM_REVISADAS = ['una camiseta roja talla M de hombre' => 'decision A', 'niño rojo talla 6' => 'decision B'];
+const DICM_REVISADAS = ['una camiseta roja talla M de hombre' => 'decision A', 'niño rojo talla 6' => 'decision B',
+    // 2026-11-26, brief de Camilo: «rojo 10 niño» requiere aclarar talla o cantidad (antes: cantidad 10 y faltaba la talla).
+    // Cobertura activa: InterpreteDictadoRevisionTest «numeros sobrantes…» y la matriz comun.
+    'rojo niño 10' => 'regla 2026-11-26: codigo de talla suelto con niño se pregunta'];
 
 test('matriz de dictado', function (string $frase, array $esperado) {
     if (isset(DICM_REVISADAS[$frase])) {

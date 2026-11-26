@@ -47,6 +47,38 @@ final class InterpreteDictado
     /** Dos tallas distintas para el mismo producto («talla M talla L 3»): no se elige ninguna (`detalle.tallas_dobles`). */
     public const TALLA_CONTRADICTORIA = 'talla_contradictoria';
 
+    /** Dos tipos distintos para la misma prenda sin «no» entre ellos («dama caballero»): `detalle.tipos_dobles`. */
+    public const TIPO_CONTRADICTORIO = 'tipo_contradictorio';
+
+    /** Un tipo dicho entre dos prendas sin pausa que diga de cual es (`detalle.tipo_dudoso`): la anterior se pregunta. */
+    public const TIPO_DUDOSO = 'tipo_dudoso';
+
+    /** «no» / «mejor» / «perdón» sin un reemplazo claro del mismo tipo que lo ultimo dicho (`detalle.correccion`). */
+    public const CORRECCION_DUDOSA = 'correccion_dudosa';
+
+    /** Algo con forma de codigo que no es una referencia del catalogo (otra tela, otro color, talla inexistente). */
+    public const SKU_NO_RECONOCIDO = 'sku_no_reconocido';
+
+    /** Un SKU seguido de un atributo que no coincide con el («124H-DZ-M dama»): `detalle.sku_conflictos`. */
+    public const SKU_CONTRADICTORIO = 'sku_contradictorio';
+
+    /** Palabras que anuncian una corrección de lo ultimo dicho. */
+    private const MARCAS_CORRECCION = ['no', 'mejor', 'perdon', 'perdona', 'digo', 'corrijo', 'osea'];
+
+    /**
+     * Palabras de apoyo del habla («quiero», «dame», «por favor», articulos): no son datos. Cualquier otra palabra que no se
+     * use se muestra en la linea (`detalle.no_usadas`). «no» NO es de apoyo: es una corrección o una negación.
+     */
+    private const APOYO = ['de', 'del', 'la', 'las', 'el', 'los', 'lo', 'le', 'les', 'en', 'y', 'e', 'o', 'a', 'al', 'con', 'para', 'por', 'favor',
+        'porfa', 'porfavor', 'quiero', 'quisiera', 'queria', 'necesito', 'necesitamos', 'dame', 'deme', 'denos', 'danos', 'me', 'nos', 'mi', 'su',
+        'regalas', 'regala', 'regalame', 'manda', 'mandame', 'envia', 'enviame', 'pon', 'ponme', 'poner', 'agrega', 'agregame', 'agregar', 'agregue',
+        'anade', 'anota', 'anotame', 'apunta', 'pedido', 'pedir', 'pido', 'listo', 'listos', 'lista', 'bueno', 'buenas', 'buenos', 'ok', 'okay', 'vale',
+        'entonces', 'tambien', 'mas', 'otra', 'otro', 'otras', 'otros', 'una', 'un', 'uno', 'unas', 'unos', 'referencia', 'referencias', 'ref',
+        'camiseta', 'camisetas', 'prenda', 'prendas', 'talla', 'tallas', 'color', 'colores', 'tipo', 'cantidad', 'unidad', 'unidades', 'und',
+        'unds', 'uds', 'ud', 'pieza', 'piezas', 'que', 'son', 'es', 'sea', 'seria', 'hola', 'gracias', 'hay', 'tengo', 'tiene', 'x', 'cada', 'total',
+        'eso', 'esa', 'ese', 'este', 'esta', 'esto', 'aqui', 'ahi', 'si', 'piel', 'durazno', 'linea', 'dz', 'dia', 'dias', 'tarde', 'tardes',
+        'noche', 'noches', 'senorita', 'cliente', 'clienta', 'va', 'van', 'llevar', 'lleva', 'llevo'];
+
     private const GENEROS = [
         'dama' => 'D', 'damas' => 'D', 'mujer' => 'D', 'mujeres' => 'D', 'femenino' => 'D', 'femenina' => 'D', 'senora' => 'D', 'senoras' => 'D',
         'caballero' => 'H', 'caballeros' => 'H', 'hombre' => 'H', 'hombres' => 'H', 'masculino' => 'H', 'masculina' => 'H', 'senor' => 'H', 'senores' => 'H',
@@ -162,6 +194,10 @@ final class InterpreteDictado
         $lineas = [];
         $actual = $this->nueva();
         $contextoAdulto = null;
+        // Pieza anterior: la misma pieza dicha dos veces seguidas («negro negro», «M M») es eco o tartamudeo, no otro producto.
+        $previa = null;
+        // Ultimo token usado por una pieza o un numero (para saber si hubo una pausa «,» / «y» antes de un tipo).
+        $ultimoFin = -1;
 
         for ($i = 0, $n = count($t); $i < $n; $i++) {
             $inicio = $i;
@@ -172,175 +208,450 @@ final class InterpreteDictado
             if ($pieza === null) {
                 if ($frag !== '') {
                     $actual['palabras'][] = $frag;
+                    // Palabras que no son de apoyo y no se usaron: se muestran, nunca desaparecen en silencio.
+                    if (! in_array($frag, self::APOYO, true)) {
+                        $actual['sueltas'][] = $frag;
+                    }
                 }
 
                 continue;
             }
 
             [$tipo, $valor] = $pieza;
+            $clave = $this->clavePieza($tipo, $valor);
 
-            if ($tipo === 'numero') {
-                // El paso 2 decide si es talla o cantidad. No cierra la linea.
+            if ($clave !== null && $clave === $previa) {
                 $actual['palabras'][] = $frag;
-                $actual['numeros'][] = $valor + ['texto' => $frag, 'ini' => $inicio, 'fin' => $i];
+                $actual['repetidas'][] = $frag;
+                $ultimoFin = $i;
 
                 continue;
             }
+            $previa = $clave;
 
-            if ($tipo === 'par_suelto') {
-                // «2 4» que no puede ser talla aqui («negro dama M 2 4»): dos numeros sueltos, sin linea fantasma de niño.
+            if ($tipo === 'correccion') {
+                // «no», «mejor», «perdón»: corrige la ULTIMA pieza dicha en la linea con la siguiente del mismo tipo.
                 $actual['palabras'][] = $frag;
-                foreach ($valor as $k => $num) {
-                    $actual['numeros'][] = $num + ['texto' => (string) $num['valor'], 'ini' => $inicio + $k, 'fin' => $inicio + $k];
-                }
+                $actual['correccion'] = ['marca' => $frag, 'objetivo' => $actual['ultima']];
 
                 continue;
             }
 
-            // Una pieza segura que ya estaba en la linea la cierra; la siguiente empieza con esta pieza.
-            $cerrar = function (array $heredar) use (&$actual, &$lineas) {
-                $lineas[] = $actual;
-                $actual = $this->heredar($actual, $heredar);
-            };
+            $familia = $this->familia($tipo);
+            $negarDespues = null;
 
-            if ($tipo === 'sku') {
-                // El SKU trae el producto completo: cierra la linea anterior y arranca una propia (sin heredar nada).
-                if ($this->tieneDatos($actual)) {
-                    $cerrar([]);
+            if ($actual['correccion'] !== null) {
+                ['marca' => $marca, 'objetivo' => $objetivo] = $actual['correccion'];
+                $actual['correccion'] = null;
+
+                if ($objetivo === null) {
+                    // «no negro, blanco»: lo dicho tras «no» queda negado hasta que llegue su reemplazo.
+                    $negarDespues = $familia;
+                } elseif ($objetivo === $familia && ($antes = $this->reemplazar($actual, $tipo, $valor, $frag, $inicio, $i)) !== null) {
+                    $actual['palabras'][] = $frag;
+                    $actual['correcciones'][] = $antes.' → '.$frag;
+                    $actual['ultima'] = $familia;
+                    $ultimoFin = $i;
+
+                    continue;
+                } else {
+                    // La corrección no coincide con lo último dicho («M 2, no, blanco»): no se adivina qué cambiar.
+                    $actual['correccion_dudosa'][] = $marca;
                 }
-                $actual = $this->nueva();
+            } elseif ($actual['negado'] !== null && $actual['negado']['familia'] === $familia
+                && ($antes = $this->reemplazar($actual, $tipo, $valor, $frag, $inicio, $i)) !== null) {
                 $actual['palabras'][] = $frag;
-                $actual['ancla'] = $i;
-                $actual['color'] = $valor['color'];
-                $actual['color_dicho'] = $frag;
-                $actual['genero'] = $valor['genero'];
-                $actual['genero_explicito'] = true;
-                $actual['genero_dicho'] = $frag;
-                $actual['linea'] = $valor['linea'];
-                if ($valor['talla'] !== null) {
-                    $actual['talla'] = $valor['talla'];
-                    $actual['talla_fuente'] = $frag;
-                } elseif ($valor['linea'] === 'TP') {
-                    $actual['talla'] = 'U';
-                    $actual['talla_fuente'] = $frag;
-                    $actual['heredado']['talla'] = true;
-                }
-                if ($valor['genero'] !== 'N') {
-                    $contextoAdulto = $valor['genero'];
-                }
+                $actual['correcciones'][] = 'no '.$antes.' → '.$frag;
+                $actual['negado'] = null;
+                $actual['ultima'] = $familia;
+                $ultimoFin = $i;
 
                 continue;
             }
 
-            if ($tipo === 'talla_invalida') {
-                $actual['palabras'][] = $frag;
-                $actual['tallas_invalidas'][] = $frag;
-                $actual['ancla'] = $i;
+            $this->aplicarPieza($actual, $lineas, $t, $inicio, $i, $frag, $tipo, $valor, $contextoAdulto, $ultimoFin);
 
-                continue;
+            if ($negarDespues !== null) {
+                $actual['negado'] = ['familia' => $negarDespues, 'frag' => $frag];
             }
-
-            if ($tipo === 'linea') {
-                // «top» fija linea, genero Dama y talla unica (blandas: una talla dicha despues las reemplaza).
-                if (($actual['linea'] === 'TP' && ! isset($actual['heredado']['linea'])) || ($this->completa($actual) && ! isset($actual['heredado']['talla']))) {
-                    $cerrar(['genero']);
-                }
-                $actual['palabras'][] = $frag;
-                $actual['ancla'] = $i;
-                $actual['linea'] = 'TP';
-                unset($actual['heredado']['linea']);
-                $actual['genero'] = 'D';
-                if ($actual['talla'] === null || isset($actual['heredado']['talla'])) {
-                    $actual['talla'] = 'U';
-                    $actual['talla_fuente'] = $frag;
-                    $actual['heredado']['talla'] = true;
-                }
-
-                continue;
+            if ($familia !== null) {
+                $actual['ultima'] = $familia;
             }
-
-            if ($tipo === 'uno') {
-                // «una camiseta roja talla M»: 1 expresado (decision A). Tras una linea completa empieza una nueva.
-                if ($this->completa($actual) || $actual['uno'] !== null || $actual['cantidad'] !== null) {
-                    $cerrar(['genero', 'linea']);
-                }
-                $actual['palabras'][] = $frag;
-                $actual['ancla'] = $i;
-                $actual['uno'] = $frag;
-
-                continue;
-            }
-
-            $campo = $tipo;
-            // Ya lo tiene propio, o lo tiene heredado pero la linea ya esta completa («negro M 10, XL 3 y blanco M 4»).
-            $propio = $this->tiene($actual, $campo) && (! isset($actual['heredado'][$campo]) || $this->completa($actual));
-
-            if ($tipo === 'genero') {
-                // Si el tipo de la linea completa era heredado (no lo dijo ella), un tipo nuevo se lo corrige a ELLA («marfil, caballero»).
-                if ($propio && $actual['genero_explicito'] && $this->completa($actual) && ! isset($actual['heredado']['genero'])) {
-                    $cerrar(['color']);
-                }
-                $actual['palabras'][] = $frag;
-                $actual['ancla'] = $i;
-                $actual['genero'] = $valor;
-                $actual['genero_explicito'] = true;
-                $actual['genero_dicho'] = $frag;
-                unset($actual['heredado']['genero']);
-                if ($valor !== 'N') {
-                    $contextoAdulto = $valor;
-                }
-
-                continue;
-            }
-
-            if ($tipo === 'talla' && $propio && ! isset($actual['heredado']['talla']) && ! $this->completa($actual)) {
-                // «negro dama talla M talla L 3»: dos tallas para un producto que aun no tiene cantidad. No se elige en
-                // silencio ni se abre otra linea: se pregunta (auditoria 2026-11-25, frases adversas).
-                $actual['palabras'][] = $frag;
-                $actual['ancla'] = $i;
-                $actual['tallas_dobles'] = array_values(array_unique([...($actual['tallas_dobles'] ?: [$actual['talla_fuente']]), $frag]));
-
-                continue;
-            }
-
-            if ($propio) {
-                $cerrar($tipo === 'color' ? ['genero', 'linea'] : ['color', 'genero', 'linea']);
-            }
-
-            $actual['palabras'][] = $frag;
-            $actual['ancla'] = $i;
-
-            if ($tipo === 'color') {
-                $actual['color'] = count($valor) === 1 ? $valor[0] : null;
-                $actual['candidatos'] = count($valor) === 1 ? [] : $valor;
-                $actual['color_dicho'] = $frag;
-                unset($actual['heredado']['color'], $actual['heredado']['candidatos']);
-
-                continue;
-            }
-
-            if ($tipo === 'cantidad') {
-                $actual['cantidad'] = $valor;
-                $actual['cantidad_fuente'] = $frag;
-
-                continue;
-            }
-
-            // Talla segura.
-            $actual['talla'] = $valor;
-            $actual['talla_fuente'] = $frag;
-            unset($actual['heredado']['talla']);
-            $contextoAdulto = $this->ajustarGeneroPorTalla($actual, $valor, $contextoAdulto);
+            $ultimoFin = $i;
         }
 
         $lineas[] = $actual;
-        $lineas = array_values(array_filter($lineas, fn ($l) => $this->tieneDatos($l)));
 
-        // Una cantidad huerfana («negro dama M 2 unidades 3 unidades»): la linea nueva solo trae cantidad, sin color, talla
-        // ni numeros propios. No es otro producto: es una segunda cantidad del anterior → contradiccion, se pregunta.
-        $limpias = [];
+        return $this->asignarLineas($this->depurar($lineas));
+    }
+
+    /**
+     * Paso 1: lleva una pieza segura a la linea. Una pieza que la linea ya tenia la cierra y la siguiente empieza con ella,
+     * salvo los casos donde eso inventaria un producto (tipos o SKU contradictorios, tipo entre dos prendas).
+     */
+    private function aplicarPieza(array &$actual, array &$lineas, array $t, int $inicio, int $i, string $frag, string $tipo, mixed $valor, ?string &$contextoAdulto, int $ultimoFin): void
+    {
+        $cerrar = function (array $heredar) use (&$actual, &$lineas) {
+            $lineas[] = $actual;
+            $actual = $this->heredar($actual, $heredar);
+        };
+        $palabra = function (bool $repetida = false) use (&$actual, $frag) {
+            $actual['palabras'][] = $frag;
+            if ($repetida) {
+                $actual['repetidas'][] = $frag;
+            }
+        };
+
+        if ($tipo === 'numero') {
+            // El paso 2 decide si es talla o cantidad. No cierra la linea.
+            $actual['palabras'][] = $frag;
+            $actual['numeros'][] = $valor + ['texto' => $frag, 'ini' => $inicio, 'fin' => $i];
+
+            return;
+        }
+
+        if ($tipo === 'par_suelto') {
+            // «2 4» que no puede ser talla aqui («negro dama M 2 4»): dos numeros sueltos, sin linea fantasma de niño.
+            $actual['palabras'][] = $frag;
+            foreach ($valor as $k => $num) {
+                $actual['numeros'][] = $num + ['texto' => (string) $num['valor'], 'ini' => $inicio + $k, 'fin' => $inicio + $k];
+            }
+
+            return;
+        }
+
+        if ($tipo === 'sku' || $tipo === 'sku_invalido') {
+            // El SKU es un producto propio. Lo dicho antes que solo era cantidad («cinco 124H-DZ-M») es de este producto; si
+            // la linea ya tenia producto, se cierra. No hereda nada.
+            $previo = $actual;
+            $soloCantidad = ! $this->tieneProducto($actual);
+            if (! $soloCantidad && $this->tieneDatos($actual)) {
+                $cerrar([]);
+            }
+            $actual = $this->nueva();
+            if ($soloCantidad) {
+                foreach (['numeros', 'cantidad', 'cantidad_fuente', 'uno', 'palabras', 'sueltas'] as $campo) {
+                    $actual[$campo] = $previo[$campo];
+                }
+            }
+            $actual['palabras'][] = $frag;
+            $actual['ancla'] = $i;
+
+            if ($tipo === 'sku_invalido') {
+                $actual['skus_invalidos'][] = $valor;
+
+                return;
+            }
+
+            $actual['sku_dicho'] = $valor['sku'];
+            $actual['sku_fijo'] = $valor;
+            $actual['color'] = $valor['color'];
+            $actual['color_dicho'] = $frag;
+            $actual['genero'] = $valor['genero'];
+            $actual['genero_explicito'] = true;
+            $actual['genero_dicho'] = $frag;
+            $actual['linea'] = $valor['linea'];
+            if ($valor['talla'] !== null) {
+                $actual['talla'] = $valor['talla'];
+                $actual['talla_fuente'] = $frag;
+            } elseif ($valor['linea'] === 'TP') {
+                // Crop top sin talla: la decide el catalogo (si existe en M y Única, se pregunta).
+                $actual['talla'] = 'U';
+                $actual['talla_fuente'] = $frag;
+                $actual['heredado']['talla'] = true;
+                $actual['talla_asumida'] = true;
+            }
+            if ($valor['genero'] !== 'N') {
+                $contextoAdulto = $valor['genero'];
+            }
+
+            return;
+        }
+
+        if ($tipo === 'talla_invalida') {
+            $actual['palabras'][] = $frag;
+            $actual['tallas_invalidas'][] = $frag;
+            $actual['ancla'] = $i;
+
+            return;
+        }
+
+        // Un atributo despues de un SKU: si coincide no aporta nada; si no coincide y no empieza otro producto, se pregunta.
+        if ($actual['sku_fijo'] !== null && in_array($tipo, ['genero', 'color', 'talla', 'linea'], true)) {
+            $fijo = $actual['sku_fijo'];
+            $coincide = match ($tipo) {
+                'genero' => $valor === $fijo['genero'],
+                'color' => count($valor) === 1 && $valor[0] === $fijo['color'],
+                'talla' => $fijo['talla'] === null || $valor === $fijo['talla'],
+                'linea' => $fijo['linea'] === 'TP',
+            };
+
+            if ($coincide && ! ($tipo === 'talla' && $fijo['talla'] === null)) {
+                $palabra(true);
+
+                return;
+            }
+            if (! $coincide && (! $this->completa($actual) || ! $this->siguenPiezas($t, $i + 1))) {
+                $palabra();
+                $actual['sku_conflictos'][] = $frag;
+
+                return;
+            }
+            // SKU sin talla + talla dicha: la completa (abajo). SKU completo + otro producto: sigue la regla general.
+        }
+
+        if ($tipo === 'linea') {
+            // «top» fija linea, genero Dama y talla unica (blandas: una talla dicha despues las reemplaza).
+            if (($actual['linea'] === 'TP' && ! isset($actual['heredado']['linea'])) || ($this->completa($actual) && ! isset($actual['heredado']['talla']))) {
+                $cerrar(['genero']);
+            }
+            $actual['palabras'][] = $frag;
+            $actual['ancla'] = $i;
+            $actual['linea'] = 'TP';
+            unset($actual['heredado']['linea']);
+            $actual['genero'] = 'D';
+            if ($actual['talla'] === null || isset($actual['heredado']['talla'])) {
+                $actual['talla'] = 'U';
+                $actual['talla_fuente'] = $frag;
+                $actual['heredado']['talla'] = true;
+                $actual['talla_asumida'] = true;
+            }
+
+            return;
+        }
+
+        if ($tipo === 'uno') {
+            // «una camiseta roja talla M»: 1 expresado (decision A). Tras una linea completa empieza una nueva; tambien cuando
+            // la linea ya tiene su color y «una» viene delante de OTRO color («… negras L, una blanca S»).
+            if ($this->completa($actual) || $actual['uno'] !== null || $actual['cantidad'] !== null
+                || ($valor['antes_de_color'] && $this->colorPropio($actual))) {
+                $cerrar(['genero', 'linea']);
+            }
+            $actual['palabras'][] = $frag;
+            $actual['ancla'] = $i;
+            $actual['uno'] = $frag;
+
+            return;
+        }
+
+        // La talla Única que se asume al decir «crop top» es blanda: una talla dicha despues la reemplaza aunque la linea ya
+        // tenga cantidad («tres crop top lila M» = M × 3; evaluacion ciega E41, 2026-11-26). Tras una pausa y con la prenda
+        // completa, la talla es otra prenda («crop top lila 3, M 2»).
+        if ($tipo === 'talla' && $actual['talla_asumida']
+            && ! ($this->completa($actual) && $this->haySeparador($t, $ultimoFin + 1, $inicio - 1))) {
+            $actual['palabras'][] = $frag;
+            $actual['ancla'] = $i;
+            $actual['talla'] = $valor;
+            $actual['talla_fuente'] = $frag;
+            $actual['talla_asumida'] = false;
+            unset($actual['heredado']['talla']);
+
+            return;
+        }
+
+        $campo = $tipo;
+        // Ya lo tiene propio, o lo tiene heredado pero la linea ya esta completa («negro M 10, XL 3 y blanco M 4»).
+        $propio = $this->tiene($actual, $campo) && (! isset($actual['heredado'][$campo]) || $this->completa($actual));
+
+        if ($tipo === 'genero') {
+            $this->aplicarGenero($actual, $cerrar, $palabra, $t, $inicio, $i, $frag, $valor, $contextoAdulto, $ultimoFin);
+
+            return;
+        }
+
+        if ($tipo === 'talla' && $propio && ! isset($actual['heredado']['talla']) && ! $this->completa($actual)) {
+            // «negro dama talla M talla L 3»: dos tallas para un producto que aun no tiene cantidad. No se elige en silencio
+            // ni se abre otra linea: se pregunta. La misma talla repetida («M dama M») no contradice nada.
+            $actual['palabras'][] = $frag;
+            $actual['ancla'] = $i;
+            if ($valor === $actual['talla']) {
+                $actual['repetidas'][] = $frag;
+            } else {
+                $actual['tallas_dobles'] = array_values(array_unique([...($actual['tallas_dobles'] ?: [$actual['talla_fuente']]), $frag]));
+            }
+
+            return;
+        }
+
+        if ($propio) {
+            $cerrar($tipo === 'color' ? ['genero', 'linea'] : ['color', 'genero', 'linea']);
+        }
+
+        $actual['palabras'][] = $frag;
+        $actual['ancla'] = $i;
+
+        if ($tipo === 'color') {
+            $actual['color'] = count($valor) === 1 ? $valor[0] : null;
+            $actual['candidatos'] = count($valor) === 1 ? [] : $valor;
+            $actual['color_dicho'] = $frag;
+            unset($actual['heredado']['color'], $actual['heredado']['candidatos']);
+
+            return;
+        }
+
+        if ($tipo === 'cantidad') {
+            $actual['cantidad'] = $valor;
+            $actual['cantidad_fuente'] = $frag;
+
+            return;
+        }
+
+        // Talla segura.
+        $actual['talla'] = $valor;
+        $actual['talla_fuente'] = $frag;
+        $actual['talla_asumida'] = false;
+        unset($actual['heredado']['talla']);
+        $contextoAdulto = $this->ajustarGeneroPorTalla($actual, $valor, $contextoAdulto);
+    }
+
+    /**
+     * El tipo (dama/caballero/niño) con alcance definido:
+     *  - Un tipo dicho en la linea manda sobre el heredado o el elegido en pantalla; vale para las prendas siguientes del mismo
+     *    dictado hasta que se diga otro (heredado, marcado como tal).
+     *  - Dos tipos distintos para la misma prenda, sin «no», se preguntan.
+     *  - Tras una prenda completa, un tipo seguido de OTRO color está entre dos prendas: es de la siguiente si ella no dice su
+     *    tipo y hubo pausa antes; de la anterior si la pausa fue despues o si la siguiente ya dice el suyo; sin pausas, la
+     *    anterior queda en duda (se pregunta) y la siguiente lo toma. Nunca se cambia en silencio el tipo de la anterior.
+     */
+    private function aplicarGenero(array &$actual, callable $cerrar, callable $palabra, array $t, int $inicio, int $i, string $frag, string $valor, ?string &$contextoAdulto, int $ultimoFin): void
+    {
+        // El crop top dicho en ESTA linea ya es de dama: «dama» no agrega nada; otro tipo es de la prenda siguiente (si sigue
+        // otra) o una contradicción (si no).
+        if ($actual['linea'] === 'TP' && ! isset($actual['heredado']['linea'])) {
+            if ($valor === 'D' && ! ($this->completa($actual) && $this->siguenPiezas($t, $i + 1))) {
+                $palabra(true);
+
+                return;
+            }
+            if (! ($this->completa($actual) && $this->siguenPiezas($t, $i + 1))) {
+                $palabra();
+                $actual['tipos_dobles'] = array_values(array_unique(['crop top', $frag]));
+
+                return;
+            }
+            $cerrar([]);
+        }
+
+        $propioExplicito = $actual['genero'] !== null && $actual['genero_explicito'] && ! isset($actual['heredado']['genero']);
+
+        if ($propioExplicito && $valor === $actual['genero']) {
+            $palabra(true);
+
+            return;
+        }
+
+        if ($propioExplicito && $this->completa($actual)) {
+            if (! $this->siguenPiezas($t, $i + 1)) {
+                // «negro dama M 2 caballero»: un tipo distinto al final, sin otra prenda despues → se pregunta.
+                $palabra();
+                $actual['tipos_dobles'] = array_values(array_unique([...($actual['tipos_dobles'] ?: [$actual['genero_dicho']]), $frag]));
+
+                return;
+            }
+            // «negro dama M 2 caballero L 3»: otra prenda del mismo color con otro tipo.
+            $cerrar(['color']);
+        } elseif ($propioExplicito) {
+            // «terracota dama caballero XL 4»: dos tipos para la misma prenda.
+            $palabra();
+            $actual['tipos_dobles'] = array_values(array_unique([...($actual['tipos_dobles'] ?: [$actual['genero_dicho']]), $frag]));
+
+            return;
+        } elseif ($this->completa($actual) && ($this->colorPropio($actual) || $actual['sku_dicho'] !== null)
+            && ($siguiente = $this->siguienteProducto($t, $i + 1)) !== null) {
+            // Solo hay «dos prendas» si la anterior ya tiene su color: «una XL dama roja» es UNA prenda (roja la completa).
+            $pausaAntes = $this->haySeparador($t, $ultimoFin + 1, $inicio - 1);
+            $destino = match (true) {
+                $siguiente['con_tipo'] => 'anterior',
+                $pausaAntes && ! $siguiente['pausa'] => 'siguiente',
+                ! $pausaAntes && $siguiente['pausa'] => 'anterior',
+                default => 'duda',
+            };
+
+            if ($destino !== 'anterior') {
+                if ($destino === 'duda') {
+                    $actual['tipo_dudoso'] = $frag;
+                    $actual['genero'] = null;
+                    $actual['genero_explicito'] = false;
+                    $actual['genero_dicho'] = null;
+                    unset($actual['heredado']['genero']);
+                }
+                $cerrar([]);
+            }
+        }
+
+        // Decir el tipo es hablar de la camiseta (DZ): el crop top heredado de la prenda anterior no sigue
+        // («crop top negro M 5 y roja dama M 2» → la roja es camiseta de dama; propiedad «otra prenda no cambia», 2026-11-26).
+        if (isset($actual['heredado']['linea'])) {
+            $actual['linea'] = 'DZ';
+            unset($actual['heredado']['linea']);
+            if ($actual['talla_asumida'] || isset($actual['heredado']['talla'])) {
+                $actual['talla'] = null;
+                $actual['talla_fuente'] = null;
+                $actual['talla_asumida'] = false;
+                unset($actual['heredado']['talla']);
+            }
+        }
+
+        $actual['palabras'][] = $frag;
+        $actual['ancla'] = $i;
+        $actual['genero'] = $valor;
+        $actual['genero_explicito'] = true;
+        $actual['genero_dicho'] = $frag;
+        unset($actual['heredado']['genero']);
+        if ($valor !== 'N') {
+            $contextoAdulto = $valor;
+        }
+    }
+
+    /**
+     * Despues del paso 1: descarta lineas sin datos (sus palabras sueltas pasan a la linea vecina para no perderlas) y une la
+     * cantidad huerfana a su linea («negro dama M 2 unidades 3 unidades» = dos cantidades del mismo producto → se pregunta).
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private function depurar(array $lineas): array
+    {
+        $con = [];
+        $sueltasPendientes = [];
+
         foreach ($lineas as $l) {
+            if (! $this->tieneDatos($l)) {
+                array_push($sueltasPendientes, ...$l['sueltas']);
+                if ($con !== [] && ($l['correccion'] !== null || $l['negado'] !== null)) {
+                    $con[count($con) - 1]['correccion_dudosa'][] = $l['correccion']['marca'] ?? $l['negado']['frag'];
+                }
+
+                continue;
+            }
+            if ($sueltasPendientes !== []) {
+                $destino = $con === [] ? null : count($con) - 1;
+                if ($destino === null) {
+                    $l['sueltas'] = [...$sueltasPendientes, ...$l['sueltas']];
+                } else {
+                    array_push($con[$destino]['sueltas'], ...$sueltasPendientes);
+                }
+                $sueltasPendientes = [];
+            }
+            $con[] = $l;
+        }
+
+        if ($sueltasPendientes !== []) {
+            if ($con === []) {
+                // Nada reconocible: una linea que muestra lo que no se entendio (nunca una respuesta vacia en silencio).
+                $vacia = $this->nueva();
+                $vacia['sueltas'] = $sueltasPendientes;
+                $vacia['palabras'] = $sueltasPendientes;
+                $con[] = $vacia;
+            } else {
+                array_push($con[count($con) - 1]['sueltas'], ...$sueltasPendientes);
+            }
+        }
+
+        $limpias = [];
+        foreach ($con as $l) {
             $huerfana = $limpias !== [] && $l['cantidad'] !== null && $l['numeros'] === [] && $l['uno'] === null && $l['tallas_invalidas'] === []
+                && $l['sku_dicho'] === null && $l['skus_invalidos'] === []
                 && ($l['color'] === null && $l['candidatos'] === [] || isset($l['heredado']['color']))
                 && ($l['talla'] === null || isset($l['heredado']['talla']))
                 && ! ($l['linea'] === 'TP' && ! isset($l['heredado']['linea']));
@@ -353,7 +664,7 @@ final class InterpreteDictado
             $limpias[] = $l;
         }
 
-        return $this->asignarLineas($limpias);
+        return $limpias;
     }
 
     /**
@@ -436,19 +747,30 @@ final class InterpreteDictado
             return ['unica_completa' => ! $faltaTalla && ! $faltaCantidad] + $base;
         }
 
-        // Lecturas de talla (cada una usa uno o dos numeros) — solo alias de niño y solo si la linea admite niño.
-        $tallas = [['usa' => [], 'codigo' => null, 'fuente' => null, 'debil' => false]];
+        // Lecturas de talla (cada una usa uno o dos numeros) — solo si la linea admite niño: alias pegados (24, 68, 1012, 1416),
+        // pares («6.8», «6 y 8») y el codigo suelto del inicio del rango (2, 6, 10, 14: «rojo 10 niño» → ¿talla 10-12 o 10
+        // unidades?). El codigo suelto es la lectura mas debil: nunca parte un par que forma rango ni gana a un alias o un par.
+        $tallas = [['usa' => [], 'codigo' => null, 'fuente' => null, 'debil' => false, 'suelto' => false]];
         if ($faltaTalla && $this->admiteNino($l)) {
+            $hayPar = false;
+            foreach ($nums as $j => $x) {
+                $sig = $nums[$j + 1] ?? null;
+                $hayPar = $hayPar || ($sig !== null && $x['clase'] === 'entero' && $sig['clase'] === 'entero' && $this->esRango($x['valor'], $sig['valor']))
+                    || ($x['clase'] === 'compuesto' && $this->esRango($x['a'], $x['b']));
+            }
             foreach ($nums as $j => $x) {
                 if ($x['clase'] === 'entero' && isset(self::ALIAS_PEGADOS[(string) $x['valor']])) {
-                    $tallas[] = ['usa' => [$j], 'codigo' => self::ALIAS_PEGADOS[(string) $x['valor']], 'fuente' => $x['texto'], 'debil' => false];
+                    $tallas[] = ['usa' => [$j], 'codigo' => self::ALIAS_PEGADOS[(string) $x['valor']], 'fuente' => $x['texto'], 'debil' => false, 'suelto' => false];
+                }
+                if (! $hayPar && $x['clase'] === 'entero' && isset(self::RANGOS_NINO[$x['valor']])) {
+                    $tallas[] = ['usa' => [$j], 'codigo' => (string) $x['valor'], 'fuente' => $x['texto'], 'debil' => false, 'suelto' => true];
                 }
                 if ($x['clase'] === 'compuesto' && $this->esRango($x['a'], $x['b'])) {
-                    $tallas[] = ['usa' => [$j], 'codigo' => (string) $x['a'], 'fuente' => $x['texto'], 'debil' => true];
+                    $tallas[] = ['usa' => [$j], 'codigo' => (string) $x['a'], 'fuente' => $x['texto'], 'debil' => true, 'suelto' => false];
                 }
                 $sig = $nums[$j + 1] ?? null;
                 if ($sig !== null && $x['clase'] === 'entero' && $sig['clase'] === 'entero' && $this->esRango($x['valor'], $sig['valor'])) {
-                    $tallas[] = ['usa' => [$j, $j + 1], 'codigo' => (string) $x['valor'], 'fuente' => $x['texto'].' '.$sig['texto'], 'debil' => true];
+                    $tallas[] = ['usa' => [$j, $j + 1], 'codigo' => (string) $x['valor'], 'fuente' => $x['texto'].' '.$sig['texto'], 'debil' => true, 'suelto' => false];
                 }
             }
         }
@@ -484,6 +806,14 @@ final class InterpreteDictado
             $lecturas = $sinInvalida;
         }
 
+        // El codigo suelto no compite con un alias o un par que completan la linea («roja 68 niño 10» = 6-8 × 10).
+        $fuerte = array_filter($lecturas, fn ($x) => $x['completa'] && $x['t']['codigo'] !== null && ! $x['t']['suelto']);
+        if ($fuerte !== []) {
+            $lecturas = array_values(array_filter($lecturas, fn ($x) => ! ($x['completa'] && $x['t']['suelto'])));
+        }
+
+        // Dos lecturas con el mismo resultado solo salen de numeros iguales («68 68»): puede ser eco del dictado → se confirma.
+
         // Las lecturas con talla van primero (la pantalla las ofrece en ese orden).
         usort($lecturas, fn ($x, $y) => ($y['t']['codigo'] !== null) <=> ($x['t']['codigo'] !== null));
         $completas = array_values(array_filter($lecturas, fn ($x) => $x['completa']));
@@ -501,12 +831,19 @@ final class InterpreteDictado
         }
 
         if ($lecturas !== []) {
-            return ['opciones' => array_map(fn ($x) => [
-                'talla' => $x['t']['codigo'] ?? $l['talla'],
-                'talla_etiqueta' => self::etiquetaTalla($x['t']['codigo'] ?? $l['talla']),
-                'cantidad' => $x['c']['valor'] ?? ($l['cantidad']['valor'] ?? null),
-                'fuente' => trim(($x['t']['fuente'] ?? '').' '.($x['c']['fuente'] ?? '')),
-            ], $completas !== [] ? $completas : $lecturas), 'sin_asignar' => array_column($nums, 'texto')] + $base;
+            $opciones = [];
+            foreach ($completas !== [] ? $completas : $lecturas as $x) {
+                $o = [
+                    'talla' => $x['t']['codigo'] ?? $l['talla'],
+                    'talla_etiqueta' => self::etiquetaTalla($x['t']['codigo'] ?? $l['talla']),
+                    'cantidad' => $x['c']['valor'] ?? ($l['cantidad']['valor'] ?? null),
+                    'fuente' => trim(($x['t']['fuente'] ?? '').' '.($x['c']['fuente'] ?? '')),
+                ];
+                // La pantalla muestra cada resultado una vez («68 68» → un solo botón «talla 6-8 y 68 unidades» para confirmar).
+                $opciones[json_encode([$o['talla'], $o['cantidad']])] ??= $o;
+            }
+
+            return ['opciones' => array_values($opciones), 'sin_asignar' => array_column($nums, 'texto')] + $base;
         }
 
         return ['sin_asignar' => array_column($nums, 'texto')] + $base;
@@ -523,9 +860,17 @@ final class InterpreteDictado
             return [null, 1];
         }
 
-        // SKU dictado («124H-DZ-M», «124h dz m»): color + tipo + linea + talla de un solo golpe.
+        // SKU dictado («124H-DZ-M», «124h dz m»): color + tipo + linea + talla de un solo golpe; o algo con forma de codigo
+        // que no es del catalogo (se marca, nunca se ignora).
         if (($sku = $this->skuEn($t, $i)) !== null) {
-            return [['sku', $sku[0]], $sku[1]];
+            return [[$sku[0], $sku[1]], $sku[2]];
+        }
+
+        if (in_array($tok, self::MARCAS_CORRECCION, true)) {
+            return [['correccion', $tok], 1];
+        }
+        if ($tok === 'o' && $sig === 'sea') {
+            return [['correccion', 'o sea'], 2];
         }
 
         // «talla …»: el marcador manda (talla 6 = 6-8, talla 68 = 6-8, talla 6 8, talla 6.8, talla S, talla ese, talla doble equis ele).
@@ -582,12 +927,15 @@ final class InterpreteDictado
             return [['talla', 'U'], 1];
         }
 
-        if (in_array($tok, ['un', 'una', 'uno'], true) && $sig !== null
-            && (in_array($sig, self::UNO_CON, true) || $this->colorEn($t, $i + 1) !== null
+        if (in_array($tok, ['un', 'una', 'uno'], true) && $sig !== null) {
+            $antesDeColor = $this->colorEn($t, $i + 1) !== null || ($sig === 'de' && isset($t[$i + 2]) && $this->colorEn($t, $i + 2) !== null);
+
+            if ($antesDeColor || in_array($sig, self::UNO_CON, true) || isset(self::GENEROS[$sig])
                 // «una XL dama roja», «una ESE …», «una equis ele …», «una 2XL …»: artículo + talla = 1 unidad.
                 || in_array($sig, ['ese', 'eme', 'ele'], true) || $this->tallaLetra($t, $i + 1) !== null
-                || ($sig === 'de' && isset($t[$i + 2]) && (in_array($t[$i + 2], ['ese', 'eme', 'ele'], true) || $this->colorEn($t, $i + 2) !== null)))) {
-            return [['uno', 1], 1];
+                || ($sig === 'de' && isset($t[$i + 2]) && (in_array($t[$i + 2], ['ese', 'eme', 'ele'], true) || isset(self::GENEROS[$t[$i + 2]])))) {
+                return [['uno', ['antes_de_color' => $antesDeColor]], 1];
+            }
         }
 
         if (isset(self::GENEROS[$tok])) {
@@ -608,40 +956,223 @@ final class InterpreteDictado
         return [null, 1];
     }
 
-    /** @return ?array{0: string, 1: int} talla y tokens que ocupa despues de «talla» */
     /**
-     * @return array{0: array{color: string, genero: string, linea: string, talla: ?string}, 1: int}|null  valor y tokens consumidos
+     * SKU del codigo unico (Doc. 33): «124H-DZ-M», «124h-dz», «124h dz m». Devuelve ['sku', valor, tokens] con el texto del
+     * codigo tal como se dijo (el resolutor lo busca EXACTO), o ['sku_invalido', texto, tokens] si tiene forma de codigo pero
+     * no es del catalogo (otro color, otra tela/linea, talla inexistente). null si no parece un codigo.
+     *
+     * @return array{0: string, 1: mixed, 2: int}|null
      */
     private function skuEn(array $t, int $i): ?array
     {
-        if ($this->codigos === []) {
-            return null;
-        }
-
         $tok = $t[$i];
         $consumidos = 1;
-        $talla = null;
+        $tallaDicha = null;
 
         if (preg_match('/^(\d{3})([dhn])-(dz|tp)(?:-([a-z0-9]{1,3}))?$/', $tok, $m)) {
-            $talla = isset($m[4]) && $m[4] !== '' ? $this->tallaDeSku($m[4]) : null;
-            if (isset($m[4]) && $m[4] !== '' && $talla === null) {
-                return null;
-            }
+            $tallaDicha = ($m[4] ?? '') !== '' ? $m[4] : null;
         } elseif (preg_match('/^(\d{3})([dhn])$/', $tok, $m) && in_array($t[$i + 1] ?? null, ['dz', 'tp'], true)) {
             $m[3] = $t[$i + 1];
             $consumidos = 2;
-            if (($cand = $t[$i + 2] ?? null) !== null && ($tc = $this->tallaDeSku($cand)) !== null) {
-                $talla = $tc;
+            if (($cand = $t[$i + 2] ?? null) !== null && $this->tallaDeSku($cand) !== null) {
+                $tallaDicha = $cand;
                 $consumidos = 3;
             }
+        } elseif (preg_match('/^\d{3}[a-z]{1,2}-[a-z0-9]{1,4}(?:-[a-z0-9]{1,4})?$/', $tok)) {
+            return ['sku_invalido', strtoupper($tok), 1];
         } else {
             return null;
         }
 
+        $texto = strtoupper(implode('-', array_filter([$m[1].$m[2], $m[3], $tallaDicha], fn ($x) => $x !== null)));
         $color = $this->codigos[(int) $m[1]] ?? null;
+        $talla = $tallaDicha === null ? null : $this->tallaDeSku($tallaDicha);
 
-        return $color === null ? null
-            : [['color' => $color, 'genero' => strtoupper($m[2]), 'linea' => strtoupper($m[3]), 'talla' => $talla], $consumidos];
+        if ($color === null || ($tallaDicha !== null && $talla === null)) {
+            return ['sku_invalido', $texto, $consumidos];
+        }
+
+        return ['sku', ['color' => $color, 'genero' => strtoupper($m[2]), 'linea' => strtoupper($m[3]), 'talla' => $talla, 'sku' => $texto], $consumidos];
+    }
+
+    /** Clave para reconocer la misma pieza dicha dos veces seguidas (los numeros no: «2 2» se revisa). */
+    private function clavePieza(string $tipo, mixed $valor): ?string
+    {
+        return match ($tipo) {
+            'color' => 'color:'.implode('|', (array) $valor),
+            'genero' => 'genero:'.$valor,
+            'talla' => 'talla:'.$valor,
+            'linea' => 'linea:'.$valor,
+            'uno' => 'uno',
+            default => null,
+        };
+    }
+
+    /** Campo que corrige una pieza: lo que «no» / «mejor» puede reemplazar. */
+    private function familia(string $tipo): ?string
+    {
+        return match ($tipo) {
+            'color' => 'color',
+            'genero' => 'genero',
+            'talla', 'talla_invalida' => 'talla',
+            'numero', 'cantidad', 'uno' => 'cantidad',
+            'linea' => 'linea',
+            default => null,
+        };
+    }
+
+    /**
+     * Aplica una corrección: la pieza nueva reemplaza a la del mismo campo que la linea ya tenia. Devuelve lo que se reemplazo
+     * (para mostrarlo) o null si no habia nada de ese campo que corregir.
+     */
+    private function reemplazar(array &$l, string $tipo, mixed $valor, string $frag, int $inicio, int $i): ?string
+    {
+        if ($tipo === 'color' && $this->colorPropio($l)) {
+            $antes = (string) $l['color_dicho'];
+            $l['color'] = count($valor) === 1 ? $valor[0] : null;
+            $l['candidatos'] = count($valor) === 1 ? [] : $valor;
+            $l['color_dicho'] = $frag;
+
+            return $antes;
+        }
+
+        if ($tipo === 'genero' && $l['genero'] !== null && ! isset($l['heredado']['genero'])) {
+            $antes = (string) ($l['genero_dicho'] ?? $l['genero']);
+            $l['genero'] = $valor;
+            $l['genero_explicito'] = true;
+            $l['genero_dicho'] = $frag;
+            $l['tipos_dobles'] = [];
+
+            return $antes;
+        }
+
+        if ($tipo === 'talla' && $l['talla'] !== null && ! isset($l['heredado']['talla'])) {
+            $antes = (string) $l['talla_fuente'];
+            $l['talla'] = $valor;
+            $l['talla_fuente'] = $frag;
+            $l['talla_asumida'] = false;
+            $l['tallas_dobles'] = [];
+
+            return $antes;
+        }
+
+        if (in_array($tipo, ['numero', 'cantidad', 'uno'], true)) {
+            $nuevo = match ($tipo) {
+                'numero' => ['cantidad' => $this->valorCantidad($valor, $frag)],
+                'cantidad' => ['cantidad' => $valor],
+                'uno' => ['uno' => $frag],
+            };
+
+            if ($l['numeros'] !== []) {
+                $antes = (string) end($l['numeros'])['texto'];
+                array_pop($l['numeros']);
+            } elseif ($l['cantidad'] !== null) {
+                $antes = (string) $l['cantidad_fuente'];
+            } elseif ($l['uno'] !== null) {
+                $antes = (string) $l['uno'];
+            } else {
+                return null;
+            }
+
+            // La cantidad corregida queda firme (con su texto), sin competir con la anterior.
+            $l['cantidad'] = $nuevo['cantidad'] ?? null;
+            $l['cantidad_fuente'] = isset($nuevo['cantidad']) ? $frag : null;
+            $l['uno'] = $nuevo['uno'] ?? null;
+            $l['cantidades_extra'] = [];
+
+            return $antes;
+        }
+
+        return null;
+    }
+
+    /** La linea tiene producto propio (no solo cantidad o datos heredados). */
+    private function tieneProducto(array $l): bool
+    {
+        return $this->colorPropio($l)
+            || ($l['talla'] !== null && ! isset($l['heredado']['talla']))
+            || ($l['genero'] !== null && $l['genero_explicito'] && ! isset($l['heredado']['genero']))
+            || ($l['linea'] === 'TP' && ! isset($l['heredado']['linea']))
+            || $l['sku_dicho'] !== null || $l['skus_invalidos'] !== [] || $l['tallas_invalidas'] !== [];
+    }
+
+    private function colorPropio(array $l): bool
+    {
+        return ($l['color'] !== null || $l['candidatos'] !== []) && ! isset($l['heredado']['color']);
+    }
+
+    /** ¿Queda alguna pieza (color, talla, cantidad, tipo, SKU) despues de $j? */
+    private function siguenPiezas(array $t, int $j): bool
+    {
+        $vacia = $this->nueva();
+        for ($k = $j, $n = count($t); $k < $n; $k++) {
+            [$p, $c] = $this->pieza($t, $k, $vacia);
+            if ($p !== null && $p[0] !== 'correccion') {
+                return true;
+            }
+            $k += max(1, $c) - 1;
+        }
+
+        return false;
+    }
+
+    /**
+     * Mira la prenda que empieza despues de un tipo: null si lo siguiente no es otra prenda (un color o un SKU, con o sin
+     * cantidad delante). Si lo es: si hubo pausa («,» «.» «y») antes de ella y si dice su propio tipo.
+     *
+     * @return array{pausa: bool, con_tipo: bool}|null
+     */
+    private function siguienteProducto(array $t, int $j): ?array
+    {
+        $pausa = false;
+        $vacia = $this->nueva();
+
+        for ($k = $j, $n = count($t); $k < $n; $k++) {
+            if (in_array($t[$k], ['|', 'y'], true)) {
+                $pausa = true;
+
+                continue;
+            }
+            [$p, $c] = $this->pieza($t, $k, $vacia);
+            if ($p === null) {
+                continue;
+            }
+            if (in_array($p[0], ['numero', 'uno', 'cantidad'], true)) {
+                $k += max(1, $c) - 1;
+
+                continue;
+            }
+            if (! in_array($p[0], ['color', 'sku', 'sku_invalido'], true)) {
+                return null;
+            }
+
+            $conTipo = $p[0] !== 'color';
+            for ($m = $k + max(1, $c); ! $conTipo && $m < $n; $m++) {
+                [$q, $d] = $this->pieza($t, $m, $vacia);
+                if ($q !== null && in_array($q[0], ['color', 'sku', 'sku_invalido'], true)) {
+                    break;
+                }
+                if ($q !== null && in_array($q[0], ['genero', 'linea'], true)) {
+                    $conTipo = true;
+                }
+                $m += max(1, $d) - 1;
+            }
+
+            return ['pausa' => $pausa, 'con_tipo' => $conTipo];
+        }
+
+        return null;
+    }
+
+    private function haySeparador(array $t, int $desde, int $hasta): bool
+    {
+        for ($k = max(0, $desde); $k <= $hasta; $k++) {
+            if (in_array($t[$k] ?? null, ['|', 'y'], true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** Codigo de talla del SKU en minuscula («m», «xl», «6», «u») → codigo oficial, o null si no es una talla del catalogo. */
@@ -976,7 +1507,11 @@ final class InterpreteDictado
     {
         return ['color' => null, 'candidatos' => [], 'color_dicho' => null, 'genero' => null, 'genero_explicito' => false, 'genero_dicho' => null,
             'linea' => 'DZ', 'talla' => null, 'talla_fuente' => null, 'cantidad' => null, 'cantidad_fuente' => null, 'uno' => null,
-            'numeros' => [], 'tallas_invalidas' => [], 'tallas_dobles' => [], 'cantidades_extra' => [], 'palabras' => [], 'heredado' => [], 'ancla' => -1];
+            'numeros' => [], 'tallas_invalidas' => [], 'tallas_dobles' => [], 'cantidades_extra' => [], 'palabras' => [], 'heredado' => [], 'ancla' => -1,
+            // Jornada 2026-11-26: palabras no usadas, repeticiones, correcciones, tipos y SKU.
+            'sueltas' => [], 'repetidas' => [], 'correccion' => null, 'negado' => null, 'correcciones' => [], 'correccion_dudosa' => [],
+            'ultima' => null, 'tipos_dobles' => [], 'tipo_dudoso' => null, 'sku_dicho' => null, 'sku_fijo' => null, 'skus_invalidos' => [],
+            'sku_conflictos' => [], 'talla_asumida' => false];
     }
 
     /** Linea nueva que hereda (en blando) los campos indicados de la anterior. */
@@ -1030,7 +1565,9 @@ final class InterpreteDictado
         }
 
         return $l['numeros'] !== [] || $l['tallas_invalidas'] !== [] || $l['uno'] !== null
-            || ($l['linea'] === 'TP' && ! isset($l['heredado']['linea']));
+            || ($l['linea'] === 'TP' && ! isset($l['heredado']['linea']))
+            || $l['sku_dicho'] !== null || $l['skus_invalidos'] !== [] || $l['tipo_dudoso'] !== null
+            || ($l['genero'] !== null && $l['genero_explicito'] && ! isset($l['heredado']['genero']) && $l['tipos_dobles'] !== []);
     }
 
     /** Agrega a una linea ya armada numeros que no encajaron en ninguna parte. */
@@ -1121,12 +1658,69 @@ final class InterpreteDictado
             $problemas[] = self::NUMEROS_SIN_ASIGNAR;
         }
 
+        // Tipo: dos distintos en la misma prenda, o uno dicho entre dos prendas sin saber de cual es.
+        $genero = $l['genero'];
+        if ($l['tipos_dobles'] !== []) {
+            $problemas[] = self::TIPO_CONTRADICTORIO;
+            $detalle['tipos_dobles'] = $l['tipos_dobles'];
+            $genero = null;
+        }
+        if ($l['tipo_dudoso'] !== null) {
+            $problemas[] = self::TIPO_DUDOSO;
+            $detalle['tipo_dudoso'] = $l['tipo_dudoso'];
+        }
+
+        // Correcciones: las aplicadas se muestran; una corrección sin reemplazo claro se pregunta.
+        $dudosas = $l['correccion_dudosa'];
+        if ($l['correccion'] !== null) {
+            $dudosas[] = $l['correccion']['marca'];
+        }
+        if ($l['negado'] !== null) {
+            $dudosas[] = 'no '.$l['negado']['frag'];
+        }
+        if ($dudosas !== []) {
+            $problemas[] = self::CORRECCION_DUDOSA;
+            $detalle['correccion'] = array_values(array_unique($dudosas));
+        }
+        if ($l['correcciones'] !== []) {
+            $detalle['correcciones'] = $l['correcciones'];
+        }
+
+        // SKU: lo que tenia forma de codigo y no es del catalogo, o un atributo que lo contradice.
+        if ($l['skus_invalidos'] !== []) {
+            $problemas[] = self::SKU_NO_RECONOCIDO;
+            $detalle['skus_invalidos'] = $l['skus_invalidos'];
+        }
+        if ($l['sku_conflictos'] !== []) {
+            $problemas[] = self::SKU_CONTRADICTORIO;
+            $detalle['sku_conflictos'] = $l['sku_conflictos'];
+        }
+
+        // Lo que se dijo y no se uso (ni es palabra de apoyo) se muestra; las repeticiones tambien.
+        if ($l['sueltas'] !== []) {
+            $detalle['no_usadas'] = array_values(array_unique($l['sueltas']));
+        }
+        if ($l['repetidas'] !== []) {
+            $detalle['repetidas'] = $l['repetidas'];
+        }
+
+        // Sin datos de prenda (solo palabras no reconocidas): se dice que falta todo, nunca se devuelve vacio.
+        if ($problemas === [] && $l['color'] === null) {
+            $problemas[] = self::FALTA_COLOR;
+        }
+
         return [
             'texto' => trim(implode(' ', $l['palabras'])),
             'color' => $l['color'],
             'candidatos' => $l['candidatos'],
-            'genero' => $l['genero'],
-            'genero_explicito' => $l['genero_explicito'],
+            'genero' => $genero,
+            'genero_explicito' => $genero !== null && $l['genero_explicito'] && ! isset($l['heredado']['genero']),
+            // Contexto: el tipo vino de una prenda anterior del mismo dictado, o de una talla de niño.
+            'genero_heredado' => $genero !== null && isset($l['heredado']['genero']),
+            'genero_por_talla' => $genero === 'N' && ! $l['genero_explicito'] && ! isset($l['heredado']['genero']),
+            'sku_dicho' => $l['sku_dicho'],
+            // Crop top sin talla dicha: el resolutor decide con el catalogo (nunca asume Única si existe M).
+            'talla_asumida' => $l['talla_asumida'] && $talla === 'U',
             'linea' => $l['linea'],
             'talla' => $talla,
             'talla_etiqueta' => self::etiquetaTalla($talla),
