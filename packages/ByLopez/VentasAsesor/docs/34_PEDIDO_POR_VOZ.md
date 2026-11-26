@@ -164,8 +164,9 @@ ninguna para que pasara):
 | F evaluación ciega | 1.ª corrida: 93/95 líneas, **1 falso positivo** (E41 «tres crop top lila M» → Única). Corregido: 94/94; E41 ya no es ciega |
 | HTTP + catálogo | DIC01 12/12 · DIC04 4/4 |
 | Guardado y concurrencia | DIC02 8/8 · DIC03 2/2 (procesos PHP simultáneos) |
-| E regresión | ACL y menú 12 · seguridad de Nueva venta 6 · pantalla 4 · API 7 · Nueva venta 39: todas pasan, salida 0 |
-| D navegador (demo local, autenticación real) | flujo 26/26 · robustez de red 10/10 · micrófono simulado + móvil 390 px 18/18 · humo 17/17 |
+| E regresión | ACL y menú 12 · seguridad de Nueva venta 6 · pantalla 4 · API 7 · Nueva venta 39 · precios (contexto comercial 16, precio por grupo del carrito 17) · líneas del borrador 48 · solicitudes del borrador 29: todas pasan, salida 0 |
+| D navegador (demo local, autenticación real) | flujo 26/26 · robustez de red 10/10 · micrófono simulado + móvil 390 px 18/18 · humo 19/19 (incluye contraste ≥ 4,5 en claro y oscuro) |
+| Humo en pruebas.alpz (versión instalada, cuenta temporal de QA) | 17/17 sobre 6d918fb48f; el estado guardado en la base coincide (110D-DZ-M × 5, 106H-DZ-L × 3, 110N-DZ-10 × 1, 106D-TP-U × 2; dos operaciones aplicadas). Esa corrida destapó el texto del cuadro ilegible en modo oscuro (contraste 1,2): corregido y verificado otra vez en pruebas |
 
 ## 9. Evaluación de herramientas de código abierto (corregida el 2026-11-26)
 
@@ -175,14 +176,15 @@ expectativas.
 
 - Las dos aceptaciones incorrectas del prototipo del 2026-11-25 («talla M talla L 3» y «niño 68 68») venían de **mi capa
   semántica de integración**, no de phplrt ni de ICU. ICU solo causó aclaraciones de más («doscientas» → 2, «diez y seis» → 10).
-- B quedó **idéntico a A en 207/207 frases** (matriz común, evaluación ciega y frases de la jornada) después de corregir un defecto
+- B quedó **idéntico a A en 207/207 frases** (y en 1.035 comparaciones: cada frase con cada valor de «Si no digo el tipo»; matriz común, evaluación ciega y frases de la jornada) después de corregir un defecto
   propio de integración: la gramática unía «2 y 3» en una pieza y el adaptador usaba solo el primer número, así que el «3» se
   perdía y B aceptaba «Negro M × 2» (falso positivo). El riesgo es estructural: si la segmentación de la gramática no coincide
   exactamente con las reglas en PHP, se pierden datos en silencio.
 - Complejidad: B reemplaza `pieza()` (105 líneas) por adaptador (128) + gramática (127) + parser generado (1.091); el resto del
   intérprete (reglas de contexto, asignación, correcciones, ~1.700 líneas) sigue igual de necesario. Los colores salen del
   catálogo y no caben en una gramática compilada.
-- Rendimiento: B ≈ 1,4 veces más lento (0,76 frente a 0,56 ms por frase; 65 frente a 49 ms con 3.000 caracteres).
+- Rendimiento: B más lento en todas las corridas. Con el equipo libre (3 corridas): 0,26-0,30 frente a 0,35-0,62 ms por frase
+  (1,2 a 2,4 veces) y 22-42 frente a 34-70 ms con 3.000 caracteres. Las mediciones varían con la carga del equipo.
 - Dependencias: en producción `phplrt/runtime`; en desarrollo el compilador (trae laminas-code, symfony/console y twig) y
   regenerar el parser en cada cambio de gramática. phplrt 4.x corre en PHP 8.3; la rama 5 pide 8.4.
 - nearley (JavaScript, sin publicar desde 2023) y Fuse.js (solo sugerencias en el navegador) no se reconsideraron.
