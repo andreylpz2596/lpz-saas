@@ -36,6 +36,7 @@
             .nv-dic-config { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 13px; color: #374151; }
             .nv-dic-config select { border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 8px; font-size: 14px; background: #fff; color: #111827; min-height: 40px; }
             .nv-dic-texto { margin-top: 8px; width: 100%; border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 10px; font-size: 16px; background: transparent; color: inherit; }
+            .nv-dic-texto::placeholder { color: #6b7280; opacity: 1; }
             .nv-dic-texto--escuchando { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, .25); }
             .nv-dic-mic { margin-top: 4px; font-size: 12px; color: #4b5563; }
             .nv-dic-mic--escuchando { color: #1d4ed8; font-weight: 600; }
@@ -98,7 +99,9 @@
             html.dark .nv-dic-resumen b, html.dark .nv-dic-valor { color: #f9fafb; }
             html.dark .nv-dic-cabecera, html.dark .nv-dic-efectos { border-color: #374151; }
             html.dark .nv-dic-config select, html.dark .nv-dic-campo select, html.dark .nv-dic-campo input { background: #111827; color: #f9fafb; border-color: #4b5563; }
-            html.dark .nv-dic-texto { border-color: #4b5563; }
+            /* El cuadro hereda el color del body, que Bagisto no aclara en modo oscuro: sin esto el texto sale negro sobre #111827. */
+            html.dark .nv-dic-texto { border-color: #4b5563; color: #f9fafb; }
+            html.dark .nv-dic-texto::placeholder { color: #9ca3af; }
             html.dark .nv-dic-linea { background: #111827; border-color: #374151; }
             html.dark .nv-dic-linea--ok { background: #052e16; border-color: #166534; }
             html.dark .nv-dic-linea--aviso { background: #3a2a05; border-color: #92400e; }

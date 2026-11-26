@@ -123,4 +123,22 @@ async function perderProximaRespuesta(page, fragmentoUrl) {
     }, fragmentoUrl);
 }
 
-module.exports = { BASE, EVID, CRED, abrir, login, ventaConCliente, clicTexto, escribir, lineas, interpretar, esperarEstado, enLinea, foto, modoOscuro, perderProximaRespuesta };
+/** Contraste WCAG del texto de cada selector contra su fondo efectivo (espera a que terminen las transiciones de Bagisto). */
+async function contrastes(page, selectores) {
+    await new Promise((r) => setTimeout(r, 1000));
+    return page.evaluate((sels) => {
+        const rgb = (s) => (s.match(/[\d.]+/g) || []).map(Number);
+        const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+        const fondo = (el) => { for (let n = el; n; n = n.parentElement) { const c = rgb(getComputedStyle(n).backgroundColor); if (c.length === 3 || c[3] > 0.5) return c.slice(0, 3); } return [255, 255, 255]; };
+        const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return Math.round((x + 0.05) / (y + 0.05) * 10) / 10; };
+        const out = {};
+        for (const [k, s] of Object.entries(sels)) {
+            const [css, pseudo] = s.split("::");
+            const el = [...document.querySelectorAll(css)].find((e) => e.offsetParent !== null && ! e.disabled);
+            out[k] = el ? ratio(rgb(getComputedStyle(el, pseudo ? "::" + pseudo : null).color).slice(0, 3), fondo(el)) : null;
+        }
+        return out;
+    }, selectores);
+}
+
+module.exports = { BASE, EVID, CRED, abrir, login, ventaConCliente, clicTexto, escribir, lineas, interpretar, esperarEstado, enLinea, foto, modoOscuro, perderProximaRespuesta, contrastes };

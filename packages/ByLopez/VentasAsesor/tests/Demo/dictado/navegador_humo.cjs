@@ -87,7 +87,14 @@ const PREFIJO = process.env.PREFIJO || 'H';
         const ancho = await m.page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
         paso('movil 390 px: sin desborde horizontal', ancho[0] <= ancho[1], ancho);
         await c.foto(m.page, PREFIJO + '3_movil_390.png');
+        const SEL = { texto: '[data-venta="dictado-texto"]', ayudaCuadro: '[data-venta="dictado-texto"]::placeholder', dijo: '[data-venta="dictado-dijo"]',
+            mensaje: '[data-venta="dictado-mensaje"]', opcion: '[data-venta="dictado-opcion"]', corregir: '[data-venta="dictado-corregir"]', omitir: '[data-venta="dictado-omitir"]' };
+        const claro = await c.contrastes(m.page, SEL);
+        paso('claro: todos los textos del panel con contraste >= 4.5', Object.values(claro).every((r) => r !== null && r >= 4.5), claro);
         await c.modoOscuro(m.page, true);
+        const oscuro = await c.contrastes(m.page, SEL);
+        paso('oscuro: todos los textos del panel con contraste >= 4.5 (el texto dictado se lee)', Object.values(oscuro).every((r) => r !== null && r >= 4.5), oscuro);
+        await m.page.evaluate(() => document.querySelector('[data-venta="dictado-texto"]').scrollIntoView({ block: 'center' }));
         await c.foto(m.page, PREFIJO + '4_movil_390_oscuro.png');
         paso('sin errores de JavaScript (movil)', m.errores.length === 0, m.errores);
     } catch (e) {
