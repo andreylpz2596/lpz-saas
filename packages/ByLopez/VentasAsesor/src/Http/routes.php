@@ -61,6 +61,7 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
             Route::post('reactivar', [ClienteAccesoController::class, 'reactivar'])->name('reactivar');
             Route::post('desvincular', [ClienteAccesoController::class, 'desvincular'])->name('desvincular');
             Route::post('contrasena', [ClienteAccesoController::class, 'contrasena'])->name('contrasena');
+            Route::post('correo', [ClienteAccesoController::class, 'correo'])->name('correo');
         });
 
         // D-58: autocomplete de ubicaciones colombianas (catalogo DIVIPOLA local), reutilizable.

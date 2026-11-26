@@ -245,6 +245,44 @@ class ClienteAccesoService
         return $this->estado($customerId, $actor);
     }
 
+    /**
+     * Correo de INGRESO del usuario de autoservicio, cambiado por el administrador autorizado. El correo de la ficha del cliente
+     * no se toca. Unico entre todos los usuarios del panel; el evento guarda el anterior y el nuevo.
+     */
+    public function cambiarCorreo(int $customerId, AdminContract $actor, string $email): array
+    {
+        $this->exigirPermiso($actor);
+
+        if (! $this->autorizacion->esAdministradorAutorizado($actor)) {
+            throw new Invalido(Invalido::SOLO_ADMINISTRADOR);
+        }
+
+        $correo = Str::lower(trim($email));
+
+        if ($correo === '' || mb_strlen($correo) > 191 || ! filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+            throw new Invalido(Invalido::CORREO_INVALIDO);
+        }
+
+        DB::transaction(function () use ($customerId, $actor, $correo) {
+            $acceso = $this->bloquearVigente($customerId);
+            $usuario = Admin::query()->lockForUpdate()->find($acceso->admin_id) ?? throw new Invalido(Invalido::USUARIO_INEXISTENTE);
+            $anterior = (string) $usuario->email;
+
+            if (Str::lower($anterior) === $correo) {
+                return;
+            }
+
+            if (Admin::query()->whereKeyNot($usuario->id)->whereRaw('LOWER(email) = ?', [$correo])->exists()) {
+                throw new Invalido(Invalido::CORREO_EN_USO);
+            }
+
+            $usuario->forceFill(['email' => $correo, 'remember_token' => null])->save();
+            $this->evento($acceso, 'correo_cambiado', $actor, null, ['anterior' => $anterior, 'nuevo' => $correo]);
+        });
+
+        return $this->estado($customerId, $actor);
+    }
+
     /** Vinculo activo (no suspendido, no desvinculado) del usuario, o null. Lo usa el autoservicio (P3). */
     public function vinculoActivoDelUsuario(int $adminId): ?ClienteAcceso
     {
