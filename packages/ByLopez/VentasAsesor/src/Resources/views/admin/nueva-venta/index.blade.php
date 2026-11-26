@@ -139,6 +139,19 @@
                 .nv-matriz .nv-paso { width: 32px; }
                 .nv-matriz .nv-cantidad { width: 44px; }
             }
+
+            /* «Ver tallas» fijo bajo la cabecera en telefono y tableta vertical mientras haya colores elegidos (las
+               utilidades max-lg:* que lo pedian no existen en el CSS compilado del panel). La cabecera de Bagisto mide
+               49-53 px por debajo de 640 px y 61 px hasta 1023 px: la barra queda 1-5 px debajo de su borde, sin hueco.
+               Con poca altura (telefono en horizontal) no se fija para no tapar la lista. Necesita el ajuste movil
+               compartido: con el contenedor `overflow-x-hidden` de Bagisto la barra no se pega. */
+            @media (max-width: 1023px) and (min-height: 501px) {
+                .nv-cta-fija { position: sticky; top: 60px; z-index: 10; margin-left: -1rem; margin-right: -1rem; padding: .5rem 1rem; border-bottom: 1px solid #e5e7eb; background: #fff; }
+                :is(.dark) .nv-cta-fija { border-color: #1f2937; background: #111827; }
+            }
+            @media (max-width: 639px) and (min-height: 501px) {
+                .nv-cta-fija { top: 48px; }
+            }
         </style>
     @endPushOnce
 
@@ -699,7 +712,7 @@
                                          haya colores elegidos. -->
                                     <div
                                         class="mb-3 flex flex-wrap items-center gap-2.5"
-                                        :class="tarjetasPorColor.length ? 'max-lg:sticky max-lg:top-[60px] max-lg:z-10 max-lg:-mx-4 max-lg:border-b max-lg:bg-white max-lg:px-4 max-lg:py-2 max-lg:dark:border-gray-800 max-lg:dark:bg-gray-900' : ''"
+                                        :class="tarjetasPorColor.length ? 'nv-cta-fija' : ''"
                                         data-venta="cta-tallas"
                                     >
                                         <button
