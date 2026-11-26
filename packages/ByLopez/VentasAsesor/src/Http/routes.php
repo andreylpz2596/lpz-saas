@@ -10,6 +10,7 @@ use ByLopez\VentasAsesor\Http\Controllers\Admin\ComisionesController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\ControlCostosController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CotizacionController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\CreditoClienteController;
+use ByLopez\VentasAsesor\Http\Controllers\Admin\CupoCarteraController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\FacturaPedidoController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\GuiaPedidoController;
 use ByLopez\VentasAsesor\Http\Controllers\Admin\InicioController;
@@ -125,6 +126,14 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
         Route::post('cartera/credito/ajustes', [CreditoClienteController::class, 'ajustar'])->name('admin.ventas_asesor.cartera.credito.ajustar');
         Route::post('cartera/credito/ajustes/{ajuste}/reversar', [CreditoClienteController::class, 'reversarAjuste'])->whereNumber('ajuste')->name('admin.ventas_asesor.cartera.credito.ajuste_reversar');
 
+        // Doc. 35: cupo / limite de cartera por cliente. Cada hoja ACL autoriza SOLO su ruta; los servicios vuelven a validar permiso
+        // y la regla del administrador autorizado (un rol `all` cualquiera no basta).
+        Route::get('cartera/cupo/cliente/{cliente}', [CupoCarteraController::class, 'resumen'])->whereNumber('cliente')->name('admin.ventas_asesor.cartera.cupo.cliente');
+        Route::get('cartera/cupo/cliente/{cliente}/historial', [CupoCarteraController::class, 'historial'])->whereNumber('cliente')->name('admin.ventas_asesor.cartera.cupo.historial');
+        Route::post('cartera/cupo/cliente/{cliente}', [CupoCarteraController::class, 'editar'])->whereNumber('cliente')->name('admin.ventas_asesor.cartera.cupo.editar');
+        Route::post('cartera/cupo/cliente/{cliente}/exceso', [CupoCarteraController::class, 'exceso'])->whereNumber('cliente')->name('admin.ventas_asesor.cartera.cupo.exceso');
+        Route::post('cartera/cupo/exceso/{excepcion}/anular', [CupoCarteraController::class, 'excesoAnular'])->whereNumber('excepcion')->name('admin.ventas_asesor.cartera.cupo.exceso_anular');
+
         // ASESOR-01: listado (`view_all`) y ficha (`?asesor=ID`, o la propia con `view_own`); alta, edicion y estado
         // exigen la hoja ventas_asesor.asesores.manage.
         Route::get('asesores', [AsesoresController::class, 'index'])->name('admin.ventas_asesor.asesores.index');
@@ -196,6 +205,8 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
             Route::get('productos/{producto}/matriz', [NuevaVentaController::class, 'matriz'])->name('productos.matriz');
             Route::get('matrices', [NuevaVentaController::class, 'matrices'])->name('matrices');
             Route::get('clientes/{cliente}/direcciones', [NuevaVentaController::class, 'direccionesCliente'])->name('clientes.direcciones');
+            // Doc. 35: cupo de cartera del cliente (informativo). Sin la hoja cupo.ver responde `visible:false`, nunca 403.
+            Route::get('cupo/{cliente}', [CupoCarteraController::class, 'resumen'])->whereNumber('cliente')->name('cupo');
             // Cotizaciones: el PDF sale de la foto guardada; crear/listar son de UNA venta en curso.
             // Enlace del menu hacia Configuracion > Ventas Asesor > Cotizaciones (la pantalla es la de Bagisto, con su propio ACL).
             Route::get('cotizaciones/datos', [CotizacionController::class, 'datos'])->name('cotizaciones.datos');

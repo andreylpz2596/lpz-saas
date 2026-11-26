@@ -564,6 +564,11 @@ class ConfirmarVentaService
         $codigo = match ($e->codigo) {
             RechazoDelCerco::STOCK_INSUFICIENTE => Rechazo::STOCK_INSUFICIENTE,
             RechazoDelCerco::CONFIRMACION_OBSOLETA => Rechazo::CONFIRMACION_OBSOLETA,
+            // Doc. 35: el cupo se decide bajo bloqueo; la venta vuelve a `activo` (como con cualquier rechazo previo al pedido).
+            RechazoDelCerco::CUPO_EXCEDIDO => Rechazo::CUPO_EXCEDIDO,
+            RechazoDelCerco::CUPO_BLOQUEADO => Rechazo::CUPO_BLOQUEADO,
+            RechazoDelCerco::CUPO_SIN_ASIGNAR => Rechazo::CUPO_SIN_ASIGNAR,
+            RechazoDelCerco::CUPO_NO_VERIFICABLE => Rechazo::CUPO_NO_VERIFICABLE,
             default => Rechazo::CONFIRMACION_INCONSISTENTE,
         };
 

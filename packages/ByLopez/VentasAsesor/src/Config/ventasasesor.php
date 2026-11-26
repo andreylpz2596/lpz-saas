@@ -42,6 +42,21 @@ return [
         'medios_con_referencia' => ['transferencia'],
     ],
 
+    /*
+     * Cupo / limite de cartera por cliente (Doc. 35). `cupo_disponible = cupo_autorizado − exposicion_vigente`; la exposicion se DERIVA de
+     * Cartera, nunca se guarda.
+     *
+     * - `activo` = false (por defecto): el cupo NO bloquea ventas. Se puede consultar y administrar, pero el cerco de creacion de
+     *   pedidos no consulta nada. true = bloqueo duro dentro de la transaccion del pedido (cliente sin cupo, bloqueado o excedido).
+     * - `umbral_alerta_pct`: utilizacion desde la cual el estado pasa a «cerca del limite».
+     * - `dias_vigencia_excepcion`: vigencia de una autorizacion de exceso sin consumir.
+     */
+    'cupo' => [
+        'activo' => (bool) env('VENTASASESOR_CUPO_ACTIVO', false),
+        'umbral_alerta_pct' => (int) env('VENTASASESOR_CUPO_UMBRAL_ALERTA', 80),
+        'dias_vigencia_excepcion' => (int) env('VENTASASESOR_CUPO_DIAS_EXCEPCION', 2),
+    ],
+
     // Doc. 33 P4: valores por defecto del autoservicio del cliente frecuente (no elige entrega ni pago; no registra dinero).
     'autoservicio' => [
         'metodo_entrega' => 'pickup',

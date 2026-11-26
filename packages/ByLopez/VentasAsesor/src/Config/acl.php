@@ -104,6 +104,9 @@ return [
             'admin.ventas_asesor.nueva_venta.grupo.historial',
             // R2 (Doc. 23): advertencia de rentabilidad del propio borrador (sin costos para el asesor).
             'admin.ventas_asesor.nueva_venta.rentabilidad',
+            // Doc. 35: cupo de cartera del cliente en Nueva venta (informativo). Cualquiera que pueda vender puede PREGUNTAR; el
+            // controlador responde `visible:false` (200, sin 403) si no tiene la hoja `cartera.cupo.ver`, y las cifras solo con ella.
+            'admin.ventas_asesor.nueva_venta.cupo',
             // Cotizaciones de la venta en curso (crear, historial y PDF): quien puede crear una venta puede cotizarla.
             'admin.ventas_asesor.nueva_venta.cotizaciones.store',
             'admin.ventas_asesor.nueva_venta.cotizaciones.index',
@@ -355,6 +358,33 @@ return [
         'name' => 'ventasasesor::app.acl.credito-ajustar',
         'route' => [$inicio, 'admin.ventas_asesor.cartera.credito.ajustar', 'admin.ventas_asesor.cartera.credito.ajuste_reversar'],
         'sort' => 5,
+    ], [
+        // Doc. 35: cupo / limite de cartera por cliente. Hojas SEPARADAS (la agrupadora no autoriza nada); el servicio valida siempre y
+        // editar / autorizar exceso exigen ademas ser el administrador autorizado. Sin asignar a ningun rol.
+        'key' => 'ventas_asesor.cartera.cupo',
+        'name' => 'ventasasesor::app.acl.cupo',
+        'route' => $inicio,
+        'sort' => 8,
+    ], [
+        'key' => 'ventas_asesor.cartera.cupo.ver',
+        'name' => 'ventasasesor::app.acl.cupo-ver',
+        'route' => [$inicio, 'admin.ventas_asesor.cartera.cupo.cliente'],
+        'sort' => 1,
+    ], [
+        'key' => 'ventas_asesor.cartera.cupo.editar',
+        'name' => 'ventasasesor::app.acl.cupo-editar',
+        'route' => [$inicio, 'admin.ventas_asesor.cartera.cupo.editar'],
+        'sort' => 2,
+    ], [
+        'key' => 'ventas_asesor.cartera.cupo.historial',
+        'name' => 'ventasasesor::app.acl.cupo-historial',
+        'route' => [$inicio, 'admin.ventas_asesor.cartera.cupo.historial'],
+        'sort' => 3,
+    ], [
+        'key' => 'ventas_asesor.cartera.cupo.autorizar_exceso',
+        'name' => 'ventasasesor::app.acl.cupo-autorizar-exceso',
+        'route' => [$inicio, 'admin.ventas_asesor.cartera.cupo.exceso', 'admin.ventas_asesor.cartera.cupo.exceso_anular'],
+        'sort' => 4,
     ], [
         /*
          * ASESOR-01: ficha de asesores. Como `pedidos`, la agrupadora abre la pantalla (string, regla 3) y el

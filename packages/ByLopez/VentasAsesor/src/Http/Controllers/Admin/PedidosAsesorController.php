@@ -8,6 +8,7 @@ use ByLopez\VentasAsesor\Http\Requests\Pedidos\ListarPedidosAsesorRequest;
 use ByLopez\VentasAsesor\Services\Cartera\CarteraConsultaService;
 use ByLopez\VentasAsesor\Services\Comisiones\AvanceAsesorService;
 use ByLopez\VentasAsesor\Services\Credito\CreditoClienteService;
+use ByLopez\VentasAsesor\Services\Cupo\CupoCarteraClienteService;
 use ByLopez\VentasAsesor\Services\Pedidos\ConsultaPedidosAsesorService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Cartera\MediosCobro;
@@ -150,10 +151,17 @@ class PedidosAsesorController extends Controller
         }
 
         $filtros = $request->filtros();
+        $pedidos = $this->consulta->listar($alcance, $admin, $filtros, (int) $request->input('page', 1))->withQueryString();
+
+        // Doc. 35: alerta de cupo (cerca del limite, agotado, excedido, bloqueado) junto al cliente de cada fila. Solo con la hoja
+        // `cartera.cupo.ver`; un lote por pagina (una llamada a Cartera para todos los clientes de la pagina), y solo clientes CON cupo.
+        $alertasCupo = $this->autorizacion->puedeCupo($admin, AutorizacionVentasAsesor::PERMISO_CUPO_VER)
+            ? app(CupoCarteraClienteService::class)->alertasDeClientes(collect($pedidos->items())->pluck('customer_id')->filter()->all())
+            : [];
 
         return view('ventasasesor::admin.pedidos.index', $this->permisosDeEnvio($admin) + $this->tarjetaDeAvance($admin) + [
-            'pedidos' => $this->consulta->listar($alcance, $admin, $filtros, (int) $request->input('page', 1))
-                ->withQueryString(),
+            'pedidos' => $pedidos,
+            'alertasCupo' => $alertasCupo,
             'filtros' => $filtros,
             'indicadores' => $this->consulta->indicadores($alcance, $admin),
             'metodosEntrega' => $this->consulta->metodosEntrega($alcance, $admin),

@@ -13,7 +13,7 @@ uses(TestCase::class);
 test('la ACL del paquete se fusiona sin reemplazar la de Bagisto ni la de otros paquetes', function () {
     $claves = collect(config('acl'))->pluck('key')->all();
 
-    expect(va01_clavesAcl())->toHaveCount(56)
+    expect(va01_clavesAcl())->toHaveCount(61)
         ->and($claves)->toContain('dashboard')
         ->and($claves)->toContain('sales.orders.view')
         ->and($claves)->toContain('corte_confeccion');
@@ -67,6 +67,12 @@ test('el arbol ACL del modulo es exactamente el definido para VentasAsesor', fun
         'ventas_asesor.cartera.credito.reembolsar',
         'ventas_asesor.cartera.credito.reversar',
         'ventas_asesor.cartera.credito.ajustar',
+        // Doc. 35: cupo / limite de cartera por cliente.
+        'ventas_asesor.cartera.cupo',
+        'ventas_asesor.cartera.cupo.ver',
+        'ventas_asesor.cartera.cupo.editar',
+        'ventas_asesor.cartera.cupo.historial',
+        'ventas_asesor.cartera.cupo.autorizar_exceso',
         'ventas_asesor.cartera.reversar',
         // Doc. 33 P1: acceso de clientes al aplicativo (autoservicio).
         'ventas_asesor.clientes_acceso',
@@ -239,6 +245,8 @@ test('03G-C: la API de "nueva venta rapida" la autoriza el mismo permiso que Bor
         'admin.ventas_asesor.nueva_venta.confirmar',
         'admin.ventas_asesor.nueva_venta.pantalla',
         'admin.ventas_asesor.nueva_venta.en_curso',
+        // Doc. 35: el cupo del cliente en Nueva venta (informativo; sin la hoja cupo.ver responde visible:false, nunca 403).
+        'admin.ventas_asesor.nueva_venta.cupo',
         'admin.ventas_asesor.nueva_venta.clientes.direcciones',
         'admin.ventas_asesor.nueva_venta.eliminar',
         'admin.ventas_asesor.nueva_venta.direcciones.agregar',
@@ -248,7 +256,7 @@ test('03G-C: la API de "nueva venta rapida" la autoriza el mismo permiso que Bor
     }
 
     // No se duplico ninguna clave del modulo para lograrlo (las pruebas de conteo/arbol arriba lo exigen).
-    expect(va01_clavesAcl())->toHaveCount(56);
+    expect(va01_clavesAcl())->toHaveCount(61);
 });
 
 test('las claves del servicio existen en la ACL y ninguna clave usa guiones', function () {

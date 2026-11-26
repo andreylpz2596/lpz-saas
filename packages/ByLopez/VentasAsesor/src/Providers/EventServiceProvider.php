@@ -72,6 +72,10 @@ class EventServiceProvider extends ServiceProvider
         // R2/R3 (Doc. 23): snapshot de rentabilidad y lineas de comision estimadas. DESPUES del costo y de la atribucion (los lee).
         Event::listen(RegistrarRentabilidadYComision::EVENTO, RegistrarRentabilidadYComision::class.'@handle');
 
+        // Doc. 35 §8: liga la autorizacion de exceso de cupo consumida por el cerco con el pedido creado, en la misma transaccion. Va al
+        // FINAL de la cadena de ByLopez para no mover los indices que fija 03F-45; sin autorizacion consumida no hace nada.
+        Event::listen(\ByLopez\VentasAsesor\Listeners\VincularExcesoCupoAlPedido::EVENTO, \ByLopez\VentasAsesor\Listeners\VincularExcesoCupoAlPedido::class.'@handle');
+
         // Doc. 23 §10.2: hechos reales (entrega, cobro, dinero recibido, cancelacion, reembolso, atribucion) → bandeja de
         // reevaluacion de comisiones. Solo marca dentro de la transaccion del hecho; el calculo corre tras el commit.
         SolicitarReevaluacionComision::registrar();

@@ -62,6 +62,24 @@
 
     $nombreCliente = fn (object $pedido) => trim($pedido->customer_first_name.' '.$pedido->customer_last_name);
 
+    // Doc. 35: alerta de cupo del cliente de la fila (solo cerca del limite, agotado, excedido o bloqueado; `$alertasCupo` lo calcula el
+    // controlador por lote). Vacio si el actor no puede ver el cupo o el cliente no esta en alerta.
+    $alertasCupo = $alertasCupo ?? [];
+    $pillCupo = function (object $pedido) use ($alertasCupo): string {
+        $c = $alertasCupo[(int) ($pedido->customer_id ?? 0)] ?? null;
+
+        if ($c === null) {
+            return '';
+        }
+
+        $tono = $c->estado === 'cerca' ? 'amarillo' : 'rojo';
+        $texto = $c->estado === 'cerca'
+            ? trans('ventasasesor::cupo.alerta.cerca', ['pct' => rtrim(rtrim(number_format((float) $c->utilizacionPct, 1, ',', '.'), '0'), ',').' %'])
+            : trans('ventasasesor::cupo.alerta.'.$c->estado);
+
+        return '<a href="'.e(route('admin.ventas_asesor.cartera.index', ['cliente' => $c->customerId])).'" class="va-pill va-pill--sm va-pill--'.$tono.'" data-cupo-alerta-fila="'.e($c->estado).'" title="'.e(trans('ventasasesor::cupo.titulo')).'">'.e($texto).'</a>';
+    };
+
     $inicialesCliente = function (object $pedido) use ($nombreCliente): string {
         $nombre = $nombreCliente($pedido);
 
@@ -816,6 +834,7 @@
                                     <div class="min-w-0">
                                         <p class="truncate font-semibold text-gray-900 dark:text-white">{{ $nombreCliente($pedido) ?: '-' }}</p>
                                         <p class="truncate text-xs text-slate-500 dark:text-gray-400">{{ $pedido->telefono ?: trans('ventasasesor::app.pedidos.sin-telefono') }}</p>
+                                        {!! $pillCupo($pedido) !!}
                                     </div>
                                 </div>
                             </td>
@@ -900,6 +919,7 @@
                         <div class="min-w-0">
                             <p class="truncate font-semibold text-gray-900 dark:text-white">{{ $nombreCliente($pedido) ?: '-' }}</p>
                             <p class="truncate text-sm text-slate-500 dark:text-gray-400">{{ $pedido->telefono ?: trans('ventasasesor::app.pedidos.sin-telefono') }}</p>
+                            {!! $pillCupo($pedido) !!}
                         </div>
                     </div>
 

@@ -272,6 +272,53 @@
                     </div>
                 </div>
 
+                <!-- Doc. 35: cupo de cartera del cliente. INFORMATIVO: el servidor recalcula y decide al confirmar (cerco de creacion de pedidos). -->
+                <div
+                    v-if="cupoVista"
+                    class="mt-3 rounded-lg border p-3 text-sm"
+                    :class="cupoVista.clases.caja"
+                    data-cupo-nv
+                    :data-cupo-estado="cupoVista.estado"
+                    role="status"
+                >
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <p class="font-bold">
+                            @lang('ventasasesor::cupo.nueva_venta.titulo')
+                            <span class="ml-2 rounded-full px-2 py-0.5 text-xs font-bold" :class="cupoVista.clases.pill" data-cupo-nv-estado>@{{ cupoVista.etiqueta }}</span>
+                        </p>
+                        <p v-if="! cupoVista.bloqueoActivo" class="text-xs text-amber-800 dark:text-amber-200" data-cupo-nv-no-bloquea>@lang('ventasasesor::cupo.nueva_venta.no_bloquea')</p>
+                    </div>
+
+                    <dl class="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">@lang('ventasasesor::cupo.nueva_venta.autorizado')</dt>
+                            <dd class="font-bold" data-cupo-nv-autorizado>@{{ precio(cupoVista.autorizado) }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">@lang('ventasasesor::cupo.nueva_venta.utilizado')</dt>
+                            <dd class="font-bold" data-cupo-nv-utilizado>@{{ precio(cupoVista.exposicion) }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">@lang('ventasasesor::cupo.nueva_venta.disponible')</dt>
+                            <dd class="font-bold" data-cupo-nv-disponible>@{{ precio(cupoVista.disponible) }}</dd>
+                        </div>
+                        <div v-if="cupoVista.evaluacion">
+                            <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">@lang('ventasasesor::cupo.nueva_venta.nueva')</dt>
+                            <dd class="font-bold" data-cupo-nv-nueva>@{{ precio(cupoVista.evaluacion.nueva_obligacion) }}</dd>
+                        </div>
+                    </dl>
+
+                    <p v-if="cupoVista.evaluacion && ! cupoVista.mensaje" class="mt-2 font-semibold" data-cupo-nv-despues>
+                        @lang('ventasasesor::cupo.nueva_venta.despues'): @{{ precio(cupoVista.evaluacion.disponible_despues) }}
+                    </p>
+                    <p v-if="cupoVista.mensaje" class="mt-2 rounded-md px-3 py-2 font-bold" :class="cupoVista.clases.mensaje" role="alert" data-cupo-nv-alerta>
+                        @{{ cupoVista.mensaje }}
+                        <span v-if="cupoVista.ayuda" class="mt-0.5 block text-xs font-medium">@{{ cupoVista.ayuda }}</span>
+                    </p>
+                    <p v-if="cupoVista.cubierta" class="mt-2 rounded-md bg-green-100 px-3 py-2 font-semibold text-green-900 dark:bg-green-900 dark:text-green-100" data-cupo-nv-cubierta>@{{ cupoVista.cubierta }}</p>
+                    <p class="mt-2 text-xs opacity-70">@lang('ventasasesor::cupo.nueva_venta.informativo')</p>
+                </div>
+
                 <!-- Indicador de progreso (no es wizard: solo informa y permite saltar con scroll) -->
                 <div
                     v-if="borradorId"
@@ -2904,6 +2951,10 @@
 
                         // Doc. 34: pedido por voz (el navegador transcribe; el servidor interpreta, valida y agrega en una operacion idempotente).
                         dictado: { abierto: false, texto: '', mic: 'inactivo', micMensaje: null, cargando: false, agregando: false, lineas: [], colores: [], tallas: {}, catalogo: {}, catalogoError: null, error: null, hecho: null, incierto: null, operacion: null, enviadas: null, tipoDefecto: '', secuencia: 0, panelVisible: false },
+                        // Doc. 35: cupo de cartera del cliente (informativo; el servidor decide al confirmar). `cupoSolicitud` descarta respuestas viejas.
+                        cupoCliente: null,
+                        cupoSolicitud: 0,
+
 
                         cargando: {
                             cliente: false, colores: false, matrices: false, tallas: false, direccion: false,
@@ -3017,6 +3068,60 @@
                         const monto = Math.max(0, Number(this.creditoAplicar.monto) || 0);
 
                         return Math.max(0, Number(this.confirmacion?.total ?? 0) - monto);
+                    },
+
+                    /**
+                     * Doc. 35: lo que el panel de cupo PRESENTA. No decide nada: las cifras y la evaluacion vienen del servidor (la misma
+                     * decision que toma el cerco al confirmar); aqui solo se eligen textos y colores. La evaluacion solo se muestra si
+                     * corresponde al total ACTUAL de la venta (si no, se espera a la respuesta nueva en vez de mostrar una cifra vieja).
+                     */
+                    cupoVista() {
+                        const c = this.cupoCliente;
+
+                        if (this.modoCliente || ! c || ! c.visible || ! this.clienteActual) {
+                            return null;
+                        }
+
+                        const total = Number(this.estado?.total_esperado ?? 0);
+                        const ev = c.evaluacion && total > 0 && Math.abs(Number(c.evaluacion.nueva_obligacion) - total) < 0.005 ? c.evaluacion : null;
+                        const k = c.cupo;
+                        const etiquetas = @json(trans('ventasasesor::cupo.estados'));
+                        const textos = @json(trans('ventasasesor::cupo.nueva_venta'));
+                        const rojo = { caja: 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100', pill: 'bg-red-600 text-white', mensaje: 'bg-red-600 text-white' };
+                        const ambar = { caja: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100', pill: 'bg-amber-200 text-amber-900', mensaje: 'bg-amber-200 text-amber-900' };
+                        const verde = { caja: 'border-green-300 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100', pill: 'bg-green-200 text-green-900', mensaje: 'bg-green-200 text-green-900' };
+                        const gris = { caja: 'border-gray-300 bg-gray-50 text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100', pill: 'bg-gray-200 text-gray-800', mensaje: 'bg-gray-200 text-gray-800' };
+                        let clases = { activo: verde, cerca: ambar, agotado: rojo, excedido: rojo, bloqueado: rojo, sin_cupo: ambar }[k.estado] || gris;
+                        let mensaje = null;
+                        let ayuda = null;
+
+                        if (ev && ! ev.permitido) {
+                            clases = c.bloqueo_activo ? rojo : ambar;
+                            const dinero = (v) => this.precio(v);
+
+                            mensaje = {
+                                cupo_excedido: textos.excede.replace(':monto', dinero(ev.exceso)),
+                                cupo_bloqueado: textos.bloqueado,
+                                cupo_sin_asignar: textos.sin_cupo,
+                                cupo_no_verificable: etiquetas.sin_cupo,
+                            }[ev.codigo] || null;
+                            ayuda = ev.codigo === 'cupo_excedido' ? textos.excede_ayuda : null;
+                        }
+
+                        return {
+                            estado: k.estado,
+                            etiqueta: etiquetas[k.estado] || k.estado,
+                            clases,
+                            autorizado: k.autorizado,
+                            exposicion: k.exposicion,
+                            disponible: k.disponible,
+                            bloqueoActivo: c.bloqueo_activo,
+                            evaluacion: ev,
+                            mensaje,
+                            ayuda,
+                            cubierta: ev && ! ev.permitido && ev.cubierta_por_exceso && k.exceso_vigente
+                                ? textos.cubierta.replace(':monto', this.precio(k.exceso_vigente.exceso_autorizado)) : null,
+                        };
                     },
 
                     /** GRP-01: grupo habitual vs aplicado, tal cual lo devuelve el backend (nunca se calcula aqui). */
@@ -3390,6 +3495,13 @@
 
                     clienteActual(nuevo) {
                         this.cargarCreditoCliente(nuevo ? (nuevo.customer_id ?? nuevo.customerId) : null);
+                        this.cupoCliente = null;
+                        this.cargarCupoCliente();
+                    },
+
+                    // Doc. 35: la nueva obligacion estimada es el total de la venta; al cambiar, se vuelve a preguntar al servidor.
+                    'estado.total_esperado'() {
+                        this.cargarCupoCliente();
                     },
 
                     // R2: cada cambio del estado (cliente, grupo, cantidades, entrega, pago) o del propietario reevalua.
@@ -4109,6 +4221,28 @@
                         } finally {
                             c.enviando = false;
                         }
+                    },
+
+                    /** Doc. 35: cupo de cartera del cliente y evaluacion de la venta actual. Informativo; sin permiso responde visible:false (nunca 403). */
+                    cargarCupoCliente() {
+                        clearTimeout(this._cupoTimer);
+
+                        const id = this.clienteActual ? (this.clienteActual.customer_id ?? this.clienteActual.customerId) : null;
+
+                        if (this.modoCliente || ! id) {
+                            this.cupoCliente = null;
+
+                            return;
+                        }
+
+                        this._cupoTimer = setTimeout(() => {
+                            const solicitud = ++this.cupoSolicitud;
+                            const total = Number(this.estado?.total_esperado ?? 0);
+
+                            this.$axios.get("{{ url(route('admin.ventas_asesor.nueva_venta.cupo', ['cliente' => '__ID__'])) }}".replace('__ID__', id), { params: total > 0 ? { monto: total } : {} })
+                                .then((response) => { if (solicitud === this.cupoSolicitud) { this.cupoCliente = response.data; } })
+                                .catch(() => { if (solicitud === this.cupoSolicitud) { this.cupoCliente = null; } });
+                        }, 250);
                     },
 
                     cargarCreditoClienteSinReiniciar() {

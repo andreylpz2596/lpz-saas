@@ -79,6 +79,9 @@ class VentasAsesorServiceProvider extends ServiceProvider
         // 03F. Intento de confirmacion en curso (cart_id → borrador + token), mismo criterio.
         $this->app->scoped(ConfirmacionEnCurso::class);
 
+        // Doc. 35 §8. Autorizacion de exceso de cupo consumida por el pedido en curso (cerco → save.after), mismo criterio.
+        $this->app->scoped(\ByLopez\VentasAsesor\Support\Venta\ConsumoExcesoEnCurso::class);
+
         /*
          * RT-03B. Contexto de precio comercial por peticion (scoped, nunca singleton) y
          * CustomerRepository que lo respeta. Sin contexto explicito, el repositorio

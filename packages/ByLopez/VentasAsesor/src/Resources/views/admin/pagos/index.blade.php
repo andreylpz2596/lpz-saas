@@ -99,6 +99,11 @@
                 @endforeach
             </div>
 
+            {{-- Doc. 35: panel compacto de cupos de cartera (solo con la hoja cupo.ver y alcance «todos»). --}}
+            @if (! empty($cupoPanel))
+                @include('ventasasesor::admin.cartera.cupo-panel')
+            @endif
+
             @if ($resumenActivo)
                 <div class="va-panel mt-4 flex flex-wrap items-center justify-between gap-3 p-3" data-resumen-activo="{{ $resumenActivo }}">
                     <p class="text-sm text-gray-700 dark:text-gray-300">

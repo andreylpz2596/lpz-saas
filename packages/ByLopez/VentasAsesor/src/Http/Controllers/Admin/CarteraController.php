@@ -9,6 +9,7 @@ use ByLopez\VentasAsesor\Http\Requests\Cartera\RechazarPagoRequest;
 use ByLopez\VentasAsesor\Services\Cartera\BandejaPagosService;
 use ByLopez\VentasAsesor\Services\Cartera\ConfirmarPagoService;
 use ByLopez\VentasAsesor\Services\Cartera\RechazarPagoService;
+use ByLopez\VentasAsesor\Services\Cupo\CupoCarteraPanelService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Cartera\FechaCorteCartera;
 use ByLopez\VentasAsesor\Support\Cartera\RespuestaErrorNoControlado;
@@ -74,6 +75,8 @@ class CarteraController extends Controller
         }
 
         return view('ventasasesor::admin.pagos.index', $comunes + [
+            // Doc. 35: panel compacto de cupos (solo con la hoja cartera.cupo.ver y alcance de Cartera «todos»; null = no se muestra).
+            'cupoPanel' => app(CupoCarteraPanelService::class)->resumen($admin),
             'pagos' => $this->bandeja->listar($admin, $request->filtros(), (int) $request->input('page', 1))->withQueryString(),
             'filtros' => $request->filtros(),
             'indicadores' => $this->bandeja->indicadores($admin),

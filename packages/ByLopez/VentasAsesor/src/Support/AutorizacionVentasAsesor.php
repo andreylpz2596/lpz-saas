@@ -72,6 +72,19 @@ class AutorizacionVentasAsesor
 
     public const PERMISO_CREDITO_AJUSTAR = 'ventas_asesor.cartera.credito.ajustar';
 
+    /*
+     * Doc. 35: cupo / limite de cartera por cliente. Capacidades SEPARADAS. Ver = cifras para vender; historial = auditoria de cambios;
+     * editar = fijar el limite y bloquear/desbloquear; autorizar_exceso = permitir UNA venta por encima del cupo. Editar y autorizar
+     * exceso exigen ADEMAS ser el administrador autorizado (puedeCupo): un rol `all` cualquiera no basta.
+     */
+    public const PERMISO_CUPO_VER = 'ventas_asesor.cartera.cupo.ver';
+
+    public const PERMISO_CUPO_EDITAR = 'ventas_asesor.cartera.cupo.editar';
+
+    public const PERMISO_CUPO_HISTORIAL = 'ventas_asesor.cartera.cupo.historial';
+
+    public const PERMISO_CUPO_AUTORIZAR_EXCESO = 'ventas_asesor.cartera.cupo.autorizar_exceso';
+
     /* D-COST-04/05: «Control de costos». Ver = pantalla de comparacion; actualizar = vista previa y confirmacion. */
     public const PERMISO_COSTOS = 'ventas_asesor.costos';
 
@@ -173,6 +186,26 @@ class AutorizacionVentasAsesor
         }
 
         if ($admin->role->permission_type === 'all' || $permiso !== self::PERMISO_CREDITO_VER) {
+            return $this->esAdministradorAutorizado($admin);
+        }
+
+        return true;
+    }
+
+    /**
+     * Permiso del cupo de cartera (Doc. 35), mismo criterio que D10. Editar y autorizar exceso = administrador autorizado Y la clave.
+     * Ver e historial = la clave; un rol `all` que no sea el administrador autorizado tampoco ve (la herencia de `all` no es una asignacion).
+     * Falla cerrado: nunca depende del nombre del rol ni de ocultar botones.
+     */
+    public function puedeCupo(?AdminContract $admin, string $permiso): bool
+    {
+        if (! $this->tienePermiso($admin, $permiso)) {
+            return false;
+        }
+
+        $soloConsulta = in_array($permiso, [self::PERMISO_CUPO_VER, self::PERMISO_CUPO_HISTORIAL], true);
+
+        if ($admin->role->permission_type === 'all' || ! $soloConsulta) {
             return $this->esAdministradorAutorizado($admin);
         }
 

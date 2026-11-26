@@ -124,6 +124,11 @@
             </div>
         @endif
 
+        {{-- Doc. 35: CUPO DE CARTERA (limite autorizado − exposicion derivada de Cartera). Solo con la hoja cartera.cupo.ver. --}}
+        @if (! empty($cupo))
+            @include('ventasasesor::admin.cartera.cupo')
+        @endif
+
         @if (! $cartera->carteraActiva)
             <div class="va-panel mt-5 p-5 text-sm text-gray-600 dark:text-gray-300" data-cartera-inactiva>
                 @lang('ventasasesor::app.cartera.cliente.inactiva')

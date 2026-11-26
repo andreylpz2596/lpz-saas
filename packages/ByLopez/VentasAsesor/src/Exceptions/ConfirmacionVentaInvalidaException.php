@@ -61,6 +61,21 @@ class ConfirmacionVentaInvalidaException extends RuntimeException
     /** R2: «Vender para» sin `ventas_asesor.pedidos.assign`, o asesor elegido invalido. */
     public const PROPIEDAD_COMERCIAL_INVALIDA = 'propiedad_comercial_invalida';
 
+    /*
+     * Cupo / limite de cartera (Doc. 35). Los decide el cerco bajo bloqueo (detalles.fase = 'cerco') y se traducen con el mismo codigo.
+     * `detalles` lleva las cifras: la capa HTTP las quita si el actor no puede ver el cupo.
+     */
+    public const CUPO_EXCEDIDO = 'cupo_excedido';
+
+    public const CUPO_BLOQUEADO = 'cupo_bloqueado';
+
+    public const CUPO_SIN_ASIGNAR = 'cupo_sin_asignar';
+
+    public const CUPO_NO_VERIFICABLE = 'cupo_no_verificable';
+
+    /** Codigos de rechazo por cupo (para traduccion y presentacion). */
+    public const CODIGOS_CUPO = [self::CUPO_EXCEDIDO, self::CUPO_BLOQUEADO, self::CUPO_SIN_ASIGNAR, self::CUPO_NO_VERIFICABLE];
+
     /** @param  array<string, mixed>  $detalles */
     public function __construct(
         public readonly string $codigo,

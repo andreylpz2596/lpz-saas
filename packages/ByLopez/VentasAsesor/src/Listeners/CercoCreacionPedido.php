@@ -5,6 +5,7 @@ namespace ByLopez\VentasAsesor\Listeners;
 use ByLopez\VentasAsesor\Enums\EstadoBorradorVenta as Estado;
 use ByLopez\VentasAsesor\Exceptions\PedidoRechazadoPorCercoException as Rechazo;
 use ByLopez\VentasAsesor\Models\BorradorVenta;
+use ByLopez\VentasAsesor\Support\Venta\CercoCupoCartera;
 use ByLopez\VentasAsesor\Support\Venta\CercoInventario;
 use ByLopez\VentasAsesor\Support\Venta\ConfirmacionEnCurso;
 use Illuminate\Support\Facades\Schema;
@@ -23,6 +24,8 @@ use Illuminate\Support\Facades\Schema;
  *    existe, el intento es obsoleto. La fila queda bloqueada hasta el commit o rollback del
  *    pedido: una recuperacion concurrente espera.
  * 2. D-54, para TODO pedido: bloqueo de las filas `products` y revalidacion del stock.
+ *    Doc. 35 (cupo de cartera, solo con `ventasasesor.cupo.activo`): entre el bloqueo de products y la revalidacion se toma el
+ *    bloqueo de la fila del cliente (`customers`), y despues de la revalidacion se decide el cupo con la exposicion recalculada.
  * 3. Sin confirmacion ByLopez: si el carrito pertenece a un borrador `activo` o
  *    `confirmando`, se rechaza (la ruta nativa del panel saltaria la idempotencia). Los
  *    carritos normales de la tienda y del panel no tienen borrador y pasan.
@@ -40,6 +43,7 @@ class CercoCreacionPedido
     public function __construct(
         protected ConfirmacionEnCurso $confirmaciones,
         protected CercoInventario $inventario,
+        protected CercoCupoCartera $cupo,
     ) {}
 
     public function handle(mixed $pedido): void
@@ -53,7 +57,11 @@ class CercoCreacionPedido
         }
 
         $this->inventario->bloquear($pedido);
+        // Doc. 35: el bloqueo del cliente va tras el de products y ANTES de la primera lectura no bloqueante (la de validar()), para
+        // que la instantanea de la transaccion nazca con el bloqueo ya tomado. Solo actua con `ventasasesor.cupo.activo`.
+        $this->cupo->bloquear($pedido);
         $this->inventario->validar($pedido);
+        $this->cupo->exigir($pedido);
 
         if ($intento === null && $cartId > 0) {
             $this->rechazarCarritoDeBorrador($cartId);

@@ -4,6 +4,7 @@ namespace ByLopez\VentasAsesor\Listeners;
 
 use ByLopez\VentasAsesor\Enums\AlcanceVisibilidad;
 use ByLopez\VentasAsesor\Services\Cartera\CarteraConsultaService;
+use ByLopez\VentasAsesor\Services\Cupo\CupoCarteraClienteService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use Webkul\Theme\ViewRenderEventManager;
 
@@ -39,9 +40,15 @@ class MostrarCarteraEnFichaCliente
             return;
         }
 
+        // Doc. 35: una linea de cupo (estado, disponible de autorizado) solo con la hoja `cartera.cupo.ver`; el detalle esta en «Ver cartera».
+        $cupo = $this->autorizacion->puedeCupo($admin, AutorizacionVentasAsesor::PERMISO_CUPO_VER)
+            ? app(CupoCarteraClienteService::class)->delCliente($clienteId)
+            : null;
+
         $manager->addTemplate('ventasasesor::admin.cartera.tarjeta-ficha', [
             'clienteId' => $clienteId,
             'cartera' => $ficha['cartera'],
+            'cupo' => $cupo,
         ]);
     }
 }

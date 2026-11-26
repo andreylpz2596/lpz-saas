@@ -17,6 +17,8 @@ use ByLopez\VentasAsesor\Exceptions\PagoBorradorInvalidoException;
 use ByLopez\VentasAsesor\Exceptions\PedidoRechazadoPorCercoException;
 use ByLopez\VentasAsesor\Exceptions\SolicitudBorradorInvalidaException;
 use ByLopez\VentasAsesor\Exceptions\VarianteInvalidaException;
+use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
+use ByLopez\Logistica\Support\Moneda;
 use Illuminate\Http\JsonResponse;
 use Throwable;
 
@@ -82,6 +84,10 @@ final class RespuestaErrorNuevaVenta
                 'lineas_afectadas' => $e->lineasAfectadas === [] ? null : $e->lineasAfectadas,
             ], fn ($v) => $v !== null), self::estadoPara($e->codigo)),
 
+            // Doc. 35: rechazo por cupo de cartera. Mensaje legible y, SOLO con la hoja `cartera.cupo.ver`, las cifras; el resto de
+            // actores (asesores sin la hoja, el cliente de autoservicio) recibe el codigo y un texto sin montos.
+            $e instanceof ConfirmacionVentaInvalidaException && in_array($e->codigo, ConfirmacionVentaInvalidaException::CODIGOS_CUPO, true) => self::respuestaCupo($e),
+
             $e instanceof ConfirmacionVentaInvalidaException => response()->json(array_filter([
                 'codigo' => $e->codigo,
                 'mensaje' => $e->getMessage(),
@@ -110,6 +116,26 @@ final class RespuestaErrorNuevaVenta
 
             default => throw $e,
         };
+    }
+
+    /** Rechazo por cupo de cartera: cifras solo para quien puede ver el cupo (permiso evaluado en el servidor). */
+    private static function respuestaCupo(ConfirmacionVentaInvalidaException $e): JsonResponse
+    {
+        $actor = auth()->guard('admin')->user();
+        $ve = app(AutorizacionVentasAsesor::class)->puedeCupo($actor, AutorizacionVentasAsesor::PERMISO_CUPO_VER);
+        $cifras = array_intersect_key($e->detalles, array_flip(['autorizado', 'exposicion', 'disponible', 'nueva_obligacion', 'exceso']));
+        $dinero = fn (string $clave) => Moneda::formatear((float) ($cifras[$clave] ?? 0));
+
+        return response()->json(array_filter([
+            'codigo' => $e->codigo,
+            'mensaje' => $ve
+                ? trans('ventasasesor::cupo.rechazo.'.$e->codigo.'_cifras', [
+                    'autorizado' => $dinero('autorizado'), 'exposicion' => $dinero('exposicion'), 'disponible' => $dinero('disponible'),
+                    'nueva' => $dinero('nueva_obligacion'), 'exceso' => $dinero('exceso'),
+                ])
+                : trans('ventasasesor::cupo.rechazo.'.$e->codigo),
+            'detalles' => $ve && $cifras !== [] ? $cifras : null,
+        ], fn ($v) => $v !== null), 422);
     }
 
     private static function estadoPara(string $codigo): int

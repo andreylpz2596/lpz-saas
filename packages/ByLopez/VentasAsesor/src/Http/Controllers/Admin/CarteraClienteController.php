@@ -9,6 +9,7 @@ use ByLopez\VentasAsesor\Services\Cartera\CarteraConsultaService;
 use ByLopez\VentasAsesor\Services\Cartera\AutoConfirmacionAdministrador;
 use ByLopez\VentasAsesor\Services\Cartera\RegistrarAbonoClienteService;
 use ByLopez\VentasAsesor\Services\Credito\CreditoClienteService;
+use ByLopez\VentasAsesor\Services\Cupo\CupoCarteraClienteService;
 use ByLopez\VentasAsesor\Support\AutorizacionVentasAsesor;
 use ByLopez\VentasAsesor\Support\Cartera\MediosCobro;
 use Illuminate\Http\JsonResponse;
@@ -57,7 +58,20 @@ class CarteraClienteController extends Controller
         $credito = $verCredito && $ficha['cartera']->carteraActiva ? app(CreditoClienteService::class)->delCliente($clienteId) : null;
         $tiene = fn (string $permiso) => $alcanceTotal && $this->autorizacion->puedeCredito($admin, $permiso);
 
+        // Doc. 35: cupo de cartera. Las cifras (autorizado, exposicion, disponible) con la hoja `cupo.ver`; el detalle por pedido solo con
+        // alcance «todos»; quien/por que del cambio solo con `historial` o `autorizar_exceso`. Los botones reflejan permisos; el servidor revalida.
+        $cupoPuedeVer = $this->autorizacion->puedeCupo($admin, AutorizacionVentasAsesor::PERMISO_CUPO_VER);
+        $cupoPuedeHistorial = $this->autorizacion->puedeCupo($admin, AutorizacionVentasAsesor::PERMISO_CUPO_HISTORIAL);
+        $cupoPuedeExceso = $this->autorizacion->puedeCupo($admin, AutorizacionVentasAsesor::PERMISO_CUPO_AUTORIZAR_EXCESO);
+        $cupo = $cupoPuedeVer ? app(CupoCarteraClienteService::class)->delCliente($clienteId, $alcanceTotal) : null;
+
         return view('ventasasesor::admin.cartera.cliente', $ficha + [
+            'cupo' => $cupo !== null && ! ($cupoPuedeHistorial || $cupoPuedeExceso) ? $cupo->sinAuditoria() : $cupo,
+            'cupoBloqueoActivo' => app(CupoCarteraClienteService::class)->bloqueoActivo(),
+            'cupoVerDetalle' => $alcanceTotal,
+            'cupoPuedeEditar' => $this->autorizacion->puedeCupo($admin, AutorizacionVentasAsesor::PERMISO_CUPO_EDITAR),
+            'cupoPuedeHistorial' => $cupoPuedeHistorial,
+            'cupoPuedeExceso' => $cupoPuedeExceso,
             'credito' => $credito,
             'puedeAplicar' => $tiene(AutorizacionVentasAsesor::PERMISO_CREDITO_APLICAR),
             'puedeReembolsar' => $tiene(AutorizacionVentasAsesor::PERMISO_CREDITO_REEMBOLSAR),
