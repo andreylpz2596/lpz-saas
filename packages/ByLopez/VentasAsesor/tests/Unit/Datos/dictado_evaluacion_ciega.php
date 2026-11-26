@@ -1,7 +1,7 @@
 <?php
 
 /*
-| Doc. 34 · Evaluación CIEGA del dictado (escrita el 2026-11-25 23:56 (commit 881df2a5f6), ANTES de implementar los cambios de la jornada y sin
+| Doc. 34 · Evaluación CIEGA del dictado (escrita el 2026-11-25 23:56, commit bc25bd5496, ANTES de implementar los cambios de la jornada y sin
 | ejecutarla durante el desarrollo). Frases SINTÉTICAS redactadas para evaluar: no son transcripciones de asesoras ni audio real.
 | No se usaron para programar reglas (las de desarrollo están en InterpreteDictadoRevisionTest y en la matriz común).
 |

@@ -4,7 +4,7 @@ use ByLopez\VentasAsesor\Support\Dictado\InterpreteDictado;
 
 /*
 | Doc. 34 · Evaluación CIEGA (Datos/dictado_evaluacion_ciega.php): 80 frases sintéticas escritas el 2026-11-25 23:56 (commit
-| 881df2a5f6) antes de implementar la jornada, sin usarlas para programar. Umbrales fijados antes de la primera ejecución:
+| bc25bd5496) antes de implementar la jornada, sin usarlas para programar. Umbrales fijados antes de la primera ejecución:
 |  - cero interpretaciones incorrectas aceptadas (falsos positivos);
 |  - al menos 90 % de líneas exactas (una prueba que rechaza todo no pasa);
 |  - a lo sumo 5 % de aclaraciones innecesarias.

@@ -200,10 +200,12 @@ test('DIC01-10 el catalogo de los selectores sale de los SKU reales (Crop top M,
     [$topM] = $resolutor->interpretar('crop top azul oscuro talla M 2');
     [$topSinTalla] = $resolutor->interpretar('crop top azul oscuro 2');
 
+    // Revisado 2026-11-26 (brief de Camilo: «crop top con M y U no asume Única»): antes se esperaba aviso con 907D-TP-U. Como
+    // este color tiene M y Única, ahora se pregunta la talla con las dos opciones. Con solo Única se sigue tomando con aviso (DIC04-1).
     expect([$dicho['estado'], $dicho['sku'], $dicho['variante_id']])->toBe(['ok', '907H-DZ-XXL', $xxl['XXL']])
         ->and([$topM['estado'], $topM['sku'], $topM['variante_id']])->toBe(['ok', '907D-TP-M', $top['M']])
-        ->and([$topSinTalla['estado'], $topSinTalla['sku']])->toBe(['aviso', '907D-TP-U'])
-        ->and($topSinTalla['mensaje'])->toContain('talla Única');
+        ->and([$topSinTalla['estado'], $topSinTalla['sku'], $topSinTalla['talla'], $topSinTalla['opciones_talla']])->toBe(['error', null, null, ['M', 'U']])
+        ->and($topSinTalla['mensaje'])->toBe('El crop top Azul Oscuro existe en M y Única: elige la talla.');
 
     $this->actingAs(f03b_admin(), 'admin')
         ->postJson(route('admin.ventas_asesor.nueva_venta.dictado.corregir'), ['color' => 'Azul Oscuro', 'linea' => 'TP', 'talla' => 'M', 'cantidad' => 2])
