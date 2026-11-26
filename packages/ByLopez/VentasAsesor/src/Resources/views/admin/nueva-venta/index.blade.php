@@ -1415,16 +1415,16 @@
                                 <div v-if="tipoAplicado === 'domicilio'" class="mt-4">
                                     <!-- Entrega LOCAL (zona configurada): quien entrega es obligatorio y fija el valor del domicilio. -->
                                     <div
-                                        v-if="estado.entrega.domiciliario && ! modoCliente"
+                                        v-if="estado.entrega.domiciliario"
                                         class="mb-4 rounded-lg border p-3 dark:border-gray-800"
                                         data-venta="domiciliario"
                                     >
                                         <div class="flex items-center justify-between gap-2 text-sm">
-                                            <span class="text-gray-500 dark:text-gray-400">Zona</span>
+                                            <span class="text-gray-500 dark:text-gray-400">Zona de entrega</span>
                                             <span class="font-semibold text-gray-800 dark:text-white">@{{ estado.entrega.domiciliario.zona.nombre }}</span>
                                         </div>
 
-                                        <label class="mb-1 mt-2 block text-sm font-semibold text-gray-800 dark:text-white" for="venta-domiciliario">Domiciliario *</label>
+                                        <label class="mb-1 mt-2 block text-sm font-semibold text-gray-800 dark:text-white" for="venta-domiciliario">@{{ modoCliente ? '¿Quién lleva tu pedido?' : 'Domiciliario *' }}</label>
 
                                         <select
                                             id="venta-domiciliario"
@@ -1442,12 +1442,12 @@
                                                 :value="String(o.id)"
                                                 :disabled="o.tarifa === null"
                                             >
-                                                @{{ o.nombre }}@{{ o.tarifa === null ? ' — sin tarifa en ' + estado.entrega.domiciliario.zona.nombre : '' }}
+                                                @{{ o.nombre }}@{{ o.tarifa === null ? ' — sin tarifa en ' + estado.entrega.domiciliario.zona.nombre : (modoCliente ? (o.tarifa === 0 ? ' — sin costo' : ' — ' + precio(o.tarifa)) : '') }}
                                             </option>
                                         </select>
 
                                         <p
-                                            v-if="domiciliarioEsSugerido"
+                                            v-if="domiciliarioEsSugerido && ! modoCliente"
                                             class="mt-1 text-xs text-gray-500 dark:text-gray-400"
                                         >
                                             Sugerido: último usado en @{{ estado.entrega.domiciliario.zona.nombre }}
@@ -1455,7 +1455,7 @@
 
                                         <div v-if="estado.entrega.domiciliario.tarifa !== null" class="mt-2 flex items-center justify-between gap-2 text-sm" data-venta="tarifa-domicilio">
                                             <span class="text-gray-700 dark:text-gray-200">Tarifa domicilio</span>
-                                            <span class="font-bold text-gray-900 dark:text-white">@{{ precio(estado.entrega.domiciliario.tarifa) }}</span>
+                                            <span class="font-bold text-gray-900 dark:text-white">@{{ estado.entrega.domiciliario.tarifa === 0 ? 'Sin costo' : precio(estado.entrega.domiciliario.tarifa) }}</span>
                                         </div>
 
                                         <p v-if="notaDomicilio" class="mt-1 text-xs text-gray-500 dark:text-gray-400">@{{ notaDomicilio }}</p>
@@ -2809,7 +2809,7 @@
                     notaDomicilio() {
                         const d = this.estado && this.estado.entrega ? this.estado.entrega.domiciliario : null;
 
-                        return d && d.tarifa !== null ? ({
+                        return d && d.tarifa !== null && d.tarifa > 0 ? ({
                             gratis: 'Domicilio gratis para el cliente.',
                             por_pagar: 'El cliente paga este valor al recibir.',
                             cobrado_en_pedido: 'Este valor va incluido en el pedido.',

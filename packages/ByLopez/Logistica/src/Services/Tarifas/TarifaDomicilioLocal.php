@@ -2,6 +2,8 @@
 
 namespace ByLopez\Logistica\Services\Tarifas;
 
+use ByLopez\Logistica\Enums\TipoTransportadora;
+use ByLopez\Logistica\Models\Transportadora;
 use ByLopez\Logistica\Models\Zona;
 
 /**
@@ -31,6 +33,11 @@ class TarifaDomicilioLocal
 
         $tarifa = $this->zonas->tarifaVigente($transportadoraId, (int) $zona->id);
 
-        return $tarifa ? round((float) $tarifa->valor, 2) : null;
+        if ($tarifa) {
+            return round((float) $tarifa->valor, 2);
+        }
+
+        // Una PLATAFORMA (PICAP) no cobra tarifa de zona al cliente: sin tarifa propia el valor es 0, no «sin tarifa».
+        return Transportadora::query()->whereKey($transportadoraId)->value('tipo') === TipoTransportadora::PLATAFORMA ? 0.0 : null;
     }
 }

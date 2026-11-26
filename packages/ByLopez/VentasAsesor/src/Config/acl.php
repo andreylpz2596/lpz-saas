@@ -480,6 +480,7 @@ return [
             'admin.autoservicio.direcciones',
             'admin.autoservicio.direcciones.agregar',
             'admin.autoservicio.entrega',
+            'admin.autoservicio.domiciliario',
             'admin.autoservicio.ubicaciones',
             'admin.autoservicio.confirmar',
             'admin.autoservicio.pedidos.data',

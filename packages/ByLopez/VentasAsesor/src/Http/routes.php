@@ -44,6 +44,7 @@ Route::group(['middleware' => ['admin', NoCacheMiddleware::class], 'prefix' => c
         Route::post('{borrador}/eliminar', [AutoservicioController::class, 'eliminar'])->whereNumber('borrador')->name('eliminar');
         Route::post('{borrador}/direcciones', [AutoservicioController::class, 'agregarDireccion'])->whereNumber('borrador')->name('direcciones.agregar');
         Route::post('{borrador}/entrega', [AutoservicioController::class, 'entrega'])->whereNumber('borrador')->name('entrega');
+        Route::post('{borrador}/domiciliario', [AutoservicioController::class, 'domiciliario'])->whereNumber('borrador')->name('domiciliario');
         Route::post('{borrador}/preparar', [AutoservicioController::class, 'preparar'])->whereNumber('borrador')->name('preparar');
         Route::post('{borrador}/confirmar', [AutoservicioController::class, 'confirmar'])->whereNumber('borrador')->name('confirmar');
     });
